@@ -50,6 +50,8 @@ export function mapPaymentIntent(
   invoiceNumber?: string | null,
   refundInfo?: { amount: number; reason: string | null }
 ): PaymentData {
+  // Use type assertion since invoice exists on PaymentIntent but may not be in all type definitions
+  const piInvoice = (pi as unknown as { invoice?: string | { id: string } | null }).invoice;
   return {
     id: pi.id,
     amount: pi.amount,
@@ -57,7 +59,7 @@ export function mapPaymentIntent(
     currency: pi.currency,
     status: pi.status,
     created: pi.created,
-    invoice: typeof pi.invoice === 'string' ? pi.invoice : pi.invoice?.id || null,
+    invoice: typeof piInvoice === 'string' ? piInvoice : piInvoice?.id || null,
     invoiceNumber: invoiceNumber ?? null,
     payment_method_types: pi.payment_method_types,
     refunded: pi.metadata?.refunded === 'true',
