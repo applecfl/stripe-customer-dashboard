@@ -132,9 +132,9 @@ export function TransactionsTable({
             <Table>
               <TableHeader>
                 <TableRow hoverable={false}>
-                  <TableHead className="w-10"></TableHead>
-                  <TableHead align="right" className="w-32">Amount</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-8 sm:w-10"></TableHead>
+                  <TableHead align="right" className="w-24 sm:w-32">Amount</TableHead>
+                  <TableHead className="w-8 sm:w-12"></TableHead>
                   <TableHead align="right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -146,37 +146,37 @@ export function TransactionsTable({
                     <>
                       <TableRow key={invoice.id} className="bg-red-50/50">
                         <TableCell>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-0.5 sm:gap-1">
                             <button
                               onClick={() => copyToClipboard(invoice.id)}
-                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
                               title={invoice.id}
                             >
                               {copiedId === invoice.id ? (
-                                <Check className="w-4 h-4 text-green-600" />
+                                <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
                               ) : (
-                                <Copy className="w-4 h-4 text-gray-400" />
+                                <Copy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
                               )}
                             </button>
                             <a
                               href={`https://dashboard.stripe.com/invoices/${invoice.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors hidden sm:block"
                               title="Open in Stripe"
                             >
-                              <ExternalLink className="w-4 h-4 text-gray-400 hover:text-indigo-600" />
+                              <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 hover:text-indigo-600" />
                             </a>
                           </div>
                         </TableCell>
                         <TableCell align="right">
                           <div>
-                            <span className="font-semibold text-red-700">
+                            <span className="font-semibold text-red-700 text-xs sm:text-sm">
                               {formatCurrency(invoice.amount_due, invoice.currency)}
                             </span>
                             {invoice.amount_remaining > 0 && invoice.amount_remaining !== invoice.amount_due && (
-                              <p className="text-xs text-amber-600">
-                                {formatCurrency(invoice.amount_remaining, invoice.currency)} remaining
+                              <p className="text-[10px] sm:text-xs text-amber-600">
+                                {formatCurrency(invoice.amount_remaining, invoice.currency)} <span className="hidden sm:inline">remaining</span>
                               </p>
                             )}
                           </div>
@@ -184,8 +184,8 @@ export function TransactionsTable({
                         <TableCell>
                           {/* Red exclamation mark with tooltip */}
                           <div className="relative group">
-                            <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center cursor-help">
-                              <AlertCircle className="w-4 h-4 text-red-600" />
+                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-100 flex items-center justify-center cursor-help">
+                              <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-red-600" />
                             </div>
                             {/* Tooltip - positioned above with high z-index */}
                             <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-[100]">
@@ -385,9 +385,9 @@ export function TransactionsTable({
             <Table>
               <TableHeader>
                 <TableRow hoverable={false}>
-                  <TableHead className="w-10"></TableHead>
-                  <TableHead align="right" className="w-32">Amount</TableHead>
-                  <TableHead className="w-40">Date</TableHead>
+                  <TableHead className="w-8 sm:w-10"></TableHead>
+                  <TableHead align="right" className="w-24 sm:w-32">Amount</TableHead>
+                  <TableHead className="w-24 sm:w-40">Date</TableHead>
                   <TableHead align="right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -400,39 +400,39 @@ export function TransactionsTable({
                     <>
                       <TableRow key={payment.id} className={payment.amount_refunded > 0 ? 'bg-gray-50/50' : ''}>
                         <TableCell>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-0.5 sm:gap-1">
                             <button
                               onClick={() => toggleExpanded(`pay-${payment.id}`)}
-                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
                             >
                               {isExpanded ? (
-                                <ChevronUp className="w-4 h-4 text-gray-500" />
+                                <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
                               ) : (
-                                <ChevronDown className="w-4 h-4 text-gray-500" />
+                                <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
                               )}
                             </button>
                             <a
                               href={`https://dashboard.stripe.com/payments/${payment.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors hidden sm:block"
                               title="Open in Stripe"
                             >
-                              <ExternalLink className="w-4 h-4 text-gray-400 hover:text-indigo-600" />
+                              <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 hover:text-indigo-600" />
                             </a>
                           </div>
                         </TableCell>
                         <TableCell align="right">
                           <div className="text-right">
                             {payment.amount_refunded > 0 ? (
-                              <div className="inline-flex flex-col items-end gap-0.5 font-mono text-sm">
+                              <div className="inline-flex flex-col items-end gap-0.5 font-mono text-xs sm:text-sm">
                                 {/* Original amount */}
                                 <span className="text-gray-500">
                                   {formatCurrency(payment.amount, payment.currency)}
                                 </span>
                                 {/* Refund line */}
-                                <span className="text-red-500 flex items-center gap-1">
-                                  <span className="text-xs">−</span>
+                                <span className="text-red-500 flex items-center gap-0.5 sm:gap-1">
+                                  <span className="text-[10px] sm:text-xs">−</span>
                                   {formatCurrency(payment.amount_refunded, payment.currency)}
                                 </span>
                                 {/* Divider line */}
@@ -443,7 +443,7 @@ export function TransactionsTable({
                                 </span>
                               </div>
                             ) : (
-                              <span className="font-semibold text-green-600">
+                              <span className="font-semibold text-green-600 text-xs sm:text-sm">
                                 {formatCurrency(payment.amount, payment.currency)}
                               </span>
                             )}
@@ -451,11 +451,11 @@ export function TransactionsTable({
                         </TableCell>
                         <TableCell>
                           <div>
-                            <span className="text-gray-600 text-sm">
+                            <span className="text-gray-600 text-xs sm:text-sm">
                               {formatDateTime(payment.created)}
                             </span>
                             {payment.amount_refunded > 0 && payment.refund_reason && (
-                              <p className="text-xs text-gray-500 capitalize mt-0.5">
+                              <p className="text-[10px] sm:text-xs text-gray-500 capitalize mt-0.5 hidden sm:block">
                                 {payment.refund_reason.replace(/_/g, ' ')}
                               </p>
                             )}
@@ -465,12 +465,12 @@ export function TransactionsTable({
                           {payment.status === 'succeeded' && payment.amount_refunded < payment.amount ? (
                             <button
                               onClick={() => onRefund(payment)}
-                              className="text-sm text-gray-600 hover:text-indigo-600 transition-colors"
+                              className="text-xs sm:text-sm text-gray-600 hover:text-indigo-600 transition-colors"
                             >
                               Refund
                             </button>
                           ) : payment.amount_refunded >= payment.amount ? (
-                            <span className="text-xs text-red-400 font-medium">Fully Refunded</span>
+                            <span className="text-[10px] sm:text-xs text-red-400 font-medium"><span className="hidden sm:inline">Fully </span>Refunded</span>
                           ) : null}
                         </TableCell>
                       </TableRow>

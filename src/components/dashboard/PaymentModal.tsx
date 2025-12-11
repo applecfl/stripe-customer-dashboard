@@ -182,13 +182,8 @@ function PaymentForm({
     const availableAmount = invoice ? excessAmount : payAmount;
     let remaining = availableAmount;
 
-    // Use auto-selected if paying specific invoice with excess, or manual amount in general mode
-    // Otherwise use manually selected
-    const invoicesToProcess = (invoice && excessAmount > 0) || manualAmountEntered
-      ? autoSelectedInvoices
-      : selectedAdditionalInvoices;
-
-    for (const invId of invoicesToProcess) {
+    // Always use selectedAdditionalInvoices (user can modify after auto-selection)
+    for (const invId of selectedAdditionalInvoices) {
       const inv = payableInvoices.find(i => i.id === invId);
       if (inv && remaining > 0) {
         const invAmount = getEffectiveRemaining(inv);
@@ -202,7 +197,7 @@ function PaymentForm({
     }
 
     return breakdown;
-  }, [invoice, excessAmount, payAmount, manualAmountEntered, autoSelectedInvoices, selectedAdditionalInvoices, payableInvoices]);
+  }, [invoice, excessAmount, payAmount, selectedAdditionalInvoices, payableInvoices]);
 
   // Reset form when modal opens or invoice changes
   useEffect(() => {
@@ -242,16 +237,34 @@ function PaymentForm({
     // Mark as manual entry if user types something
     if (value && parseFloat(value) > 0) {
       setManualAmountEntered(true);
-      // Clear manual selections when entering amount manually
-      setSelectedAdditionalInvoices([]);
+      // Auto-select invoices based on entered amount, but allow user to modify
+      // Calculate which invoices would be auto-selected for this amount
+      const payAmountValue = Math.round(parseFloat(value) * 100);
+      const availableAmount = invoice ? Math.max(0, payAmountValue - (invoice.amount_remaining || 0)) : payAmountValue;
+
+      if (availableAmount > 0) {
+        let remaining = availableAmount;
+        const autoSelected: string[] = [];
+        for (const inv of payableInvoices) {
+          if (remaining <= 0) break;
+          const invAmount = getEffectiveRemaining(inv);
+          if (invAmount > 0) {
+            autoSelected.push(inv.id);
+            remaining -= invAmount;
+          }
+        }
+        setSelectedAdditionalInvoices(autoSelected);
+      } else {
+        setSelectedAdditionalInvoices([]);
+      }
     } else if (!value) {
       setManualAmountEntered(false);
+      setSelectedAdditionalInvoices([]);
     }
   };
 
   const handleAdditionalInvoiceToggle = (invoiceId: string) => {
-    // When manually selecting invoices, switch to selection mode (not manual amount)
-    setManualAmountEntered(false);
+    // Allow toggling invoices regardless of whether amount was manually entered
     setSelectedAdditionalInvoices(prev =>
       prev.includes(invoiceId)
         ? prev.filter(id => id !== invoiceId)
@@ -338,12 +351,8 @@ function PaymentForm({
       if (invoice) {
         invoicesToPay.push(invoice.id);
       }
-      // Use auto-selected if manual amount entry, otherwise use manually selected
-      if (manualAmountEntered) {
-        invoicesToPay.push(...autoSelectedInvoices);
-      } else {
-        invoicesToPay.push(...selectedAdditionalInvoices);
-      }
+      // Always use selectedAdditionalInvoices (user can modify after auto-selection)
+      invoicesToPay.push(...selectedAdditionalInvoices);
 
       // Call our unified payment API
       // Apply to all only if no specific invoices are selected
@@ -593,11 +602,7 @@ function PaymentForm({
                   const effectiveRemaining = getEffectiveRemaining(inv);
                   const isFailed = isFailedInvoice(inv);
                   const breakdown = invoicePaymentBreakdown[inv.id];
-                  // Auto-selected if: paying specific invoice with excess, OR manual amount in general mode
-                  const isAutoMode = (invoice && excessAmount > 0) || (!invoice && manualAmountEntered);
-                  const isAutoSelected = isAutoMode && autoSelectedInvoices.includes(inv.id);
-                  const isManuallySelected = !isAutoMode && selectedAdditionalInvoices.includes(inv.id);
-                  const isSelected = isAutoSelected || isManuallySelected;
+                  const isSelected = selectedAdditionalInvoices.includes(inv.id);
                   const willBeFullyPaid = breakdown && breakdown.remaining === 0;
 
                   return (
@@ -616,11 +621,8 @@ function PaymentForm({
                       <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={() => !isAutoMode && handleAdditionalInvoiceToggle(inv.id)}
-                        disabled={isAutoMode}
-                        className={`w-4 h-4 rounded border-gray-300 text-indigo-600 ${
-                          isAutoMode ? 'cursor-not-allowed opacity-60' : ''
-                        }`}
+                        onChange={() => handleAdditionalInvoiceToggle(inv.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-indigo-600"
                       />
                       {isFailed ? (
                         <AlertTriangle className="w-3 h-3 text-red-500 flex-shrink-0" />
@@ -664,20 +666,6 @@ function PaymentForm({
               const availableForAdditional = invoice ? excessAmount : payAmount;
               if (availableForAdditional <= 0) return null;
 
-              const totalInvoiceAmount = autoSelectedInvoices.reduce((sum, id) => {
-                const inv = payableInvoices.find(i => i.id === id);
-                return sum + (inv ? getEffectiveRemaining(inv) : 0);
-              }, 0);
-              const excess = availableForAdditional - totalInvoiceAmount;
-              if (excess > 0) {
-                return (
-                  <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200">
-                    <p className="text-xs text-blue-700">
-                      <span className="font-medium">{formatCurrency(excess, currency)}</span> will be added as credit for future invoices
-                    </p>
-                  </div>
-                );
-              }
               return null;
             })()}
           </div>

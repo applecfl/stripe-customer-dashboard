@@ -26,6 +26,7 @@ interface PayInvoiceModalProps {
     amount: number;
     paymentMethodId: string;
     note?: string;
+    applyToInvoice?: boolean;
   }) => Promise<void>;
   onPaymentMethodAdded?: () => void;
 }
@@ -185,6 +186,7 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showAddCard, setShowAddCard] = useState(false);
+  const [applyToInvoice, setApplyToInvoice] = useState(true);
 
   // Reset form when invoice changes
   useEffect(() => {
@@ -199,6 +201,7 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
       setPaymentMethodId(invoicePm?.id || defaultPm?.id || paymentMethods[0]?.id || '');
       setNote('');
       setError('');
+      setApplyToInvoice(true);
     }
   }, [invoice, paymentMethods]);
 
@@ -212,7 +215,8 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
       return;
     }
 
-    if (payAmount > invoice.amount_remaining) {
+    // Only check max amount if applying to invoice
+    if (applyToInvoice && payAmount > invoice.amount_remaining) {
       setError('Amount cannot exceed remaining balance');
       return;
     }
@@ -231,6 +235,7 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
         amount: payAmount,
         paymentMethodId,
         note: note.trim() || undefined,
+        applyToInvoice,
       });
       handleClose();
     } catch (err) {
@@ -268,23 +273,34 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
 
   return (
     <form onSubmit={handleSubmit}>
-      {/* Invoice Summary */}
-      <div className="bg-gray-50 rounded-xl p-4 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-gray-500">Invoice</span>
-          <span className="font-mono text-sm">{invoice.number || invoice.id.slice(0, 12)}</span>
-        </div>
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-gray-500">Total Amount</span>
-          <span className="font-semibold">
-            {formatCurrency(invoice.amount_due, invoice.currency)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-500">Remaining</span>
-          <span className="font-semibold text-amber-600">
-            {formatCurrency(invoice.amount_remaining, invoice.currency)}
-          </span>
+      {/* Invoice Summary with checkbox */}
+      <div className={`rounded-xl p-4 mb-6 ${applyToInvoice ? 'bg-gray-50' : 'bg-blue-50 border border-blue-200'}`}>
+        <label className="flex items-center gap-3 mb-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={applyToInvoice}
+            onChange={(e) => setApplyToInvoice(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          <span className="text-sm font-medium text-gray-700">Apply payment to this invoice</span>
+        </label>
+        <div className={`space-y-2 ${!applyToInvoice ? 'opacity-50' : ''}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">Invoice</span>
+            <span className="font-mono text-sm">{invoice.number || invoice.id.slice(0, 12)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">Total Amount</span>
+            <span className="font-semibold">
+              {formatCurrency(invoice.amount_due, invoice.currency)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">Remaining</span>
+            <span className="font-semibold text-amber-600">
+              {formatCurrency(invoice.amount_remaining, invoice.currency)}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -432,7 +448,9 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
         </Button>
         <Button type="submit" loading={loading} disabled={!paymentMethodId}>
           <CreditCard className="w-4 h-4" />
-          Pay {amount ? formatCurrency(parseFloat(amount) * 100, invoice.currency) : 'Full Amount'}
+          {applyToInvoice
+            ? `Pay ${amount ? formatCurrency(parseFloat(amount) * 100, invoice.currency) : 'Full Amount'}`
+            : 'Add Credit'}
         </Button>
       </ModalFooter>
     </form>

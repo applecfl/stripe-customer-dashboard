@@ -70,9 +70,9 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-/* Mobile touch improvements */
-@media (max-width: 640px) {
-  button, a, input, select, textarea {
+/* Mobile touch improvements - Portrait */
+@media (max-width: 640px) and (orientation: portrait) {
+  button, a, input:not([type="checkbox"]):not([type="radio"]), select, textarea {
     min-height: 44px;
     min-width: 44px;
   }
@@ -81,6 +81,41 @@ input[type="number"] {
   button.p-1, button.p-2 {
     min-height: 36px;
     min-width: 36px;
+  }
+}
+
+/* Mobile touch improvements - Landscape (smaller targets OK) */
+@media (max-width: 896px) and (orientation: landscape) {
+  button, a, input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  button.p-1, button.p-2 {
+    min-height: 28px;
+    min-width: 28px;
+  }
+}
+
+/* Landscape mode optimizations */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Reduce vertical padding in landscape */
+  .landscape-compact {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* Smaller text in landscape mobile */
+  .landscape-text-sm {
+    font-size: 0.75rem !important;
+  }
+}
+
+/* Portrait mode optimizations */
+@media (orientation: portrait) {
+  /* Full width cards in portrait */
+  .portrait-full {
+    width: 100% !important;
   }
 }
 
@@ -94,5 +129,23 @@ html, body {
 @supports (padding: env(safe-area-inset-bottom)) {
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Landscape safe areas (for notched phones in landscape) */
+@supports (padding: env(safe-area-inset-left)) {
+  @media (orientation: landscape) {
+    .safe-landscape {
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
   }
 }

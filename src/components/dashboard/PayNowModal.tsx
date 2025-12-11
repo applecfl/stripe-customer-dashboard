@@ -82,12 +82,26 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
   }, 0);
 
   const handleInvoiceToggle = (invoiceId: string) => {
-    setSelectedInvoiceIds(prev =>
-      prev.includes(invoiceId)
-        ? prev.filter(id => id !== invoiceId)
-        : [...prev, invoiceId]
-    );
-    setApplyToAll(false);
+    if (applyToAll) {
+      // When unchecking from "apply to all", deselect this invoice (select all others)
+      setSelectedInvoiceIds(payableInvoices.filter(inv => inv.id !== invoiceId).map(inv => inv.id));
+      setApplyToAll(false);
+    } else {
+      // Normal toggle behavior
+      const isCurrentlySelected = selectedInvoiceIds.includes(invoiceId);
+      const newSelected = isCurrentlySelected
+        ? selectedInvoiceIds.filter(id => id !== invoiceId)
+        : [...selectedInvoiceIds, invoiceId];
+
+      setSelectedInvoiceIds(newSelected);
+
+      // If all invoices are now selected, switch back to applyToAll mode
+      // But only if there are actually invoices to select
+      if (payableInvoices.length > 0 && newSelected.length === payableInvoices.length) {
+        setApplyToAll(true);
+        setSelectedInvoiceIds([]);
+      }
+    }
   };
 
   const handleSelectAll = () => {
@@ -123,11 +137,7 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
       return;
     }
 
-    // Require at least one invoice to be selected
-    if (payableInvoices.length > 0 && !applyToAll && selectedInvoiceIds.length === 0) {
-      setError('Please select at least one invoice to apply the payment to');
-      return;
-    }
+    // Invoice selection is now optional - payment can be made as credit
 
     setLoading(true);
     setError('');
@@ -186,7 +196,7 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
           <div>
             <p className="font-medium text-green-800">Pay Now</p>
             <p className="text-sm text-green-600 mt-1">
-              Make a one-time payment. The card will not be saved. Please select at least one invoice to apply the payment to.
+              Make a one-time payment. Select invoices to apply payment to, or leave unselected to add as credit.
             </p>
           </div>
         </div>
@@ -252,9 +262,8 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
           rows={2}
         />
 
-        {/* Invoice Selection */}
-        {(payableInvoices.length > 0 || !showAllInvoices) && (
-          <div>
+        {/* Invoice Selection - Always show */}
+        <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">
                 Apply to Invoices
@@ -288,17 +297,27 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
                   ? Math.max(0, invoice.amount_due - metadataTotalPaid)
                   : invoice.amount_remaining;
                 const isFailed = isFailedInvoice(invoice);
+                const isChecked = selectedInvoiceIds.includes(invoice.id) || applyToAll;
                 return (
-                  <label
+                  <div
                     key={invoice.id}
-                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${isFailed ? 'bg-red-50' : ''}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleInvoiceToggle(invoice.id);
+                    }}
+                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer select-none ${isFailed ? 'bg-red-50' : ''}`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={selectedInvoiceIds.includes(invoice.id) || applyToAll}
-                      onChange={() => handleInvoiceToggle(invoice.id)}
-                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                      isChecked
+                        ? 'bg-indigo-600 border-indigo-600'
+                        : 'border-gray-300 bg-white'
+                    }`}>
+                      {isChecked && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
                     {isFailed ? (
                       <AlertTriangle className="w-4 h-4 text-red-500" />
                     ) : (
@@ -326,7 +345,7 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
                         )}
                       </p>
                     </div>
-                  </label>
+                  </div>
                 );
               })}
             </div>
@@ -339,12 +358,11 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
               </p>
             )}
             <p className="text-xs text-gray-500 mt-1">
-              Payment will be applied sequentially to selected invoices.
-              {selectedInvoiceIds.length > 0 && ' Excess payment will be added as credit.'}
-              {' Draft invoices will be finalized before payment.'}
+              {(selectedInvoiceIds.length > 0 || applyToAll)
+                ? 'Payment will be applied sequentially to selected invoices. Excess will be added as credit. Draft invoices will be finalized before payment.'
+                : 'No invoices selected - payment will be added as customer credit linked to this InvoiceUID.'}
             </p>
           </div>
-        )}
 
         {payableInvoices.length === 0 && !showAllInvoices && (
           <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
@@ -355,9 +373,9 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
         )}
 
         {payableInvoices.length === 0 && showAllInvoices && (
-          <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
-            <p className="text-sm text-amber-700">
-              No open or draft invoices available. Payment can only be made when there are invoices to apply it to.
+          <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+            <p className="text-sm text-blue-700">
+              No open or draft invoices available. Payment will be added as customer credit linked to this InvoiceUID.
             </p>
           </div>
         )}
@@ -373,9 +391,9 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
         <Button variant="secondary" onClick={onCancel} disabled={loading}>
           Cancel
         </Button>
-        <Button type="submit" loading={loading} disabled={!stripe || payableInvoices.length === 0}>
+        <Button type="submit" loading={loading} disabled={!stripe}>
           <CreditCard className="w-4 h-4" />
-          Pay Now
+          {(selectedInvoiceIds.length > 0 || applyToAll) ? 'Pay Now' : 'Add Credit'}
         </Button>
       </ModalFooter>
     </form>

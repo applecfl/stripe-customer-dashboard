@@ -562,11 +562,11 @@ export function FutureInvoicesTable({
 
         {/* Bulk Actions Toolbar */}
         {selectedIds.size > 0 && (
-          <div className="mx-4 mt-3 p-3 bg-indigo-50 rounded-lg flex flex-wrap items-center gap-2 sm:gap-3">
-            <span className="text-sm font-medium text-indigo-700">
+          <div className="mx-2 sm:mx-4 mt-2 sm:mt-3 p-2 sm:p-3 bg-indigo-50 rounded-lg flex flex-wrap items-center gap-1.5 sm:gap-3">
+            <span className="text-xs sm:text-sm font-medium text-indigo-700">
               {selectedIds.size} selected
             </span>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1 sm:gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -574,8 +574,9 @@ export function FutureInvoicesTable({
                   setBulkEditValue('');
                   setBulkAmountModal(true);
                 }}
+                className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
               >
-                Change Amount
+                <span className="hidden sm:inline">Change </span>Amount
               </Button>
               <Button
                 variant="outline"
@@ -584,30 +585,34 @@ export function FutureInvoicesTable({
                   setBulkEditValue(new Date().toISOString().split('T')[0]);
                   setBulkDateModal(true);
                 }}
+                className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
               >
-                Change Date
+                <span className="hidden sm:inline">Change </span>Date
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setBulkCardModal(true)}
+                className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
               >
-                Change Card
+                <span className="hidden sm:inline">Change </span>Card
               </Button>
               <Button
                 variant="danger"
                 size="sm"
                 onClick={confirmDeleteBulk}
+                className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
               >
-                <Trash2 className="w-4 h-4" />
-                Delete
+                <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Delete</span>
               </Button>
             </div>
             <button
               onClick={() => setSelectedIds(new Set())}
-              className="ml-auto text-sm text-gray-500 hover:text-gray-700"
+              className="ml-auto text-xs sm:text-sm text-gray-500 hover:text-gray-700"
             >
-              Clear selection
+              <span className="hidden sm:inline">Clear selection</span>
+              <X className="w-4 h-4 sm:hidden" />
             </button>
           </div>
         )}
@@ -616,25 +621,25 @@ export function FutureInvoicesTable({
           <TableHeader>
             <TableRow hoverable={false}>
               {/* Checkbox column */}
-              <TableHead className="w-10">
+              <TableHead className="w-8 sm:w-10">
                 <button
                   onClick={toggleSelectAll}
-                  className="p-1 hover:bg-gray-100 rounded transition-colors"
+                  className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
                 >
                   {isAllSelected ? (
-                    <CheckSquare className="w-4 h-4 text-indigo-600" />
+                    <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
                   ) : isSomeSelected ? (
-                    <MinusSquare className="w-4 h-4 text-indigo-600" />
+                    <MinusSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
                   ) : (
-                    <Square className="w-4 h-4 text-gray-400" />
+                    <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
                   )}
                 </button>
               </TableHead>
-              <TableHead className="w-10"></TableHead>
-              <TableHead align="right" className="w-32">Amount</TableHead>
-              <TableHead className="w-44">Finalize Date</TableHead>
-              <TableHead>Payment Method</TableHead>
-              <TableHead className="w-32"></TableHead>
+              <TableHead className="w-8 sm:w-10"></TableHead>
+              <TableHead align="right" className="w-24 sm:w-32">Amount</TableHead>
+              <TableHead className="w-28 sm:w-44"><span className="hidden sm:inline">Finalize </span>Date</TableHead>
+              <TableHead><span className="hidden sm:inline">Payment </span>Card</TableHead>
+              <TableHead className="w-20 sm:w-32"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -661,36 +666,36 @@ export function FutureInvoicesTable({
                   <TableCell>
                     <button
                       onClick={() => toggleSelect(invoice.id)}
-                      className="p-1 hover:bg-gray-100 rounded transition-colors"
+                      className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
                     >
                       {isSelected ? (
-                        <CheckSquare className="w-4 h-4 text-indigo-600" />
+                        <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
                       ) : (
-                        <Square className="w-4 h-4 text-gray-400" />
+                        <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
                       )}
                     </button>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-0.5 sm:gap-1">
                       <button
                         onClick={() => copyToClipboard(invoice.id)}
-                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                        className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
                         title={invoice.id}
                       >
                         {copiedId === invoice.id ? (
-                          <Check className="w-4 h-4 text-green-600" />
+                          <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
                         ) : (
-                          <Copy className="w-4 h-4 text-gray-400" />
+                          <Copy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
                         )}
                       </button>
                       <a
                         href={`https://dashboard.stripe.com/invoices/${invoice.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                        className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors hidden sm:block"
                         title="Open in Stripe"
                       >
-                        <ExternalLink className="w-4 h-4 text-gray-400 hover:text-indigo-600" />
+                        <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 hover:text-indigo-600" />
                       </a>
                     </div>
                   </TableCell>
@@ -699,7 +704,7 @@ export function FutureInvoicesTable({
                   <TableCell align="right">
                     {editingAmount === invoice.id ? (
                       <div className="flex items-center justify-end gap-1">
-                        <span className="text-gray-500 text-sm">$</span>
+                        <span className="text-gray-500 text-xs sm:text-sm">$</span>
                         <input
                           ref={amountInputRef}
                           type="number"
@@ -709,14 +714,14 @@ export function FutureInvoicesTable({
                           onChange={(e) => setEditValue(e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, invoice, 'amount')}
                           onBlur={() => finishEditAmount(invoice)}
-                          className="w-20 px-2 py-1 text-right text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-16 sm:w-20 px-1.5 sm:px-2 py-0.5 sm:py-1 text-right text-xs sm:text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           disabled={isSaving}
                         />
                       </div>
                     ) : (
                       <button
                         onClick={() => startEditAmount(invoice)}
-                        className={`font-semibold px-2 py-1 rounded transition-colors ${
+                        className={`font-semibold text-xs sm:text-sm px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${
                           amountChanged
                             ? 'text-amber-700 bg-amber-100 hover:bg-amber-200'
                             : 'text-gray-900 hover:text-indigo-600 hover:bg-indigo-50'
@@ -738,21 +743,21 @@ export function FutureInvoicesTable({
                           onChange={(e) => setEditValue(e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, invoice, 'date')}
                           onBlur={() => finishEditDate(invoice)}
-                          className="px-2 py-1 text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs sm:text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           disabled={isSaving}
                         />
                       </div>
                     ) : (
                       <button
                         onClick={() => startEditDate(invoice)}
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded transition-colors ${
+                        className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${
                           dateChanged
                             ? 'text-amber-700 bg-amber-100 hover:bg-amber-200'
                             : 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50'
                         }`}
                       >
-                        <Calendar className={`w-3.5 h-3.5 ${dateChanged ? 'text-amber-500' : 'text-gray-400'}`} />
-                        <span className="text-sm">
+                        <Calendar className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${dateChanged ? 'text-amber-500' : 'text-gray-400'}`} />
+                        <span className="text-xs sm:text-sm">
                           {displayedDate
                             ? formatDate(displayedDate)
                             : 'Not set'}
@@ -765,12 +770,12 @@ export function FutureInvoicesTable({
                   <TableCell>
                     {editingCard === invoice.id ? (
                       <div className="relative">
-                        <div className="absolute z-10 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg">
-                          <div className="p-2 border-b border-gray-100 flex items-center justify-between">
-                            <span className="text-xs font-medium text-gray-500">Select Payment Method</span>
+                        <div className="absolute z-10 mt-1 w-48 sm:w-64 bg-white border border-gray-200 rounded-lg shadow-lg">
+                          <div className="p-1.5 sm:p-2 border-b border-gray-100 flex items-center justify-between">
+                            <span className="text-[10px] sm:text-xs font-medium text-gray-500">Select Payment Method</span>
                             <button
                               onClick={() => setEditingCard(null)}
-                              className="p-1 hover:bg-gray-100 rounded"
+                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded"
                             >
                               <X className="w-3 h-3 text-gray-400" />
                             </button>
@@ -783,26 +788,27 @@ export function FutureInvoicesTable({
                                 <button
                                   key={method.id}
                                   onClick={() => handlePaymentMethodChange(invoice.id, method.id)}
-                                  className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors ${
+                                  className={`w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-left hover:bg-gray-50 transition-colors ${
                                     isSelected ? 'bg-indigo-50' : ''
                                   }`}
                                   disabled={isSaving}
                                 >
-                                  <div className="w-8 h-5 rounded bg-gray-100 flex items-center justify-center">
-                                    <CreditCard className="w-3.5 h-3.5 text-gray-500" />
+                                  <div className="w-6 h-4 sm:w-8 sm:h-5 rounded bg-gray-100 flex items-center justify-center">
+                                    <CreditCard className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-500" />
                                   </div>
-                                  <span className="text-sm flex-1">
+                                  <span className="text-xs sm:text-sm flex-1">
                                     <span className="capitalize">{method.card?.brand}</span>
-                                    {' •••• '}
+                                    <span className="hidden sm:inline">{' •••• '}</span>
+                                    <span className="sm:hidden"> ••</span>
                                     {method.card?.last4}
                                   </span>
                                   {method.isDefault && (
-                                    <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded">
+                                    <span className="hidden sm:inline text-[10px] bg-gray-100 text-gray-500 px-1 rounded">
                                       Default
                                     </span>
                                   )}
                                   {isSelected && (
-                                    <Check className="w-4 h-4 text-indigo-600" />
+                                    <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
                                   )}
                                 </button>
                               );
@@ -810,27 +816,28 @@ export function FutureInvoicesTable({
                           </div>
                         </div>
                         {/* Current value shown while dropdown is open */}
-                        <div className="flex items-center gap-2 text-gray-400">
+                        <div className="flex items-center gap-1.5 sm:gap-2 text-gray-400">
                           {displayedPm ? (
                             <>
-                              <div className="w-8 h-5 rounded bg-gray-100 flex items-center justify-center">
-                                <CreditCard className="w-3.5 h-3.5 text-gray-400" />
+                              <div className="w-6 h-4 sm:w-8 sm:h-5 rounded bg-gray-100 flex items-center justify-center">
+                                <CreditCard className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400" />
                               </div>
-                              <span className="text-sm">
+                              <span className="text-xs sm:text-sm">
                                 <span className="capitalize">{displayedPm.card?.brand}</span>
-                                {' •••• '}
+                                <span className="hidden sm:inline">{' •••• '}</span>
+                                <span className="sm:hidden"> ••</span>
                                 {displayedPm.card?.last4}
                               </span>
                             </>
                           ) : (
-                            <span className="text-sm">Select card...</span>
+                            <span className="text-xs sm:text-sm">Select...</span>
                           )}
                         </div>
                       </div>
                     ) : (
                       <button
                         onClick={() => setEditingCard(invoice.id)}
-                        className={`group flex items-center gap-2 px-2 py-1 rounded transition-colors ${
+                        className={`group flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${
                           pmChanged
                             ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
                             : 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50'
@@ -838,34 +845,36 @@ export function FutureInvoicesTable({
                       >
                         {displayedPm ? (
                           <>
-                            <div className={`w-8 h-5 rounded flex items-center justify-center ${
+                            <div className={`w-6 h-4 sm:w-8 sm:h-5 rounded flex items-center justify-center ${
                               pmChanged ? 'bg-amber-200' : 'bg-gray-100 group-hover:bg-indigo-100'
                             }`}>
-                              <CreditCard className={`w-3.5 h-3.5 ${
+                              <CreditCard className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${
                                 pmChanged ? 'text-amber-600' : 'text-gray-500 group-hover:text-indigo-500'
                               }`} />
                             </div>
-                            <span className="text-sm">
-                              <span className="capitalize">{displayedPm.card?.brand}</span>
-                              {' •••• '}
+                            <span className="text-xs sm:text-sm">
+                              <span className="capitalize hidden sm:inline">{displayedPm.card?.brand}</span>
+                              <span className="hidden sm:inline">{' •••• '}</span>
+                              <span className="sm:hidden">••</span>
                               {displayedPm.card?.last4}
                             </span>
                             {displayedPm.isDefault && !pmChanged && (
-                              <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded group-hover:bg-indigo-100 group-hover:text-indigo-600">
+                              <span className="hidden sm:inline text-[10px] bg-gray-100 text-gray-500 px-1 rounded group-hover:bg-indigo-100 group-hover:text-indigo-600">
                                 Default
                               </span>
                             )}
-                            <ChevronDown className={`w-3.5 h-3.5 ${pmChanged ? 'text-amber-500' : 'text-gray-400 group-hover:text-indigo-500'}`} />
+                            <ChevronDown className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${pmChanged ? 'text-amber-500' : 'text-gray-400 group-hover:text-indigo-500'}`} />
                           </>
                         ) : (
                           <>
-                            <div className="w-8 h-5 rounded bg-amber-50 flex items-center justify-center group-hover:bg-indigo-100">
-                              <CreditCard className="w-3.5 h-3.5 text-amber-500 group-hover:text-indigo-500" />
+                            <div className="w-6 h-4 sm:w-8 sm:h-5 rounded bg-amber-50 flex items-center justify-center group-hover:bg-indigo-100">
+                              <CreditCard className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 group-hover:text-indigo-500" />
                             </div>
-                            <span className="text-sm text-amber-600 group-hover:text-indigo-600">
-                              No card set
+                            <span className="text-xs sm:text-sm text-amber-600 group-hover:text-indigo-600">
+                              <span className="hidden sm:inline">No card set</span>
+                              <span className="sm:hidden">None</span>
                             </span>
-                            <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-indigo-500" />
+                            <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400 group-hover:text-indigo-500" />
                           </>
                         )}
                       </button>
@@ -874,37 +883,37 @@ export function FutureInvoicesTable({
 
                   {/* Save/Cancel/Delete Actions */}
                   <TableCell>
-                    <div className="flex items-center gap-1 justify-end">
+                    <div className="flex items-center gap-0.5 sm:gap-1 justify-end">
                       {invoiceHasChanges ? (
                         <>
                           <button
                             onClick={() => saveChanges(invoice)}
                             disabled={isSaving}
-                            className="flex items-center gap-1 px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors disabled:opacity-50"
+                            className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm rounded transition-colors disabled:opacity-50"
                           >
                             {isSaving ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin" />
                             ) : (
-                              <Save className="w-3.5 h-3.5" />
+                              <Save className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                             )}
-                            <span>Save</span>
+                            <span className="hidden sm:inline">Save</span>
                           </button>
                           <button
                             onClick={() => cancelChanges(invoice.id)}
                             disabled={isSaving}
-                            className="p-1 hover:bg-gray-100 text-gray-500 rounded transition-colors"
+                            className="p-0.5 sm:p-1 hover:bg-gray-100 text-gray-500 rounded transition-colors"
                             title="Cancel"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </button>
                         </>
                       ) : (
                         <button
                           onClick={() => confirmDeleteSingle(invoice.id)}
-                          className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-colors"
+                          className="p-0.5 sm:p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-colors"
                           title="Delete invoice"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </button>
                       )}
                     </div>
