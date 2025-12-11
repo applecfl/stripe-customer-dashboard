@@ -14,7 +14,7 @@ export function Card({ children, className, allowOverflow }: CardProps) {
     <div
       className={cn(
         'bg-white rounded-lg sm:rounded-xl border border-gray-200 shadow-sm',
-        allowOverflow ? 'overflow-visible' : 'overflow-hidden',
+        allowOverflow ? 'overflow-visible' : 'overflow-x-auto overflow-y-hidden',
         className
       )}
     >

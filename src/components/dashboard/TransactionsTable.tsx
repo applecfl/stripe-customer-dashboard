@@ -31,7 +31,6 @@ import {
   Wallet,
   MessageSquare,
   RotateCcw,
-  MoreVertical,
 } from 'lucide-react';
 
 interface TransactionsTableProps {
@@ -57,7 +56,6 @@ export function TransactionsTable({
 }: TransactionsTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const copyToClipboard = async (id: string) => {
     await navigator.clipboard.writeText(id);
@@ -117,7 +115,7 @@ export function TransactionsTable({
     <div className="space-y-6">
       {/* Failed Invoices Section */}
       {hasFailedInvoices && (
-        <Card allowOverflow>
+        <Card>
           <CardHeader
             action={
               <span className="text-sm text-gray-500">
@@ -130,8 +128,8 @@ export function TransactionsTable({
               Failed Invoices
             </div>
           </CardHeader>
-          <CardContent noPadding className="overflow-visible">
-            <Table allowOverflow>
+          <CardContent noPadding>
+            <Table>
               <TableHeader>
                 <TableRow hoverable={false}>
                   <TableHead className="w-10"></TableHead>
@@ -264,48 +262,35 @@ export function TransactionsTable({
                               Void
                             </button>
                           </div>
-                          {/* Mobile: dropdown menu */}
-                          <div className="sm:hidden relative">
+                          {/* Mobile: same inline buttons, user can scroll */}
+                          <div className="sm:hidden flex items-center justify-end gap-2">
                             <button
-                              onClick={() => setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)}
-                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                              onClick={() => onRetryInvoice(invoice)}
+                              className="text-xs text-gray-600 hover:text-indigo-600 transition-colors whitespace-nowrap"
                             >
-                              <MoreVertical className="w-4 h-4 text-gray-500" />
+                              Retry
                             </button>
-                            {openMenuId === invoice.id && (
-                              <>
-                                <div
-                                  className="fixed inset-0 z-10"
-                                  onClick={() => setOpenMenuId(null)}
-                                />
-                                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 min-w-[120px]">
-                                  <button
-                                    onClick={() => { onRetryInvoice(invoice); setOpenMenuId(null); }}
-                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                                  >
-                                    Retry
-                                  </button>
-                                  <button
-                                    onClick={() => { onPayInvoice(invoice); setOpenMenuId(null); }}
-                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                                  >
-                                    Pay
-                                  </button>
-                                  <button
-                                    onClick={() => { onPauseInvoice(invoice, !invoice.isPaused); setOpenMenuId(null); }}
-                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                                  >
-                                    {invoice.isPaused ? 'Resume' : 'Pause'}
-                                  </button>
-                                  <button
-                                    onClick={() => { onVoidInvoice(invoice); setOpenMenuId(null); }}
-                                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                                  >
-                                    Void
-                                  </button>
-                                </div>
-                              </>
-                            )}
+                            <span className="text-gray-300">|</span>
+                            <button
+                              onClick={() => onPayInvoice(invoice)}
+                              className="text-xs text-gray-600 hover:text-indigo-600 transition-colors whitespace-nowrap"
+                            >
+                              Pay
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              onClick={() => onPauseInvoice(invoice, !invoice.isPaused)}
+                              className="text-xs text-gray-600 hover:text-indigo-600 transition-colors whitespace-nowrap"
+                            >
+                              {invoice.isPaused ? 'Resume' : 'Pause'}
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              onClick={() => onVoidInvoice(invoice)}
+                              className="text-xs text-red-500 hover:text-red-700 transition-colors whitespace-nowrap"
+                            >
+                              Void
+                            </button>
                           </div>
                         </TableCell>
                       </TableRow>

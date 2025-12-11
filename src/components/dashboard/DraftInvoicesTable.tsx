@@ -13,6 +13,9 @@ import {
   TableRow,
   TableHead,
   TableCell,
+  Modal,
+  ModalFooter,
+  Button,
 } from '@/components/ui';
 import {
   Clock,
@@ -25,6 +28,10 @@ import {
   X,
   Save,
   ExternalLink,
+  Trash2,
+  CheckSquare,
+  Square,
+  MinusSquare,
 } from 'lucide-react';
 
 interface FutureInvoicesTableProps {
@@ -69,6 +76,24 @@ export function FutureInvoicesTable({
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    invoiceIds: string[];
+    isBulk: boolean;
+  }>({ isOpen: false, invoiceIds: [], isBulk: false });
+  const [deleting, setDeleting] = useState(false);
+
+  // Bulk edit modals state
+  const [bulkAmountModal, setBulkAmountModal] = useState(false);
+  const [bulkDateModal, setBulkDateModal] = useState(false);
+  const [bulkCardModal, setBulkCardModal] = useState(false);
+  const [bulkEditValue, setBulkEditValue] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const amountInputRef = useRef<HTMLInputElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -325,6 +350,187 @@ export function FutureInvoicesTable({
     }
   };
 
+  // Selection helpers
+  const toggleSelect = (invoiceId: string) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(invoiceId)) {
+        newSet.delete(invoiceId);
+      } else {
+        newSet.add(invoiceId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === draftInvoices.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(draftInvoices.map(inv => inv.id)));
+    }
+  };
+
+  const isAllSelected = draftInvoices.length > 0 && selectedIds.size === draftInvoices.length;
+  const isSomeSelected = selectedIds.size > 0 && selectedIds.size < draftInvoices.length;
+
+  // Delete invoice(s)
+  const handleDelete = async () => {
+    if (deleteModal.invoiceIds.length === 0) return;
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      for (const invoiceId of deleteModal.invoiceIds) {
+        const res = await fetch(withToken(`/api/stripe/invoices/${invoiceId}`), {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || `Failed to delete invoice ${invoiceId}`);
+        }
+      }
+
+      // Clear selection after successful deletion
+      setSelectedIds(prev => {
+        const newSet = new Set(prev);
+        deleteModal.invoiceIds.forEach(id => newSet.delete(id));
+        return newSet;
+      });
+
+      setDeleteModal({ isOpen: false, invoiceIds: [], isBulk: false });
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to delete invoice(s):', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete invoice(s)');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Open delete confirmation for single invoice
+  const confirmDeleteSingle = (invoiceId: string) => {
+    setDeleteModal({ isOpen: true, invoiceIds: [invoiceId], isBulk: false });
+  };
+
+  // Open delete confirmation for selected invoices
+  const confirmDeleteBulk = () => {
+    if (selectedIds.size === 0) return;
+    setDeleteModal({ isOpen: true, invoiceIds: Array.from(selectedIds), isBulk: true });
+  };
+
+  // Bulk change amount
+  const handleBulkChangeAmount = async () => {
+    const newAmount = Math.round(parseFloat(bulkEditValue) * 100);
+    if (isNaN(newAmount) || newAmount <= 0) {
+      setError('Please enter a valid amount');
+      return;
+    }
+
+    setBulkSaving(true);
+    setError(null);
+
+    try {
+      for (const invoiceId of Array.from(selectedIds)) {
+        const invoice = draftInvoices.find(inv => inv.id === invoiceId);
+        if (!invoice) continue;
+
+        const res = await fetch(withToken('/api/stripe/invoices/adjust'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            invoiceId,
+            newAmount,
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || `Failed to update amount for invoice ${invoiceId}`);
+        }
+      }
+
+      setBulkAmountModal(false);
+      setBulkEditValue('');
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to bulk change amount:', err);
+      setError(err instanceof Error ? err.message : 'Failed to change amount');
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  // Bulk change date
+  const handleBulkChangeDate = async () => {
+    const newDate = new Date(bulkEditValue + 'T00:00:00');
+    if (isNaN(newDate.getTime())) {
+      setError('Please enter a valid date');
+      return;
+    }
+    const timestamp = Math.floor(newDate.getTime() / 1000);
+
+    setBulkSaving(true);
+    setError(null);
+
+    try {
+      for (const invoiceId of Array.from(selectedIds)) {
+        const res = await fetch(withToken('/api/stripe/invoices/schedule'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            invoiceId,
+            scheduledDate: timestamp,
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || `Failed to update date for invoice ${invoiceId}`);
+        }
+      }
+
+      setBulkDateModal(false);
+      setBulkEditValue('');
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to bulk change date:', err);
+      setError(err instanceof Error ? err.message : 'Failed to change date');
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  // Bulk change payment method
+  const handleBulkChangeCard = async (paymentMethodId: string) => {
+    setBulkSaving(true);
+    setError(null);
+
+    try {
+      for (const invoiceId of Array.from(selectedIds)) {
+        const res = await fetch(withToken('/api/stripe/invoices/payment-method'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            invoiceId,
+            paymentMethodId,
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || `Failed to update payment method for invoice ${invoiceId}`);
+        }
+      }
+
+      setBulkCardModal(false);
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to bulk change card:', err);
+      setError(err instanceof Error ? err.message : 'Failed to change payment method');
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   if (draftInvoices.length === 0) {
     return null;
   }
@@ -353,14 +559,82 @@ export function FutureInvoicesTable({
             </button>
           </div>
         )}
+
+        {/* Bulk Actions Toolbar */}
+        {selectedIds.size > 0 && (
+          <div className="mx-4 mt-3 p-3 bg-indigo-50 rounded-lg flex flex-wrap items-center gap-2 sm:gap-3">
+            <span className="text-sm font-medium text-indigo-700">
+              {selectedIds.size} selected
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setBulkEditValue('');
+                  setBulkAmountModal(true);
+                }}
+              >
+                Change Amount
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setBulkEditValue(new Date().toISOString().split('T')[0]);
+                  setBulkDateModal(true);
+                }}
+              >
+                Change Date
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBulkCardModal(true)}
+              >
+                Change Card
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={confirmDeleteBulk}
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </Button>
+            </div>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="ml-auto text-sm text-gray-500 hover:text-gray-700"
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
+
         <Table>
           <TableHeader>
             <TableRow hoverable={false}>
+              {/* Checkbox column */}
+              <TableHead className="w-10">
+                <button
+                  onClick={toggleSelectAll}
+                  className="p-1 hover:bg-gray-100 rounded transition-colors"
+                >
+                  {isAllSelected ? (
+                    <CheckSquare className="w-4 h-4 text-indigo-600" />
+                  ) : isSomeSelected ? (
+                    <MinusSquare className="w-4 h-4 text-indigo-600" />
+                  ) : (
+                    <Square className="w-4 h-4 text-gray-400" />
+                  )}
+                </button>
+              </TableHead>
               <TableHead className="w-10"></TableHead>
               <TableHead align="right" className="w-32">Amount</TableHead>
               <TableHead className="w-44">Finalize Date</TableHead>
               <TableHead>Payment Method</TableHead>
-              <TableHead className="w-24"></TableHead>
+              <TableHead className="w-32"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -379,8 +653,23 @@ export function FutureInvoicesTable({
               const pmChanged = pendingChanges[invoice.id]?.paymentMethodId !== undefined &&
                 pendingChanges[invoice.id]?.paymentMethodId !== invoice.default_payment_method;
 
+              const isSelected = selectedIds.has(invoice.id);
+
               return (
-                <TableRow key={invoice.id} className={invoiceHasChanges ? 'bg-amber-50/50' : ''}>
+                <TableRow key={invoice.id} className={`${invoiceHasChanges ? 'bg-amber-50/50' : ''} ${isSelected ? 'bg-indigo-50/50' : ''}`}>
+                  {/* Checkbox Cell */}
+                  <TableCell>
+                    <button
+                      onClick={() => toggleSelect(invoice.id)}
+                      className="p-1 hover:bg-gray-100 rounded transition-colors"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-4 h-4 text-indigo-600" />
+                      ) : (
+                        <Square className="w-4 h-4 text-gray-400" />
+                      )}
+                    </button>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
                       <button
@@ -583,32 +872,42 @@ export function FutureInvoicesTable({
                     )}
                   </TableCell>
 
-                  {/* Save/Cancel Actions */}
+                  {/* Save/Cancel/Delete Actions */}
                   <TableCell>
-                    {invoiceHasChanges && (
-                      <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 justify-end">
+                      {invoiceHasChanges ? (
+                        <>
+                          <button
+                            onClick={() => saveChanges(invoice)}
+                            disabled={isSaving}
+                            className="flex items-center gap-1 px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors disabled:opacity-50"
+                          >
+                            {isSaving ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Save className="w-3.5 h-3.5" />
+                            )}
+                            <span>Save</span>
+                          </button>
+                          <button
+                            onClick={() => cancelChanges(invoice.id)}
+                            disabled={isSaving}
+                            className="p-1 hover:bg-gray-100 text-gray-500 rounded transition-colors"
+                            title="Cancel"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
                         <button
-                          onClick={() => saveChanges(invoice)}
-                          disabled={isSaving}
-                          className="flex items-center gap-1 px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors disabled:opacity-50"
+                          onClick={() => confirmDeleteSingle(invoice.id)}
+                          className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-colors"
+                          title="Delete invoice"
                         >
-                          {isSaving ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Save className="w-3.5 h-3.5" />
-                          )}
-                          <span>Save</span>
+                          <Trash2 className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => cancelChanges(invoice.id)}
-                          disabled={isSaving}
-                          className="p-1 hover:bg-gray-100 text-gray-500 rounded transition-colors"
-                          title="Cancel"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               );
@@ -616,6 +915,176 @@ export function FutureInvoicesTable({
           </TableBody>
         </Table>
       </CardContent>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, invoiceIds: [], isBulk: false })}
+        title={deleteModal.isBulk ? 'Delete Invoices' : 'Delete Invoice'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            {deleteModal.isBulk
+              ? `Are you sure you want to delete ${deleteModal.invoiceIds.length} invoice${deleteModal.invoiceIds.length !== 1 ? 's' : ''}? This action cannot be undone.`
+              : 'Are you sure you want to delete this invoice? This action cannot be undone.'}
+          </p>
+          {deleteModal.isBulk && (
+            <div className="bg-gray-50 rounded-lg p-3 max-h-32 overflow-y-auto">
+              <p className="text-xs font-medium text-gray-500 mb-2">Invoices to delete:</p>
+              {deleteModal.invoiceIds.map(id => {
+                const invoice = draftInvoices.find(inv => inv.id === id);
+                return (
+                  <div key={id} className="text-sm text-gray-700 flex justify-between py-1">
+                    <span className="font-mono text-xs">{id.slice(0, 20)}...</span>
+                    {invoice && <span className="font-medium">{formatCurrency(invoice.amount_due, invoice.currency)}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteModal({ isOpen: false, invoiceIds: [], isBulk: false })}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </>
+              )}
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+
+      {/* Bulk Change Amount Modal */}
+      <Modal
+        isOpen={bulkAmountModal}
+        onClose={() => setBulkAmountModal(false)}
+        title="Change Amount"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Set a new amount for {selectedIds.size} selected invoice{selectedIds.size !== 1 ? 's' : ''}.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">New Amount</label>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">$</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={bulkEditValue}
+                onChange={(e) => setBulkEditValue(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setBulkAmountModal(false)} disabled={bulkSaving}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleBulkChangeAmount} disabled={bulkSaving || !bulkEditValue}>
+              {bulkSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Apply to {selectedIds.size} invoice{selectedIds.size !== 1 ? 's' : ''}
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+
+      {/* Bulk Change Date Modal */}
+      <Modal
+        isOpen={bulkDateModal}
+        onClose={() => setBulkDateModal(false)}
+        title="Change Finalize Date"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Set a new finalize date for {selectedIds.size} selected invoice{selectedIds.size !== 1 ? 's' : ''}.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">New Date</label>
+            <input
+              type="date"
+              value={bulkEditValue}
+              onChange={(e) => setBulkEditValue(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setBulkDateModal(false)} disabled={bulkSaving}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleBulkChangeDate} disabled={bulkSaving || !bulkEditValue}>
+              {bulkSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Apply to {selectedIds.size} invoice{selectedIds.size !== 1 ? 's' : ''}
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+
+      {/* Bulk Change Card Modal */}
+      <Modal
+        isOpen={bulkCardModal}
+        onClose={() => setBulkCardModal(false)}
+        title="Change Payment Method"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Select a payment method for {selectedIds.size} selected invoice{selectedIds.size !== 1 ? 's' : ''}.
+          </p>
+          <div className="space-y-2">
+            {paymentMethods.map((method) => (
+              <button
+                key={method.id}
+                onClick={() => handleBulkChangeCard(method.id)}
+                disabled={bulkSaving}
+                className="w-full flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                <div className="w-10 h-6 rounded bg-gray-100 flex items-center justify-center">
+                  <CreditCard className="w-4 h-4 text-gray-500" />
+                </div>
+                <span className="flex-1 text-left">
+                  <span className="capitalize font-medium">{method.card?.brand}</span>
+                  {' •••• '}
+                  {method.card?.last4}
+                </span>
+                {method.isDefault && (
+                  <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">
+                    Default
+                  </span>
+                )}
+                {bulkSaving && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+              </button>
+            ))}
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setBulkCardModal(false)} disabled={bulkSaving}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
     </Card>
   );
 }

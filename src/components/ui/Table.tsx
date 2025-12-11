@@ -11,8 +11,8 @@ interface TableProps {
 
 export function Table({ children, className, allowOverflow }: TableProps) {
   return (
-    <div className={cn(allowOverflow ? 'overflow-visible' : 'overflow-x-auto -mx-4 sm:mx-0', className)}>
-      <table className="w-full min-w-[500px] sm:min-w-0">{children}</table>
+    <div className={cn(allowOverflow ? 'overflow-visible' : 'overflow-x-auto', className)}>
+      <table className={cn('w-full', !allowOverflow && 'min-w-[650px] sm:min-w-0')}>{children}</table>
     </div>
   );
 }
