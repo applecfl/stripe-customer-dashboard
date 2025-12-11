@@ -152,29 +152,6 @@ function PaymentForm({
     }, 0);
   }, [selectedAdditionalInvoices, payableInvoices]);
 
-  // Auto-select invoices based on entered amount (when amount is manually entered)
-  // For specific invoice payment: use excess amount; for general payment: use full amount
-  const autoSelectedInvoices = useMemo(() => {
-    // For specific invoice: only auto-select if there's excess
-    // For general payment: auto-select based on entered amount
-    const availableAmount = invoice ? excessAmount : payAmount;
-    if (availableAmount <= 0) return [];
-
-    let remaining = availableAmount;
-    const selected: string[] = [];
-
-    for (const inv of payableInvoices) {
-      if (remaining <= 0) break;
-      const invAmount = getEffectiveRemaining(inv);
-      if (invAmount > 0) {
-        selected.push(inv.id);
-        remaining -= invAmount;
-      }
-    }
-
-    return selected;
-  }, [invoice, excessAmount, payAmount, payableInvoices]);
-
   // Calculate how much of the payment applies to each invoice (for display)
   const invoicePaymentBreakdown = useMemo(() => {
     const breakdown: Record<string, { willPay: number; remaining: number }> = {};
