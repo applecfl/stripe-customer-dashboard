@@ -31,6 +31,7 @@ import {
   Wallet,
   MessageSquare,
   RotateCcw,
+  MoreVertical,
 } from 'lucide-react';
 
 interface TransactionsTableProps {
@@ -56,6 +57,7 @@ export function TransactionsTable({
 }: TransactionsTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const copyToClipboard = async (id: string) => {
     await navigator.clipboard.writeText(id);
@@ -232,7 +234,8 @@ export function TransactionsTable({
                           </div>
                         </TableCell>
                         <TableCell align="right">
-                          <div className="flex items-center justify-end gap-2">
+                          {/* Desktop: inline buttons */}
+                          <div className="hidden sm:flex items-center justify-end gap-2">
                             <button
                               onClick={() => onRetryInvoice(invoice)}
                               className="text-sm text-gray-600 hover:text-indigo-600 transition-colors"
@@ -260,6 +263,49 @@ export function TransactionsTable({
                             >
                               Void
                             </button>
+                          </div>
+                          {/* Mobile: dropdown menu */}
+                          <div className="sm:hidden relative">
+                            <button
+                              onClick={() => setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)}
+                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                              <MoreVertical className="w-4 h-4 text-gray-500" />
+                            </button>
+                            {openMenuId === invoice.id && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-10"
+                                  onClick={() => setOpenMenuId(null)}
+                                />
+                                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 min-w-[120px]">
+                                  <button
+                                    onClick={() => { onRetryInvoice(invoice); setOpenMenuId(null); }}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Retry
+                                  </button>
+                                  <button
+                                    onClick={() => { onPayInvoice(invoice); setOpenMenuId(null); }}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Pay
+                                  </button>
+                                  <button
+                                    onClick={() => { onPauseInvoice(invoice, !invoice.isPaused); setOpenMenuId(null); }}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                                  >
+                                    {invoice.isPaused ? 'Resume' : 'Pause'}
+                                  </button>
+                                  <button
+                                    onClick={() => { onVoidInvoice(invoice); setOpenMenuId(null); }}
+                                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                  >
+                                    Void
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
