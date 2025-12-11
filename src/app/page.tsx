@@ -458,26 +458,26 @@ function DashboardContent() {
     <div className="min-h-screen bg-gray-50">
       {/* Header Bar */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <img
                 src="https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png"
                 alt="LEC Logo"
-                className="h-8 w-auto"
+                className="h-6 sm:h-8 w-auto flex-shrink-0"
               />
-              <span className="font-semibold text-gray-900">LEC - Payment Manager</span>
+              <span className="font-semibold text-gray-900 text-sm sm:text-base truncate">Payment Manager</span>
             </div>
-            <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2 sm:gap-4 text-sm flex-shrink-0">
               {refreshing && (
-                <div className="flex items-center gap-2 text-indigo-600">
+                <div className="flex items-center gap-1 sm:gap-2 text-indigo-600">
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span className="text-xs">Updating...</span>
+                  <span className="text-xs hidden sm:inline">Updating...</span>
                 </div>
               )}
-              <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2">
                 <span className="text-gray-500">Invoice UID:</span>
-                <code className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-mono text-xs">
+                <code className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-mono text-xs max-w-[120px] truncate">
                   {invoiceUID}
                 </code>
               </div>
@@ -489,13 +489,13 @@ function DashboardContent() {
       {/* Error Banner */}
       {error && (
         <div className="bg-red-50 border-b border-red-200">
-          <div className="max-w-7xl mx-auto px-6 py-3">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
             <div className="flex items-center gap-2 text-red-700">
-              <AlertCircle className="w-4 h-4" />
-              <span className="text-sm">{error}</span>
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span className="text-sm flex-1">{error}</span>
               <button
                 onClick={() => setError(null)}
-                className="ml-auto text-sm underline hover:no-underline"
+                className="text-sm underline hover:no-underline flex-shrink-0"
               >
                 Dismiss
               </button>
@@ -505,7 +505,7 @@ function DashboardContent() {
       )}
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8 space-y-4 sm:space-y-8">
         {/* Customer Header */}
         <CustomerHeader
           customer={customer}
@@ -514,19 +514,20 @@ function DashboardContent() {
         />
 
         {/* Tabs */}
-        <div className="border-b border-gray-200">
-          <nav className="flex gap-8">
+        <div className="border-b border-gray-200 -mx-4 sm:mx-0 px-4 sm:px-0">
+          <nav className="flex gap-4 sm:gap-8">
             <button
               onClick={() => setActiveTab('invoices')}
-              className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'invoices'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
               <FileText className="w-4 h-4" />
-              Transactions
-              <span className={`px-2 py-0.5 rounded-full text-xs ${
+              <span className="hidden sm:inline">Transactions</span>
+              <span className="sm:hidden">Trans.</span>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
                 activeTab === 'invoices' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
               }`}>
                 {invoices.length + payments.filter(p => p.status === 'succeeded').length}
@@ -534,15 +535,16 @@ function DashboardContent() {
             </button>
             <button
               onClick={() => setActiveTab('payment-methods')}
-              className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'payment-methods'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
               <CreditCard className="w-4 h-4" />
-              Payment Methods
-              <span className={`px-2 py-0.5 rounded-full text-xs ${
+              <span className="hidden sm:inline">Payment Methods</span>
+              <span className="sm:hidden">Cards</span>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
                 activeTab === 'payment-methods' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
               }`}>
                 {paymentMethods.length}

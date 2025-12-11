@@ -11,8 +11,8 @@ interface TableProps {
 
 export function Table({ children, className, allowOverflow }: TableProps) {
   return (
-    <div className={cn(allowOverflow ? 'overflow-visible' : 'overflow-x-auto', className)}>
-      <table className="w-full">{children}</table>
+    <div className={cn(allowOverflow ? 'overflow-visible' : 'overflow-x-auto -mx-4 sm:mx-0', className)}>
+      <table className="w-full min-w-[500px] sm:min-w-0">{children}</table>
     </div>
   );
 }
@@ -78,7 +78,7 @@ export function TableHead({ children, className, align = 'left' }: TableHeadProp
   return (
     <th
       className={cn(
-        'px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider',
+        'px-3 sm:px-6 py-2.5 sm:py-3.5 text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider',
         alignments[align],
         className
       )}
@@ -104,7 +104,7 @@ export function TableCell({ children, className, align = 'left' }: TableCellProp
   return (
     <td
       className={cn(
-        'px-6 py-4 text-sm text-gray-700 whitespace-nowrap',
+        'px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-700 whitespace-nowrap',
         alignments[align],
         className
       )}
