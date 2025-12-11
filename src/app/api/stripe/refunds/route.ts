@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
 import stripe from '@/lib/stripe';
 import { RefundData, ApiResponse } from '@/types';
 
@@ -74,7 +75,7 @@ export async function POST(
     }
 
     // Create the refund
-    const refundParams: Parameters<typeof stripe.refunds.create>[0] = {
+    const refundParams: Stripe.RefundCreateParams = {
       payment_intent: paymentIntentId,
     };
 
