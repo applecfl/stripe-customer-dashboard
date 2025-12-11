@@ -1,0 +1,14 @@
+runConfig:
+  runtime: nodejs22
+
+env:
+  # Public env vars (safe to expose)
+  - variable: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    value: pk_test_SCQMdGmog4kMdfKc4X8mrxPb
+
+  # Secrets (stored in Secret Manager)
+  - variable: STRIPE_SECRET_KEY
+    secret: STRIPE_SECRET_KEY
+
+  - variable: AUTH_SECRET
+    secret: AUTH_SECRET
