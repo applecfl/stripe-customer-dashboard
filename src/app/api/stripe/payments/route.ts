@@ -70,8 +70,10 @@ export async function GET(
     // Create a map of payment intent IDs to invoice IDs
     const paymentIntentToInvoice = new Map<string, string>();
     allInvoices.forEach((inv) => {
-      if (inv.payment_intent) {
-        const piId = typeof inv.payment_intent === 'string' ? inv.payment_intent : inv.payment_intent.id;
+      // Use type assertion since payment_intent exists on Invoice but may not be in all type definitions
+      const paymentIntent = (inv as unknown as { payment_intent?: string | { id: string } | null }).payment_intent;
+      if (paymentIntent) {
+        const piId = typeof paymentIntent === 'string' ? paymentIntent : paymentIntent.id;
         paymentIntentToInvoice.set(piId, inv.id);
       }
     });
