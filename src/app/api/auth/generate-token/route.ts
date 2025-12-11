@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateToken, isAllowedIP, getClientIP } from '@/lib/auth';
 
 interface GenerateTokenRequest {
-  customerId: string;
-  invoiceUID: string;
+  CustomerId: string;
+  InvoiceUID: string;
 }
 
 interface GenerateTokenResponse {
@@ -31,7 +31,7 @@ export async function POST(
 
     // Parse request body
     const body: GenerateTokenRequest = await request.json();
-    const { customerId, invoiceUID } = body;
+    const { CustomerId: customerId, InvoiceUID: invoiceUID } = body;
 
     // Validate required fields
     if (!customerId || typeof customerId !== 'string') {

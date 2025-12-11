@@ -25,7 +25,7 @@ export function CustomerHeader({
   return (
     <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Main Customer Info */}
-      <div className="px-3 sm:px-8 py-3 sm:py-6 landscape-compact safe-landscape">
+      <div className="px-3 sm:px-8 py-3 sm:py-6 ">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
           {/* Customer Details */}
           <div className="flex items-start gap-2.5 sm:gap-5">
@@ -65,7 +65,7 @@ export function CustomerHeader({
           <div className="flex items-center gap-1.5 sm:gap-3 sm:flex-shrink-0">
             <Button variant="primary" size="sm" onClick={onPayNow} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-2 sm:px-4">
               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>Pay</span>
+              <span>Charge</span>
             </Button>
             <Button variant="outline" size="sm" onClick={onAddPaymentMethod} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-2 sm:px-4">
               <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />

@@ -42,6 +42,8 @@ interface TransactionsTableProps {
   onPauseInvoice: (invoice: InvoiceData, pause: boolean) => void;
   onRetryInvoice: (invoice: InvoiceData) => void;
   onRefund: (payment: PaymentData) => void;
+  showOnlyFailed?: boolean;
+  showOnlySuccess?: boolean;
 }
 
 export function TransactionsTable({
@@ -119,13 +121,13 @@ export function TransactionsTable({
           <CardHeader
             action={
               <span className="text-sm text-gray-500">
-                {failedInvoices.length} invoice{failedInvoices.length !== 1 ? 's' : ''}
+                {failedInvoices.length} payment{failedInvoices.length !== 1 ? 's' : ''}
               </span>
             }
           >
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-red-600" />
-              Failed Invoices
+              Failed Payemnts
             </div>
           </CardHeader>
           <CardContent noPadding>
@@ -378,7 +380,7 @@ export function TransactionsTable({
           >
             <div className="flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-green-600" />
-              Payments
+              Successful Payments
             </div>
           </CardHeader>
           <CardContent noPadding>

@@ -106,7 +106,7 @@ function PaymentForm({
       .sort((a, b) => getInvoiceSortPriority(a) - getInvoiceSortPriority(b));
   }, [invoices, invoice]);
 
-  // Calculate total amount of all failed invoices
+  // Calculate total amount of all failed payments
   const totalFailedAmount = useMemo(() => {
     return failedInvoices.reduce((sum, inv) => sum + inv.amount_remaining, 0);
   }, [failedInvoices]);
@@ -211,11 +211,9 @@ function PaymentForm({
 
   const handleAmountChange = (value: string) => {
     setAmount(value);
-    // Mark as manual entry if user types something
     if (value && parseFloat(value) > 0) {
       setManualAmountEntered(true);
-      // Auto-select invoices based on entered amount, but allow user to modify
-      // Calculate which invoices would be auto-selected for this amount
+      // Auto-select ONLY failed invoices
       const payAmountValue = Math.round(parseFloat(value) * 100);
       const availableAmount = invoice ? Math.max(0, payAmountValue - (invoice.amount_remaining || 0)) : payAmountValue;
 
@@ -224,10 +222,13 @@ function PaymentForm({
         const autoSelected: string[] = [];
         for (const inv of payableInvoices) {
           if (remaining <= 0) break;
-          const invAmount = getEffectiveRemaining(inv);
-          if (invAmount > 0) {
-            autoSelected.push(inv.id);
-            remaining -= invAmount;
+          // Only auto-select failed invoices
+          if (inv.status === 'open' && inv.attempt_count > 0) {
+            const invAmount = getEffectiveRemaining(inv);
+            if (invAmount > 0) {
+              autoSelected.push(inv.id);
+              remaining -= invAmount;
+            }
           }
         }
         setSelectedAdditionalInvoices(autoSelected);
@@ -413,8 +414,113 @@ function PaymentForm({
           onChange={(e) => handleAmountChange(e.target.value)}
           hint={manualAmountEntered
             ? 'Amount will be applied to invoices in order (failed first, then draft)'
-            : 'Select invoices below or enter amount manually'}
+            : 'Select payments below or enter amount manually'}
         />
+
+        {/* Invoice Selection - Show in Make Payment mode OR when excess amount on specific invoice */}
+        {(!invoice || excessAmount > 0) && (
+          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-gray-600" />
+                <span className="text-sm font-medium text-gray-800">
+                  {invoice
+                    ? 'Additional payments to make with excess:'
+                    : manualAmountEntered
+                      ? 'Payments to be made:'
+                      : 'Select payments:'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                {selectedAdditionalInvoices.length > 0 && !manualAmountEntered && (
+                  <span className="text-xs font-medium text-indigo-600">
+                    Total: {formatCurrency(selectedInvoicesTotal, currency)}
+                  </span>
+                )}
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showAllInvoices}
+                    onChange={(e) => setShowAllInvoices(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-xs text-gray-600">Show all</span>
+                </label>
+              </div>
+            </div>
+            {payableInvoices.length > 0 ? (
+              <div className="border border-gray-200 rounded-lg bg-white divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                {payableInvoices.map((inv) => {
+                  const effectiveRemaining = getEffectiveRemaining(inv);
+                  const isFailed = isFailedInvoice(inv);
+                  const breakdown = invoicePaymentBreakdown[inv.id];
+                  const isSelected = selectedAdditionalInvoices.includes(inv.id);
+                  const willBeFullyPaid = breakdown && breakdown.remaining === 0;
+
+                  return (
+                    <label
+                      key={inv.id}
+                      className={`flex items-center gap-2 p-2 cursor-pointer transition-colors ${isSelected
+                        ? willBeFullyPaid
+                          ? 'bg-green-50'
+                          : 'bg-amber-50'
+                        : isFailed
+                          ? 'bg-red-50/50 hover:bg-red-50'
+                          : 'hover:bg-gray-50'
+                        }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleAdditionalInvoiceToggle(inv.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-indigo-600"
+                      />
+                      {isFailed ? (
+                        <AlertTriangle className="w-3 h-3 text-red-500 flex-shrink-0" />
+                      ) : (
+                        <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                        <span className={`text-sm truncate ${isFailed ? 'text-red-700' : 'text-gray-900'}`}>
+                          {inv.number || inv.id.slice(0, 8)}
+                        </span>
+                        {isFailed && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded flex-shrink-0">Failed</span>}
+                        {inv.status === 'draft' && <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded flex-shrink-0">Draft</span>}
+                      </div>
+                      {/* Amount display with breakdown */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {isSelected && breakdown ? (
+                          <>
+                            <span className="text-xs text-gray-400 line-through">
+                              {formatCurrency(effectiveRemaining, inv.currency)}
+                            </span>
+                            <span className={`text-xs font-medium ${willBeFullyPaid ? 'text-green-600' : 'text-amber-600'}`}>
+                              {willBeFullyPaid ? '$0.00' : formatCurrency(breakdown.remaining, inv.currency)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-500">
+                            {formatCurrency(effectiveRemaining, inv.currency)}
+                          </span>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">No invoices available to pay.</p>
+            )}
+            {/* Excess credit info */}
+            {(() => {
+              // Calculate available amount for additional invoices
+              const availableForAdditional = invoice ? excessAmount : payAmount;
+              if (availableForAdditional <= 0) return null;
+
+              return null;
+            })()}
+          </div>
+        )}
 
         {/* Payment Method Selection */}
         <div className="space-y-2">
@@ -426,11 +532,10 @@ function PaymentForm({
             {paymentMethods.map((pm) => (
               <label
                 key={pm.id}
-                className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
-                  !showAddCard && paymentMethodId === pm.id
-                    ? 'bg-indigo-50'
-                    : 'hover:bg-gray-50'
-                }`}
+                className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${!showAddCard && paymentMethodId === pm.id
+                  ? 'bg-indigo-50'
+                  : 'hover:bg-gray-50'
+                  }`}
               >
                 <input
                   type="radio"
@@ -443,9 +548,8 @@ function PaymentForm({
                   }}
                   className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
                 />
-                <div className={`w-10 h-6 rounded flex items-center justify-center ${
-                  pm.isDefault ? 'bg-indigo-100' : 'bg-gray-100'
-                }`}>
+                <div className={`w-10 h-6 rounded flex items-center justify-center ${pm.isDefault ? 'bg-indigo-100' : 'bg-gray-100'
+                  }`}>
                   <CreditCard className="w-4 h-4 text-gray-500" />
                 </div>
                 <div className="flex-1">
@@ -471,9 +575,8 @@ function PaymentForm({
 
             {/* Add New Card Option */}
             <label
-              className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
-                showAddCard ? 'bg-indigo-50' : 'hover:bg-gray-50'
-              }`}
+              className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${showAddCard ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                }`}
             >
               <input
                 type="radio"
@@ -542,111 +645,7 @@ function PaymentForm({
           rows={2}
         />
 
-        {/* Invoice Selection - Show in Make Payment mode OR when excess amount on specific invoice */}
-        {(!invoice || excessAmount > 0) && (
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-gray-600" />
-                <span className="text-sm font-medium text-gray-800">
-                  {invoice
-                    ? 'Additional invoices to pay with excess:'
-                    : manualAmountEntered
-                      ? 'Invoices to be paid:'
-                      : 'Select invoices to pay:'}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                {selectedAdditionalInvoices.length > 0 && !manualAmountEntered && (
-                  <span className="text-xs font-medium text-indigo-600">
-                    Total: {formatCurrency(selectedInvoicesTotal, currency)}
-                  </span>
-                )}
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showAllInvoices}
-                    onChange={(e) => setShowAllInvoices(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-xs text-gray-600">Show all</span>
-                </label>
-              </div>
-            </div>
-            {payableInvoices.length > 0 ? (
-              <div className="border border-gray-200 rounded-lg bg-white divide-y divide-gray-100 max-h-48 overflow-y-auto">
-                {payableInvoices.map((inv) => {
-                  const effectiveRemaining = getEffectiveRemaining(inv);
-                  const isFailed = isFailedInvoice(inv);
-                  const breakdown = invoicePaymentBreakdown[inv.id];
-                  const isSelected = selectedAdditionalInvoices.includes(inv.id);
-                  const willBeFullyPaid = breakdown && breakdown.remaining === 0;
 
-                  return (
-                    <label
-                      key={inv.id}
-                      className={`flex items-center gap-2 p-2 cursor-pointer transition-colors ${
-                        isSelected
-                          ? willBeFullyPaid
-                            ? 'bg-green-50'
-                            : 'bg-amber-50'
-                          : isFailed
-                            ? 'bg-red-50/50 hover:bg-red-50'
-                            : 'hover:bg-gray-50'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleAdditionalInvoiceToggle(inv.id)}
-                        className="w-4 h-4 rounded border-gray-300 text-indigo-600"
-                      />
-                      {isFailed ? (
-                        <AlertTriangle className="w-3 h-3 text-red-500 flex-shrink-0" />
-                      ) : (
-                        <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0 flex items-center gap-2">
-                        <span className={`text-sm truncate ${isFailed ? 'text-red-700' : 'text-gray-900'}`}>
-                          {inv.number || inv.id.slice(0, 8)}
-                        </span>
-                        {isFailed && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded flex-shrink-0">Failed</span>}
-                        {inv.status === 'draft' && <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded flex-shrink-0">Draft</span>}
-                      </div>
-                      {/* Amount display with breakdown */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {isSelected && breakdown ? (
-                          <>
-                            <span className="text-xs text-gray-400 line-through">
-                              {formatCurrency(effectiveRemaining, inv.currency)}
-                            </span>
-                            <span className={`text-xs font-medium ${willBeFullyPaid ? 'text-green-600' : 'text-amber-600'}`}>
-                              {willBeFullyPaid ? '$0.00' : formatCurrency(breakdown.remaining, inv.currency)}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-xs text-gray-500">
-                            {formatCurrency(effectiveRemaining, inv.currency)}
-                          </span>
-                        )}
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-500">No invoices available to pay.</p>
-            )}
-            {/* Excess credit info */}
-            {(() => {
-              // Calculate available amount for additional invoices
-              const availableForAdditional = invoice ? excessAmount : payAmount;
-              if (availableForAdditional <= 0) return null;
-
-              return null;
-            })()}
-          </div>
-        )}
 
 
         {error && (

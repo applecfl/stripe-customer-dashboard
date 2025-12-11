@@ -12,7 +12,8 @@ import {
 import { LoadingState } from '@/components/ui';
 import {
   CustomerHeader,
-  TransactionsTable,
+  FailedPaymentsTable,
+  SuccessfulPaymentsTable,
   FutureInvoicesTable,
   PaymentMethodsTable,
   PaymentModal,
@@ -23,7 +24,7 @@ import {
   ChangePaymentMethodModal,
   ChangeDueDateModal,
 } from '@/components/dashboard';
-import { AlertCircle, RefreshCw, FileText, CreditCard } from 'lucide-react';
+import { AlertCircle, RefreshCw, CreditCard, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -42,7 +43,7 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'invoices' | 'payment-methods'>('invoices');
+  const [activeTab, setActiveTab] = useState<'failed' | 'success' | 'future' | 'payment-methods'>('failed');
 
   // Modal state
   const [paymentModal, setPaymentModal] = useState<{ isOpen: boolean; invoice?: InvoiceData | null }>({ isOpen: false });
@@ -515,27 +516,61 @@ function DashboardContent() {
 
         {/* Tabs */}
         <div className="border-b border-gray-200 -mx-4 sm:mx-0 px-4 sm:px-0">
-          <nav className="flex gap-4 sm:gap-8">
+          <nav className="flex gap-2 sm:gap-6 overflow-x-auto">
             <button
-              onClick={() => setActiveTab('invoices')}
-              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'invoices'
+              onClick={() => setActiveTab('failed')}
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
+                activeTab === 'failed'
+                  ? 'border-red-600 text-red-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <AlertTriangle className="w-4 h-4" />
+              <span className="hidden sm:inline">Failed</span>
+              <span className="sm:hidden">Failed</span>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
+                activeTab === 'failed' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
+              }`}>
+                {invoices.filter(inv => inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0).length}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('success')}
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
+                activeTab === 'success'
+                  ? 'border-green-600 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <CheckCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">Success</span>
+              <span className="sm:hidden">Success</span>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
+                activeTab === 'success' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+              }`}>
+                {payments.filter(p => p.status === 'succeeded').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('future')}
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
+                activeTab === 'future'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">Transactions</span>
-              <span className="sm:hidden">Trans.</span>
+              <Clock className="w-4 h-4" />
+              <span className="hidden sm:inline">Future Payments</span>
+              <span className="sm:hidden">Future</span>
               <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
-                activeTab === 'invoices' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
+                activeTab === 'future' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
               }`}>
-                {invoices.length + payments.filter(p => p.status === 'succeeded').length}
+                {invoices.filter(inv => inv.status === 'draft').length}
               </span>
             </button>
             <button
               onClick={() => setActiveTab('payment-methods')}
-              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
                 activeTab === 'payment-methods'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -554,28 +589,33 @@ function DashboardContent() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'invoices' && (
-          <div className="space-y-6">
-            {/* Active Transactions (Failed, Open invoices, Payments) */}
-            <TransactionsTable
-              invoices={invoices}
-              payments={payments}
-              paymentMethods={paymentMethods}
-              onPayInvoice={(invoice) => setPaymentModal({ isOpen: true, invoice })}
-              onVoidInvoice={setVoidInvoiceModal}
-              onPauseInvoice={handlePauseInvoice}
-              onRetryInvoice={handleRetryInvoice}
-              onRefund={setRefundModal}
-            />
+        {activeTab === 'failed' && (
+          <FailedPaymentsTable
+            invoices={invoices}
+            paymentMethods={paymentMethods}
+            onPayInvoice={(invoice) => setPaymentModal({ isOpen: true, invoice })}
+            onVoidInvoice={setVoidInvoiceModal}
+            onPauseInvoice={handlePauseInvoice}
+            onRetryInvoice={handleRetryInvoice}
+          />
+        )}
 
-            {/* Future Invoices - separate table with bulk actions */}
-            <FutureInvoicesTable
-              invoices={invoices}
-              paymentMethods={paymentMethods}
-              token={token}
-              onRefresh={refreshData}
-            />
-          </div>
+        {activeTab === 'success' && (
+          <SuccessfulPaymentsTable
+            invoices={invoices}
+            payments={payments}
+            paymentMethods={paymentMethods}
+            onRefund={setRefundModal}
+          />
+        )}
+
+        {activeTab === 'future' && (
+          <FutureInvoicesTable
+            invoices={invoices}
+            paymentMethods={paymentMethods}
+            token={token}
+            onRefresh={refreshData}
+          />
         )}
 
         {activeTab === 'payment-methods' && (

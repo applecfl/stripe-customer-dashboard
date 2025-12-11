@@ -118,7 +118,7 @@ export async function POST(
       // Sort failed invoices: oldest to newest (by due_date ascending)
       failedInvoices.sort((a, b) => (a.due_date || a.created) - (b.due_date || b.created));
 
-      // Sort draft invoices by finalize date ascending (closest/soonest first)
+      // Sort draft invoices by Payment date ascending (closest/soonest first)
       // Prioritize metadata.scheduledFinalizeAt since that's where we store user's custom date
       filteredDraft.sort((a, b) => {
         const aDate = (a.metadata?.scheduledFinalizeAt ? parseInt(a.metadata.scheduledFinalizeAt, 10) : null) ||
@@ -127,7 +127,7 @@ export async function POST(
         const bDate = (b.metadata?.scheduledFinalizeAt ? parseInt(b.metadata.scheduledFinalizeAt, 10) : null) ||
           b.automatically_finalizes_at ||
           b.due_date || b.created;
-        return aDate - bDate; // Ascending - closest finalize date first
+        return aDate - bDate; // Ascending - closest Payment date first
       });
 
       // Combine: failed first, then draft

@@ -111,14 +111,14 @@ export function FutureInvoicesTable({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Helper to get finalize date for sorting (prioritize metadata.scheduledFinalizeAt)
+  // Helper to get Payment date for sorting (prioritize metadata.scheduledFinalizeAt)
   const getFinalizeDate = (inv: InvoiceData): number => {
     if (inv.metadata?.scheduledFinalizeAt) return parseInt(inv.metadata.scheduledFinalizeAt, 10);
     if (inv.automatically_finalizes_at) return inv.automatically_finalizes_at;
     return inv.due_date || inv.created;
   };
 
-  // Filter to only draft invoices, sorted by finalize date
+  // Filter to only draft invoices, sorted by Payment date
   const draftInvoices = invoices
     .filter(inv => inv.status === 'draft')
     .sort((a, b) => getFinalizeDate(a) - getFinalizeDate(b));
@@ -286,7 +286,7 @@ export function FutureInvoicesTable({
         const data = await res.json();
         console.log('Schedule API response:', data);
         if (!data.success) {
-          throw new Error(data.error || 'Failed to update finalize date');
+          throw new Error(data.error || 'Failed to update Payment date');
         }
       }
 
@@ -546,7 +546,7 @@ export function FutureInvoicesTable({
       >
         <div className="flex items-center gap-2">
           <Clock className="w-5 h-5 text-indigo-600" />
-          Future
+          Future Payment
         </div>
       </CardHeader>
 
@@ -721,11 +721,10 @@ export function FutureInvoicesTable({
                     ) : (
                       <button
                         onClick={() => startEditAmount(invoice)}
-                        className={`font-semibold text-xs sm:text-sm px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${
-                          amountChanged
-                            ? 'text-amber-700 bg-amber-100 hover:bg-amber-200'
-                            : 'text-gray-900 hover:text-indigo-600 hover:bg-indigo-50'
-                        }`}
+                        className={`font-semibold text-xs sm:text-sm px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${amountChanged
+                          ? 'text-amber-700 bg-amber-100 hover:bg-amber-200'
+                          : 'text-gray-900 hover:text-indigo-600 hover:bg-indigo-50'
+                          }`}
                       >
                         {formatCurrency(displayedAmount, invoice.currency)}
                       </button>
@@ -750,11 +749,10 @@ export function FutureInvoicesTable({
                     ) : (
                       <button
                         onClick={() => startEditDate(invoice)}
-                        className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${
-                          dateChanged
-                            ? 'text-amber-700 bg-amber-100 hover:bg-amber-200'
-                            : 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50'
-                        }`}
+                        className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${dateChanged
+                          ? 'text-amber-700 bg-amber-100 hover:bg-amber-200'
+                          : 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50'
+                          }`}
                       >
                         <Calendar className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${dateChanged ? 'text-amber-500' : 'text-gray-400'}`} />
                         <span className="text-xs sm:text-sm">
@@ -788,9 +786,8 @@ export function FutureInvoicesTable({
                                 <button
                                   key={method.id}
                                   onClick={() => handlePaymentMethodChange(invoice.id, method.id)}
-                                  className={`w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-left hover:bg-gray-50 transition-colors ${
-                                    isSelected ? 'bg-indigo-50' : ''
-                                  }`}
+                                  className={`w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-left hover:bg-gray-50 transition-colors ${isSelected ? 'bg-indigo-50' : ''
+                                    }`}
                                   disabled={isSaving}
                                 >
                                   <div className="w-6 h-4 sm:w-8 sm:h-5 rounded bg-gray-100 flex items-center justify-center">
@@ -837,20 +834,17 @@ export function FutureInvoicesTable({
                     ) : (
                       <button
                         onClick={() => setEditingCard(invoice.id)}
-                        className={`group flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${
-                          pmChanged
-                            ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                            : 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50'
-                        }`}
+                        className={`group flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${pmChanged
+                          ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                          : 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50'
+                          }`}
                       >
                         {displayedPm ? (
                           <>
-                            <div className={`w-6 h-4 sm:w-8 sm:h-5 rounded flex items-center justify-center ${
-                              pmChanged ? 'bg-amber-200' : 'bg-gray-100 group-hover:bg-indigo-100'
-                            }`}>
-                              <CreditCard className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${
-                                pmChanged ? 'text-amber-600' : 'text-gray-500 group-hover:text-indigo-500'
-                              }`} />
+                            <div className={`w-6 h-4 sm:w-8 sm:h-5 rounded flex items-center justify-center ${pmChanged ? 'bg-amber-200' : 'bg-gray-100 group-hover:bg-indigo-100'
+                              }`}>
+                              <CreditCard className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${pmChanged ? 'text-amber-600' : 'text-gray-500 group-hover:text-indigo-500'
+                                }`} />
                             </div>
                             <span className="text-xs sm:text-sm">
                               <span className="capitalize hidden sm:inline">{displayedPm.card?.brand}</span>
@@ -1023,12 +1017,12 @@ export function FutureInvoicesTable({
       <Modal
         isOpen={bulkDateModal}
         onClose={() => setBulkDateModal(false)}
-        title="Change Finalize Date"
+        title="Change Payment date"
         size="sm"
       >
         <div className="space-y-4">
           <p className="text-gray-600">
-            Set a new finalize date for {selectedIds.size} selected invoice{selectedIds.size !== 1 ? 's' : ''}.
+            Set a new Payment date for {selectedIds.size} selected invoice{selectedIds.size !== 1 ? 's' : ''}.
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">New Date</label>

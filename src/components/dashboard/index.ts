@@ -3,6 +3,8 @@ export { InvoicesTable } from './InvoicesTable';
 export { PaymentsTable } from './PaymentsTable';
 export { PaymentMethodsTable } from './PaymentMethodsTable';
 export { TransactionsTable } from './TransactionsTable';
+export { FailedPaymentsTable } from './FailedPaymentsTable';
+export { SuccessfulPaymentsTable } from './SuccessfulPaymentsTable';
 export { FutureInvoicesTable } from './DraftInvoicesTable';
 export { PaymentModal } from './PaymentModal';
 export { VoidInvoiceModal } from './VoidInvoiceModal';
