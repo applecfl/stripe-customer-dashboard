@@ -24,18 +24,6 @@ export async function POST(
     // Get the current invoice
     const invoice = await stripe.invoices.retrieve(invoiceId);
 
-    if (invoice.status !== 'draft') {
-      return NextResponse.json(
-        { success: false, error: 'Can only adjust draft invoices' },
-        { status: 400 }
-      );
-    }
-
-    // Get existing line items
-    const lineItems = await stripe.invoiceItems.list({
-      invoice: invoiceId,
-    });
-
     // Calculate the difference
     const currentAmount = invoice.amount_due;
     const difference = newAmount - currentAmount;
@@ -47,24 +35,56 @@ export async function POST(
       });
     }
 
-    if (difference > 0) {
-      // Add a new line item for the additional amount
-      await stripe.invoiceItems.create({
-        customer: invoice.customer as string,
-        invoice: invoiceId,
-        amount: difference,
-        currency: invoice.currency,
-        description: 'Amount adjustment',
-      });
+    if (invoice.status === 'draft') {
+      // For draft invoices, use invoice items
+      if (difference > 0) {
+        // Add a new line item for the additional amount
+        await stripe.invoiceItems.create({
+          customer: invoice.customer as string,
+          invoice: invoiceId,
+          amount: difference,
+          currency: invoice.currency,
+          description: 'Amount adjustment',
+        });
+      } else {
+        // Need to reduce the amount - create a negative line item
+        await stripe.invoiceItems.create({
+          customer: invoice.customer as string,
+          invoice: invoiceId,
+          amount: difference, // negative value
+          currency: invoice.currency,
+          description: 'Amount adjustment',
+        });
+      }
+    } else if (invoice.status === 'open') {
+      // For open invoices (including failed payments), handle differently
+      if (difference > 0) {
+        // Cannot increase amount on finalized invoice
+        return NextResponse.json(
+          { success: false, error: 'Cannot increase amount on a finalized invoice. You can only reduce it.' },
+          { status: 400 }
+        );
+      } else {
+        // Reduce amount using a credit note
+        const creditAmount = Math.abs(difference);
+
+        await stripe.creditNotes.create({
+          invoice: invoiceId,
+          lines: [
+            {
+              type: 'custom_line_item',
+              description: 'Amount adjustment',
+              quantity: 1,
+              unit_amount: creditAmount,
+            },
+          ],
+        });
+      }
     } else {
-      // Need to reduce the amount - create a negative line item
-      await stripe.invoiceItems.create({
-        customer: invoice.customer as string,
-        invoice: invoiceId,
-        amount: difference, // negative value
-        currency: invoice.currency,
-        description: 'Amount adjustment',
-      });
+      return NextResponse.json(
+        { success: false, error: `Cannot adjust invoice with status: ${invoice.status}` },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({

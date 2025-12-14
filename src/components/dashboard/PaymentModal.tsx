@@ -176,6 +176,23 @@ function PaymentForm({
     return breakdown;
   }, [invoice, excessAmount, payAmount, selectedAdditionalInvoices, payableInvoices]);
 
+  // Calculate remaining credit
+  const remainingCredit = useMemo(() => {
+    let totalApplied = 0;
+
+    // Add primary invoice amount if paying specific invoice
+    if (invoice) {
+      totalApplied += Math.min(payAmount, primaryInvoiceAmount);
+    }
+
+    // Add all amounts applied to selected invoices
+    Object.values(invoicePaymentBreakdown).forEach(breakdown => {
+      totalApplied += breakdown.willPay;
+    });
+
+    return Math.max(0, payAmount - totalApplied);
+  }, [payAmount, invoice, primaryInvoiceAmount, invoicePaymentBreakdown]);
+
   // Reset form when modal opens or invoice changes
   useEffect(() => {
     if (invoice) {
@@ -430,6 +447,12 @@ function PaymentForm({
                       ? 'Payments to be made:'
                       : 'Select payments:'}
                 </span>
+                {remainingCredit > 0 && (
+
+                  <span className="text-indigo-700 text-xs font-medium">
+                    Amount to apply {formatCurrency(remainingCredit, currency)}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 {selectedAdditionalInvoices.length > 0 && !manualAmountEntered && (

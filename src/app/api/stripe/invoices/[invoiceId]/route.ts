@@ -152,26 +152,44 @@ export async function PATCH(
     switch (action) {
       case 'pause': {
         if (invoice.status === 'draft') {
-          // For draft invoices, we can change collection_method and due_date
+          // For draft invoices, disable auto_advance and store original scheduled date
           if (pause) {
+            // Get the original scheduled date from metadata or automatically_finalizes_at
+            const originalScheduledDate = invoice.metadata?.scheduledFinalizeAt ||
+              invoice.automatically_finalizes_at?.toString() || '';
+
             await stripe.invoices.update(invoiceId, {
+              auto_advance: false, // Disable auto-finalization
               metadata: {
                 ...invoice.metadata,
                 isPaused: 'true',
+                pausedAt: Date.now().toString(),
+                originalScheduledDate,
                 originalDueDate: invoice.due_date?.toString() || '',
               },
-              collection_method: 'send_invoice',
             });
           } else {
-            // Unpausing: restore original due date if we have one
+            // Resuming: restore auto_advance and original scheduled date
             const updateParams: Parameters<typeof stripe.invoices.update>[1] = {
+              auto_advance: true,
               metadata: {
                 ...invoice.metadata,
                 isPaused: 'false',
+                pausedAt: '',
+                originalScheduledDate: '',
                 originalDueDate: '',
               },
-              collection_method: 'charge_automatically',
             };
+
+            // Restore the original scheduled date if we have one
+            const originalScheduledDate = invoice.metadata?.originalScheduledDate;
+            if (originalScheduledDate) {
+              updateParams.automatically_finalizes_at = parseInt(originalScheduledDate);
+              // Also restore to our custom metadata field
+              if (updateParams.metadata) {
+                updateParams.metadata.scheduledFinalizeAt = originalScheduledDate;
+              }
+            }
 
             // Restore the original due date if we have one
             if (invoice.metadata?.originalDueDate) {

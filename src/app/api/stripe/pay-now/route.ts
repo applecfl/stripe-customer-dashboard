@@ -131,7 +131,7 @@ export async function POST(
       });
 
       // Combine: failed first, then draft
-      invoicesToPay = [...failedInvoices, ...filteredDraft].map(inv => inv.id);
+      invoicesToPay = [...failedInvoices,].map(inv => inv.id);
     }
 
     // Apply payment to invoices

@@ -32,6 +32,8 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
+  Pause,
+  Play,
 } from 'lucide-react';
 
 interface FutureInvoicesTableProps {
@@ -95,6 +97,13 @@ export function FutureInvoicesTable({
   const [bulkEditValue, setBulkEditValue] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
 
+  // Pause/Resume state
+  const [pausingId, setPausingId] = useState<string | null>(null);
+  const [showPaused, setShowPaused] = useState(true);
+
+  // Paused invoices selection state
+  const [selectedPausedIds, setSelectedPausedIds] = useState<Set<string>>(new Set());
+
   const amountInputRef = useRef<HTMLInputElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
@@ -118,10 +127,19 @@ export function FutureInvoicesTable({
     return inv.due_date || inv.created;
   };
 
-  // Filter to only draft invoices, sorted by Payment date
-  const draftInvoices = invoices
-    .filter(inv => inv.status === 'draft')
+  // Filter to only draft invoices, split into active and paused
+  const allDraftInvoices = invoices.filter(inv => inv.status === 'draft');
+
+  const activeInvoices = allDraftInvoices
+    .filter(inv => !inv.isPaused)
     .sort((a, b) => getFinalizeDate(a) - getFinalizeDate(b));
+
+  const pausedInvoices = allDraftInvoices
+    .filter(inv => inv.isPaused)
+    .sort((a, b) => getFinalizeDate(a) - getFinalizeDate(b));
+
+  // For backward compatibility, draftInvoices refers to active ones
+  const draftInvoices = activeInvoices;
 
   // Create a map for quick payment method lookup
   const paymentMethodMap = new Map(paymentMethods.map(pm => [pm.id, pm]));
@@ -374,6 +392,30 @@ export function FutureInvoicesTable({
   const isAllSelected = draftInvoices.length > 0 && selectedIds.size === draftInvoices.length;
   const isSomeSelected = selectedIds.size > 0 && selectedIds.size < draftInvoices.length;
 
+  // Paused invoices selection helpers
+  const toggleSelectPaused = (invoiceId: string) => {
+    setSelectedPausedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(invoiceId)) {
+        newSet.delete(invoiceId);
+      } else {
+        newSet.add(invoiceId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAllPaused = () => {
+    if (selectedPausedIds.size === pausedInvoices.length) {
+      setSelectedPausedIds(new Set());
+    } else {
+      setSelectedPausedIds(new Set(pausedInvoices.map(inv => inv.id)));
+    }
+  };
+
+  const isAllPausedSelected = pausedInvoices.length > 0 && selectedPausedIds.size === pausedInvoices.length;
+  const isSomePausedSelected = selectedPausedIds.size > 0 && selectedPausedIds.size < pausedInvoices.length;
+
   // Delete invoice(s)
   const handleDelete = async () => {
     if (deleteModal.invoiceIds.length === 0) return;
@@ -392,8 +434,13 @@ export function FutureInvoicesTable({
         }
       }
 
-      // Clear selection after successful deletion
+      // Clear selection after successful deletion (from both active and paused)
       setSelectedIds(prev => {
+        const newSet = new Set(prev);
+        deleteModal.invoiceIds.forEach(id => newSet.delete(id));
+        return newSet;
+      });
+      setSelectedPausedIds(prev => {
         const newSet = new Set(prev);
         deleteModal.invoiceIds.forEach(id => newSet.delete(id));
         return newSet;
@@ -418,6 +465,43 @@ export function FutureInvoicesTable({
   const confirmDeleteBulk = () => {
     if (selectedIds.size === 0) return;
     setDeleteModal({ isOpen: true, invoiceIds: Array.from(selectedIds), isBulk: true });
+  };
+
+  // Open delete confirmation for selected paused invoices
+  const confirmDeleteBulkPaused = () => {
+    if (selectedPausedIds.size === 0) return;
+    setDeleteModal({ isOpen: true, invoiceIds: Array.from(selectedPausedIds), isBulk: true });
+  };
+
+  // Bulk resume paused invoices
+  const handleBulkResume = async () => {
+    setBulkSaving(true);
+    setError(null);
+
+    try {
+      for (const invoiceId of Array.from(selectedPausedIds)) {
+        const res = await fetch(withToken(`/api/stripe/invoices/${invoiceId}`), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'pause',
+            pause: false,
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || `Failed to resume invoice ${invoiceId}`);
+        }
+      }
+
+      setSelectedPausedIds(new Set());
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to bulk resume:', err);
+      setError(err instanceof Error ? err.message : 'Failed to resume invoices');
+    } finally {
+      setBulkSaving(false);
+    }
   };
 
   // Bulk change amount
@@ -531,7 +615,65 @@ export function FutureInvoicesTable({
     }
   };
 
-  if (draftInvoices.length === 0) {
+  // Pause/Resume single invoice
+  const handlePauseResume = async (invoiceId: string, pause: boolean) => {
+    setPausingId(invoiceId);
+    setError(null);
+
+    try {
+      const res = await fetch(withToken(`/api/stripe/invoices/${invoiceId}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'pause',
+          pause,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || `Failed to ${pause ? 'pause' : 'resume'} invoice`);
+      }
+      onRefresh();
+    } catch (err) {
+      console.error(`Failed to ${pause ? 'pause' : 'resume'} invoice:`, err);
+      setError(err instanceof Error ? err.message : `Failed to ${pause ? 'pause' : 'resume'} invoice`);
+    } finally {
+      setPausingId(null);
+    }
+  };
+
+  // Bulk pause/resume
+  const handleBulkPauseResume = async (pause: boolean) => {
+    setBulkSaving(true);
+    setError(null);
+
+    try {
+      for (const invoiceId of Array.from(selectedIds)) {
+        const res = await fetch(withToken(`/api/stripe/invoices/${invoiceId}`), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'pause',
+            pause,
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || `Failed to ${pause ? 'pause' : 'resume'} invoice ${invoiceId}`);
+        }
+      }
+
+      setSelectedIds(new Set());
+      onRefresh();
+    } catch (err) {
+      console.error(`Failed to bulk ${pause ? 'pause' : 'resume'}:`, err);
+      setError(err instanceof Error ? err.message : `Failed to ${pause ? 'pause' : 'resume'} invoices`);
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  if (allDraftInvoices.length === 0) {
     return null;
   }
 
@@ -596,6 +738,16 @@ export function FutureInvoicesTable({
                 className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
               >
                 <span className="hidden sm:inline">Change </span>Card
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBulkPauseResume(true)}
+                disabled={bulkSaving}
+                className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
+              >
+                {bulkSaving ? <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : <Pause className="w-3 h-3 sm:w-4 sm:h-4" />}
+                <span className="hidden sm:inline">Pause</span>
               </Button>
               <Button
                 variant="danger"
@@ -875,7 +1027,7 @@ export function FutureInvoicesTable({
                     )}
                   </TableCell>
 
-                  {/* Save/Cancel/Delete Actions */}
+                  {/* Save/Cancel/Pause/Delete Actions */}
                   <TableCell>
                     <div className="flex items-center gap-0.5 sm:gap-1 justify-end">
                       {invoiceHasChanges ? (
@@ -902,13 +1054,27 @@ export function FutureInvoicesTable({
                           </button>
                         </>
                       ) : (
-                        <button
-                          onClick={() => confirmDeleteSingle(invoice.id)}
-                          className="p-0.5 sm:p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-colors"
-                          title="Delete invoice"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handlePauseResume(invoice.id, true)}
+                            disabled={pausingId === invoice.id}
+                            className="p-0.5 sm:p-1 hover:bg-amber-50 text-gray-400 hover:text-amber-600 rounded transition-colors disabled:opacity-50"
+                            title="Pause invoice"
+                          >
+                            {pausingId === invoice.id ? (
+                              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                            ) : (
+                              <span className="text-xs sm:text-sm">Pause</span>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => confirmDeleteSingle(invoice.id)}
+                            className="p-0.5 sm:p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-colors"
+                            title="Delete invoice"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </TableCell>
@@ -917,6 +1083,189 @@ export function FutureInvoicesTable({
             })}
           </TableBody>
         </Table>
+
+        {/* Paused Invoices Section */}
+        {pausedInvoices.length > 0 && (
+          <div className="border-t border-gray-200">
+            <button
+              onClick={() => setShowPaused(!showPaused)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Pause className="w-4 h-4 text-amber-500" />
+                <span className="text-sm font-medium text-gray-700">
+                  Paused Invoices ({pausedInvoices.length})
+                </span>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPaused ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showPaused && (
+              <>
+                {/* Bulk Actions Toolbar for Paused Invoices */}
+                {selectedPausedIds.size > 0 && (
+                  <div className="mx-2 sm:mx-4 mt-2 sm:mt-3 p-2 sm:p-3 bg-green-50 rounded-lg flex flex-wrap items-center gap-1.5 sm:gap-3">
+                    <span className="text-xs sm:text-sm font-medium text-green-700">
+                      {selectedPausedIds.size} selected
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleBulkResume}
+                        disabled={bulkSaving}
+                        className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
+                      >
+                        {bulkSaving ? <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : <Play className="w-3 h-3 sm:w-4 sm:h-4" />}
+                        <span className="hidden sm:inline">Resume</span>
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={confirmDeleteBulkPaused}
+                        className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
+                      >
+                        <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                        <span className="hidden sm:inline">Delete</span>
+                      </Button>
+                    </div>
+                    <button
+                      onClick={() => setSelectedPausedIds(new Set())}
+                      className="ml-auto text-xs sm:text-sm text-gray-500 hover:text-gray-700"
+                    >
+                      <span className="hidden sm:inline">Clear selection</span>
+                      <X className="w-4 h-4 sm:hidden" />
+                    </button>
+                  </div>
+                )}
+
+                <Table>
+                  <TableHeader>
+                    <TableRow hoverable={false}>
+                      {/* Checkbox column */}
+                      <TableHead className="w-8 sm:w-10">
+                        <button
+                          onClick={toggleSelectAllPaused}
+                          className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                        >
+                          {isAllPausedSelected ? (
+                            <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
+                          ) : isSomePausedSelected ? (
+                            <MinusSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
+                          ) : (
+                            <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                          )}
+                        </button>
+                      </TableHead>
+                      <TableHead className="w-8 sm:w-10"></TableHead>
+                      <TableHead align="right" className="w-24 sm:w-32">Amount</TableHead>
+                      <TableHead className="w-28 sm:w-44">Paused Date</TableHead>
+                      <TableHead><span className="hidden sm:inline">Payment </span>Card</TableHead>
+                      <TableHead className="w-20 sm:w-32"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pausedInvoices.map((invoice) => {
+                      const pm = getPaymentMethod(invoice);
+                      const pausedAt = invoice.metadata?.pausedAt
+                        ? new Date(parseInt(invoice.metadata.pausedAt)).toLocaleDateString()
+                        : 'Unknown';
+                      const isPausing = pausingId === invoice.id;
+                      const isPausedSelected = selectedPausedIds.has(invoice.id);
+
+                      return (
+                        <TableRow key={invoice.id} className={`bg-amber-50/30 ${isPausedSelected ? 'bg-green-50/50' : ''}`}>
+                          {/* Checkbox Cell */}
+                          <TableCell>
+                            <button
+                              onClick={() => toggleSelectPaused(invoice.id)}
+                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                            >
+                              {isPausedSelected ? (
+                                <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
+                              ) : (
+                                <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                              )}
+                            </button>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-0.5 sm:gap-1">
+                              <button
+                                onClick={() => copyToClipboard(invoice.id)}
+                                className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                                title={invoice.id}
+                              >
+                                {copiedId === invoice.id ? (
+                                  <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                                )}
+                              </button>
+                            </div>
+                          </TableCell>
+
+                          <TableCell align="right">
+                            <span className="font-semibold text-xs sm:text-sm text-gray-600">
+                              {formatCurrency(invoice.amount_due, invoice.currency)}
+                            </span>
+                          </TableCell>
+
+                          <TableCell>
+                            <span className="text-xs sm:text-sm text-gray-500">
+                              {pausedAt}
+                            </span>
+                          </TableCell>
+
+                          <TableCell>
+                            {pm ? (
+                              <div className="flex items-center gap-1.5 sm:gap-2 text-gray-500">
+                                <div className="w-6 h-4 sm:w-8 sm:h-5 rounded bg-gray-100 flex items-center justify-center">
+                                  <CreditCard className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400" />
+                                </div>
+                                <span className="text-xs sm:text-sm">
+                                  <span className="capitalize hidden sm:inline">{pm.card?.brand}</span>
+                                  <span className="hidden sm:inline">{' •••• '}</span>
+                                  <span className="sm:hidden">••</span>
+                                  {pm.card?.last4}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs sm:text-sm text-gray-400">No card</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell>
+                            <div className="flex items-center gap-0.5 sm:gap-1 justify-end">
+                              <button
+                                onClick={() => handlePauseResume(invoice.id, false)}
+                                disabled={isPausing}
+                                className="p-0.5 sm:p-1 hover:bg-green-50 text-gray-400 hover:text-green-600 rounded transition-colors disabled:opacity-50"
+                                title="Resume invoice"
+                              >
+                                {isPausing ? (
+                                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                                ) : (
+                                  <span className="text-xs sm:text-sm">Resume</span>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => confirmDeleteSingle(invoice.id)}
+                                className="p-0.5 sm:p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-colors"
+                                title="Delete invoice"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                              </button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </>
+            )}
+          </div>
+        )}
       </CardContent>
 
       {/* Delete Confirmation Modal */}
@@ -936,7 +1285,7 @@ export function FutureInvoicesTable({
             <div className="bg-gray-50 rounded-lg p-3 max-h-32 overflow-y-auto">
               <p className="text-xs font-medium text-gray-500 mb-2">Invoices to delete:</p>
               {deleteModal.invoiceIds.map(id => {
-                const invoice = draftInvoices.find(inv => inv.id === id);
+                const invoice = allDraftInvoices.find(inv => inv.id === id);
                 return (
                   <div key={id} className="text-sm text-gray-700 flex justify-between py-1">
                     <span className="font-mono text-xs">{id.slice(0, 20)}...</span>

@@ -229,24 +229,8 @@ export function SuccessfulPaymentsTable({
                             </div>
                           )}
 
-                          {/* Linked Invoice from Stripe */}
-                          {payment.invoice && (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
-                                <FileText className="w-3 h-3" />
-                                Stripe Invoice
-                              </div>
-                              <a
-                                href={`https://dashboard.stripe.com/invoices/${payment.invoice}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-medium text-blue-600 hover:underline flex items-center gap-1"
-                              >
-                                {payment.invoiceNumber || payment.invoice}
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            </div>
-                          )}
+
+
 
                           {/* Invoices paid via PayNow */}
                           {invoiceInfo.invoiceIds.length > 0 && (
@@ -260,8 +244,9 @@ export function SuccessfulPaymentsTable({
                                   // Check if invoice still exists (partially paid) or was deleted/voided (fully paid)
                                   const invoiceStillExists = invoices.some(inv => inv.id === id);
                                   const displayName = invoiceInfo.invoiceNumbers[idx] || id.slice(0, 12);
+                                  const invoice = invoices.find(inv => inv.id === id);
 
-                                  if (invoiceStillExists) {
+                                  if (invoice) {
                                     // Partial payment - invoice still exists, show link
                                     return (
                                       <a
@@ -271,7 +256,7 @@ export function SuccessfulPaymentsTable({
                                         rel="noopener noreferrer"
                                         className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-medium hover:bg-amber-200 transition-colors"
                                       >
-                                        {displayName}
+                                        ${(invoice.amount_due / 100).toFixed(2)}
                                         <ExternalLink className="w-3 h-3" />
                                       </a>
                                     );

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   CustomerData,
   InvoiceData,
@@ -26,11 +26,19 @@ import {
 } from '@/components/dashboard';
 import { AlertCircle, RefreshCw, CreditCard, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 
+// Token refresh interval (25 minutes in ms - refresh before 30 min expiry)
+const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000;
+
 function DashboardContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const customerId = searchParams.get('customerId') || '';
   const invoiceUID = searchParams.get('invoiceUID') || '';
-  const token = searchParams.get('token') || '';
+  const initialToken = searchParams.get('token') || '';
+
+  // Track the current valid token (may be refreshed)
+  const [token, setToken] = useState(initialToken);
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Data state
   const [customer, setCustomer] = useState<CustomerData | null>(null);
@@ -112,6 +120,49 @@ function DashboardContent() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Token refresh mechanism - refresh before expiry while page is open
+  useEffect(() => {
+    if (!token) return;
+
+    const refreshToken = async () => {
+      try {
+        const response = await fetch('/api/auth/refresh-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+
+        const result = await response.json();
+
+        if (result.success && result.token) {
+          // Update the token state
+          setToken(result.token);
+
+          // Update the URL with new token (without reload)
+          const url = new URL(window.location.href);
+          url.searchParams.set('token', result.token);
+          router.replace(url.pathname + url.search, { scroll: false });
+
+          console.log('Token refreshed successfully');
+        } else {
+          console.warn('Token refresh failed:', result.error);
+        }
+      } catch (error) {
+        console.error('Error refreshing token:', error);
+      }
+    };
+
+    // Schedule token refresh
+    refreshTimeoutRef.current = setTimeout(refreshToken, TOKEN_REFRESH_INTERVAL);
+
+    // Cleanup on unmount or token change
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, [token, router]);
 
   // Helper to add token to API URLs
   const withToken = (url: string) => {
@@ -593,6 +644,8 @@ function DashboardContent() {
           <FailedPaymentsTable
             invoices={invoices}
             paymentMethods={paymentMethods}
+            token={token}
+            onRefresh={refreshData}
             onPayInvoice={(invoice) => setPaymentModal({ isOpen: true, invoice })}
             onVoidInvoice={setVoidInvoiceModal}
             onPauseInvoice={handlePauseInvoice}
