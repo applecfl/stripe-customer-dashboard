@@ -228,31 +228,32 @@ export async function PATCH(
             await stripe.invoices.update(invoiceId, updateParams);
           }
         } else if (invoice.status === 'open') {
-          // For open invoices, we can't change collection_method
-          // Instead, we store the original payment method and remove it to prevent auto-charging
-          // When unpausing, we restore the original payment method
+          // For open invoices, disable auto_advance to stop automatic retry
+          // Also store the original payment method for reference
           const currentPaymentMethod = invoice.default_payment_method;
           const originalPaymentMethod = invoice.metadata?.originalPaymentMethod ||
             (typeof currentPaymentMethod === 'string' ? currentPaymentMethod : currentPaymentMethod?.id);
 
           if (pause) {
-            // Pausing: save original payment method and remove it
+            // Pausing: disable auto_advance to stop automatic retries
             await stripe.invoices.update(invoiceId, {
+              auto_advance: false,
               metadata: {
                 ...invoice.metadata,
                 isPaused: 'true',
+                pausedAt: Date.now().toString(),
                 originalDueDate: invoice.due_date?.toString() || '',
                 originalPaymentMethod: originalPaymentMethod || '',
               },
-              // Remove default payment method to prevent auto-charging
-              default_payment_method: '',
             });
           } else {
-            // Unpausing: restore original payment method if it exists
+            // Unpausing: restore auto_advance and original payment method
             const updateParams: Parameters<typeof stripe.invoices.update>[1] = {
+              auto_advance: true,
               metadata: {
                 ...invoice.metadata,
                 isPaused: 'false',
+                pausedAt: '',
                 originalDueDate: '',
                 originalPaymentMethod: '',
               },
@@ -347,9 +348,20 @@ export async function PATCH(
         }
 
         // Attempt to pay the invoice again
-        await stripe.invoices.pay(invoiceId, {
+        const paidInvoice = await stripe.invoices.pay(invoiceId, {
           payment_method: paymentMethodId || undefined,
         });
+
+        // Check if payment actually succeeded
+        if (paidInvoice.status !== 'paid') {
+          // Payment failed - get the error details
+          const errorMessage = paidInvoice.last_finalization_error?.message ||
+            'Payment failed. Please try a different payment method.';
+          return NextResponse.json(
+            { success: false, error: errorMessage },
+            { status: 400 }
+          );
+        }
         break;
       }
 
@@ -459,8 +471,21 @@ export async function PATCH(
     });
   } catch (error) {
     console.error('Error updating invoice:', error);
+
+    // Extract Stripe-specific error messages
+    let errorMessage = 'Failed to update invoice';
+    if (error && typeof error === 'object') {
+      const stripeError = error as { message?: string; raw?: { message?: string }; decline_code?: string };
+      errorMessage = stripeError.raw?.message || stripeError.message || errorMessage;
+      if (stripeError.decline_code) {
+        errorMessage = `Card declined: ${stripeError.decline_code}`;
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to update invoice' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

@@ -37,6 +37,7 @@ export async function POST(
     // Get organization name from account config
     const accountInfo = getStripeAccountInfo(accountId);
     const organizationName = accountInfo?.name || 'LEC';
+    const logoUrl = 'https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png';
 
     if (!customerEmail) {
       return NextResponse.json(
@@ -79,7 +80,7 @@ export async function POST(
           <!-- Header with Logo -->
           <tr>
             <td style="padding: 40px 40px 20px; text-align: center;">
-              <img src="https://www.lecfl.com/wp-content/uploads/2023/01/LEC-Logo-1.png" alt="${organizationName}" style="max-width: 180px; height: auto; margin-bottom: 20px;" />
+              <img src="${logoUrl}" alt="${organizationName}" style="max-width: 180px; height: auto; margin-bottom: 20px;" />
               <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #18181b;">Payment Reminder</h1>
             </td>
           </tr>

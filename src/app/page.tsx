@@ -312,22 +312,18 @@ function DashboardContent() {
   };
 
   const handleRetryInvoice = async (data: { invoiceId: string; paymentMethodId?: string }) => {
-    try {
-      const response = await fetch(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'retry', accountId, paymentMethodId: data.paymentMethodId }),
-      });
+    const response = await fetch(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'retry', accountId, paymentMethodId: data.paymentMethodId }),
+    });
 
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-
-      await refreshData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry payment');
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error);
     }
+
+    await refreshData();
   };
 
   const handleRefund = async (data: {
@@ -584,12 +580,14 @@ function DashboardContent() {
       {error && (
         <div className="bg-red-50 border-b border-red-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
-            <div className="flex items-center gap-2 text-red-700">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm flex-1">{error}</span>
+            <div className="flex items-center gap-3 text-red-800">
+              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-4 h-4 text-red-600" />
+              </div>
+              <span className="text-sm font-medium flex-1">{error}</span>
               <button
                 onClick={() => setError(null)}
-                className="text-sm underline hover:no-underline flex-shrink-0"
+                className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full hover:bg-red-200 transition-colors flex-shrink-0"
               >
                 Dismiss
               </button>
@@ -710,6 +708,7 @@ function DashboardContent() {
             invoices={invoices}
             paymentMethods={paymentMethods}
             token={token}
+            accountId={accountId}
             onRefresh={refreshData}
           />
         )}

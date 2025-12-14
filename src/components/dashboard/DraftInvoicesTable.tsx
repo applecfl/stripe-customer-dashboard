@@ -40,6 +40,7 @@ interface FutureInvoicesTableProps {
   invoices: InvoiceData[];
   paymentMethods?: PaymentMethodData[];
   token?: string;
+  accountId?: string;
   onRefresh: () => void;
   // Keep old props for compatibility but we won't use them
   onChangeDueDate?: (invoice: InvoiceData) => void;
@@ -64,6 +65,7 @@ export function FutureInvoicesTable({
   invoices,
   paymentMethods = [],
   token,
+  accountId,
   onRefresh,
 }: FutureInvoicesTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -281,6 +283,7 @@ export function FutureInvoicesTable({
           body: JSON.stringify({
             invoiceId: invoice.id,
             newAmount: changes.amount,
+            accountId,
           }),
         });
         const data = await res.json();
@@ -299,6 +302,7 @@ export function FutureInvoicesTable({
           body: JSON.stringify({
             invoiceId: invoice.id,
             scheduledDate: changes.date,
+            accountId,
           }),
         });
         const data = await res.json();
@@ -316,6 +320,7 @@ export function FutureInvoicesTable({
           body: JSON.stringify({
             invoiceId: invoice.id,
             paymentMethodId: changes.paymentMethodId,
+            accountId,
           }),
         });
         const data = await res.json();
@@ -425,7 +430,9 @@ export function FutureInvoicesTable({
 
     try {
       for (const invoiceId of deleteModal.invoiceIds) {
-        const res = await fetch(withToken(`/api/stripe/invoices/${invoiceId}`), {
+        const url = withToken(`/api/stripe/invoices/${invoiceId}`);
+        const separator = url.includes('?') ? '&' : '?';
+        const res = await fetch(`${url}${separator}accountId=${accountId}`, {
           method: 'DELETE',
         });
         const data = await res.json();
@@ -486,6 +493,7 @@ export function FutureInvoicesTable({
           body: JSON.stringify({
             action: 'pause',
             pause: false,
+            accountId,
           }),
         });
         const data = await res.json();
@@ -526,6 +534,7 @@ export function FutureInvoicesTable({
           body: JSON.stringify({
             invoiceId,
             newAmount,
+            accountId,
           }),
         });
         const data = await res.json();
@@ -565,6 +574,7 @@ export function FutureInvoicesTable({
           body: JSON.stringify({
             invoiceId,
             scheduledDate: timestamp,
+            accountId,
           }),
         });
         const data = await res.json();
@@ -597,6 +607,7 @@ export function FutureInvoicesTable({
           body: JSON.stringify({
             invoiceId,
             paymentMethodId,
+            accountId,
           }),
         });
         const data = await res.json();
@@ -627,6 +638,7 @@ export function FutureInvoicesTable({
         body: JSON.stringify({
           action: 'pause',
           pause,
+          accountId,
         }),
       });
       const data = await res.json();
@@ -655,6 +667,7 @@ export function FutureInvoicesTable({
           body: JSON.stringify({
             action: 'pause',
             pause,
+            accountId,
           }),
         });
         const data = await res.json();

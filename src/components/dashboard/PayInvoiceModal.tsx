@@ -9,7 +9,7 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { InvoiceData, PaymentMethodData } from '@/types';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import { Modal, ModalFooter, Button, Input } from '@/components/ui';
 import { CreditCard, Plus, ChevronLeft, Check } from 'lucide-react';
 
@@ -177,14 +177,15 @@ interface PayFormProps {
   onPay: PayInvoiceModalProps['onPay'];
   onClose: () => void;
   onPaymentMethodAdded?: () => void;
+  onSuccess: () => void;
+  onError: (error: string) => void;
 }
 
-function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymentMethodAdded }: PayFormProps) {
+function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymentMethodAdded, onSuccess, onError }: PayFormProps) {
   const [amount, setAmount] = useState('');
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [showAddCard, setShowAddCard] = useState(false);
   const [applyToInvoice, setApplyToInvoice] = useState(true);
 
@@ -200,7 +201,6 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
       const defaultPm = paymentMethods.find(pm => pm.isDefault);
       setPaymentMethodId(invoicePm?.id || defaultPm?.id || paymentMethods[0]?.id || '');
       setNote('');
-      setError('');
       setApplyToInvoice(true);
     }
   }, [invoice, paymentMethods]);
@@ -211,23 +211,22 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
     const payAmount = amount ? Math.round(parseFloat(amount) * 100) : invoice.amount_remaining;
 
     if (payAmount <= 0) {
-      setError('Amount must be greater than 0');
+      onError('Amount must be greater than 0');
       return;
     }
 
     // Only check max amount if applying to invoice
     if (applyToInvoice && payAmount > invoice.amount_remaining) {
-      setError('Amount cannot exceed remaining balance');
+      onError('Amount cannot exceed remaining balance');
       return;
     }
 
     if (!paymentMethodId) {
-      setError('Please select a payment method or add a new card');
+      onError('Please select a payment method or add a new card');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       await onPay({
@@ -237,21 +236,12 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
         note: note.trim() || undefined,
         applyToInvoice,
       });
-      handleClose();
+      onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process payment');
+      onError(err instanceof Error ? err.message : 'Failed to process payment');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleClose = () => {
-    setAmount('');
-    setPaymentMethodId('');
-    setNote('');
-    setError('');
-    setShowAddCard(false);
-    onClose();
   };
 
   const handleCardAdded = (newPaymentMethodId: string) => {
@@ -434,16 +424,10 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
-
-        {error && (
-          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
       </div>
 
       <ModalFooter>
-        <Button variant="secondary" onClick={handleClose} disabled={loading}>
+        <Button variant="secondary" onClick={onClose} disabled={loading}>
           Cancel
         </Button>
         <Button type="submit" loading={loading} disabled={!paymentMethodId}>
@@ -466,13 +450,111 @@ export function PayInvoiceModal({
   onPay,
   onPaymentMethodAdded,
 }: PayInvoiceModalProps) {
+  const [result, setResult] = useState<{ type: 'success' | 'error'; message?: string } | null>(null);
+
+  // Reset result when modal opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      setResult(null);
+    }
+  }, [isOpen]);
+
   if (!invoice) return null;
 
   // Get customerId from invoice if not provided directly
   const customerIdToUse = customerId || invoice.customer;
 
+  const handleClose = () => {
+    setResult(null);
+    onClose();
+  };
+
+  const handleSuccess = () => {
+    setResult({ type: 'success' });
+  };
+
+  const handleError = (error: string) => {
+    setResult({ type: 'error', message: error });
+  };
+
+  // Format date and amount for title
+  const invoiceDate = invoice.due_date || invoice.created;
+  const formattedDate = formatDate(invoiceDate);
+  const formattedAmount = formatCurrency(invoice.amount_remaining, invoice.currency);
+  const modalTitle = `${formattedDate} - ${formattedAmount}`;
+
+  // Show success modal
+  if (result?.type === 'success') {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div className="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-green-50 p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+              <Check className="w-8 h-8 text-green-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-green-900 mb-2">
+              Payment Successful
+            </h3>
+            <p className="text-sm text-green-700">
+              The payment has been processed successfully.
+            </p>
+          </div>
+          <div className="p-4">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error modal
+  if (result?.type === 'error') {
+    const error = result.message || 'Payment failed';
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div className="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-red-50 p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <CreditCard className="w-8 h-8 text-red-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-red-900 mb-2">
+              {error.toLowerCase().includes('declined') ? 'Card Declined' : 'Payment Failed'}
+            </h3>
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+          {error.toLowerCase().includes('declined') && (
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+              <p className="text-xs text-gray-600 mb-2 font-medium">What you can do:</p>
+              <ul className="text-xs text-gray-500 space-y-1">
+                <li>• Try a different payment card</li>
+                <li>• Check your card details are correct</li>
+                <li>• Contact your bank for more information</li>
+              </ul>
+            </div>
+          )}
+          <div className="p-4">
+            <button
+              type="button"
+              onClick={() => setResult(null)}
+              className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show main form modal
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Pay Invoice" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title={modalTitle} size="md">
       <Elements stripe={stripePromise}>
         <PayForm
           invoice={invoice}
@@ -481,6 +563,8 @@ export function PayInvoiceModal({
           onPay={onPay}
           onClose={onClose}
           onPaymentMethodAdded={onPaymentMethodAdded}
+          onSuccess={handleSuccess}
+          onError={handleError}
         />
       </Elements>
     </Modal>

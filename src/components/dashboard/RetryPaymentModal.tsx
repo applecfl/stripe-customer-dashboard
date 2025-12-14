@@ -11,7 +11,7 @@ import {
 import { InvoiceData, PaymentMethodData } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { Modal, ModalFooter, Button } from '@/components/ui';
-import { CreditCard, Plus, Check, RefreshCw, AlertCircle, X } from 'lucide-react';
+import { CreditCard, Plus, Check, RefreshCw } from 'lucide-react';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -36,14 +36,15 @@ interface RetryFormProps {
   onRetry: RetryPaymentModalProps['onRetry'];
   onClose: () => void;
   onPaymentMethodAdded?: () => void;
+  onSuccess: () => void;
+  onError: (error: string) => void;
 }
 
-function RetryForm({ invoice, paymentMethods, customerId, onRetry, onClose, onPaymentMethodAdded }: RetryFormProps) {
+function RetryForm({ invoice, paymentMethods, customerId, onRetry, onClose, onPaymentMethodAdded, onSuccess, onError }: RetryFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [showAddCard, setShowAddCard] = useState(false);
   const [saveCard, setSaveCard] = useState(true);
 
@@ -56,7 +57,6 @@ function RetryForm({ invoice, paymentMethods, customerId, onRetry, onClose, onPa
         : null;
       const defaultPm = paymentMethods.find(pm => pm.isDefault);
       setPaymentMethodId(invoicePm?.id || defaultPm?.id || paymentMethods[0]?.id || '');
-      setError('');
       setShowAddCard(false);
     }
   }, [invoice, paymentMethods]);
@@ -64,7 +64,6 @@ function RetryForm({ invoice, paymentMethods, customerId, onRetry, onClose, onPa
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
 
     try {
       let pmIdToUse = paymentMethodId;
@@ -120,19 +119,12 @@ function RetryForm({ invoice, paymentMethods, customerId, onRetry, onClose, onPa
         invoiceId: invoice.id,
         paymentMethodId: pmIdToUse || undefined,
       });
-      handleClose();
+      onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry payment');
+      onError(err instanceof Error ? err.message : 'Failed to retry payment');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleClose = () => {
-    setPaymentMethodId('');
-    setError('');
-    setShowAddCard(false);
-    onClose();
   };
 
   // Format the date when the invoice was first finalized/created
@@ -284,46 +276,10 @@ function RetryForm({ invoice, paymentMethods, customerId, onRetry, onClose, onPa
             </label>
           </div>
         )}
-
-        {/* Error Modal Overlay */}
-        {error && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-              <div className="bg-red-50 p-6 text-center">
-                <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-                  <CreditCard className="w-8 h-8 text-red-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-red-900 mb-2">
-                  {error.toLowerCase().includes('declined') ? 'Card Declined' : 'Payment Failed'}
-                </h3>
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-              {error.toLowerCase().includes('declined') && (
-                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-                  <p className="text-xs text-gray-600 mb-2 font-medium">What you can do:</p>
-                  <ul className="text-xs text-gray-500 space-y-1">
-                    <li>• Try a different payment card</li>
-                    <li>• Check your card details are correct</li>
-                    <li>• Contact your bank for more information</li>
-                  </ul>
-                </div>
-              )}
-              <div className="p-4">
-                <button
-                  type="button"
-                  onClick={() => setError('')}
-                  className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                >
-                  Try Again
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       <ModalFooter>
-        <Button variant="secondary" onClick={handleClose} disabled={loading}>
+        <Button variant="secondary" onClick={onClose} disabled={loading}>
           Cancel
         </Button>
         <Button type="submit" loading={loading} disabled={!paymentMethodId && !showAddCard}>
@@ -344,11 +300,103 @@ export function RetryPaymentModal({
   onRetry,
   onPaymentMethodAdded,
 }: RetryPaymentModalProps) {
+  const [result, setResult] = useState<{ type: 'success' | 'error'; message?: string } | null>(null);
+
+  // Reset result when modal opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      setResult(null);
+    }
+  }, [isOpen]);
+
   if (!invoice) return null;
 
   // Get customerId from invoice if not provided directly
   const customerIdToUse = customerId || invoice.customer;
 
+  const handleClose = () => {
+    setResult(null);
+    onClose();
+  };
+
+  const handleSuccess = () => {
+    setResult({ type: 'success' });
+  };
+
+  const handleError = (error: string) => {
+    setResult({ type: 'error', message: error });
+  };
+
+  // Show success modal
+  if (result?.type === 'success') {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div className="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-green-50 p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+              <Check className="w-8 h-8 text-green-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-green-900 mb-2">
+              Payment Successful
+            </h3>
+            <p className="text-sm text-green-700">
+              The payment has been processed successfully.
+            </p>
+          </div>
+          <div className="p-4">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error modal
+  if (result?.type === 'error') {
+    const error = result.message || 'Payment failed';
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div className="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-red-50 p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <CreditCard className="w-8 h-8 text-red-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-red-900 mb-2">
+              {error.toLowerCase().includes('declined') ? 'Card Declined' : 'Payment Failed'}
+            </h3>
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+          {error.toLowerCase().includes('declined') && (
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+              <p className="text-xs text-gray-600 mb-2 font-medium">What you can do:</p>
+              <ul className="text-xs text-gray-500 space-y-1">
+                <li>• Try a different payment card</li>
+                <li>• Check your card details are correct</li>
+                <li>• Contact your bank for more information</li>
+              </ul>
+            </div>
+          )}
+          <div className="p-4">
+            <button
+              type="button"
+              onClick={() => setResult(null)}
+              className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show main form modal
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Retry Payment" size="md">
       <Elements stripe={stripePromise}>
@@ -359,6 +407,8 @@ export function RetryPaymentModal({
           onRetry={onRetry}
           onClose={onClose}
           onPaymentMethodAdded={onPaymentMethodAdded}
+          onSuccess={handleSuccess}
+          onError={handleError}
         />
       </Elements>
     </Modal>

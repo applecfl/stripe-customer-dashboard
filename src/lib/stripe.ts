@@ -5,6 +5,7 @@ interface StripeAccountConfig {
   name: string;
   id: string;
   key: string;
+  logo?: string;
 }
 
 // Type for the STRIPE_LIST environment variable
@@ -56,13 +57,13 @@ export function getStripeForAccount(accountId: string): Stripe {
   return instance;
 }
 
-// Get account info (name, id) without exposing the key
-export function getStripeAccountInfo(accountId: string): { name: string; id: string } | null {
+// Get account info (name, id, logo) without exposing the key
+export function getStripeAccountInfo(accountId: string): { name: string; id: string; logo?: string } | null {
   try {
     const stripeList = getStripeList();
     const accountConfig = stripeList[accountId];
     if (!accountConfig) return null;
-    return { name: accountConfig.name, id: accountConfig.id };
+    return { name: accountConfig.name, id: accountConfig.id, logo: accountConfig.logo };
   } catch {
     return null;
   }
