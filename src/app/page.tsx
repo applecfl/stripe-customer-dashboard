@@ -92,6 +92,15 @@ function DashboardContent() {
   const [changeDueDateModal, setChangeDueDateModal] = useState<InvoiceData | null>(null);
   const [showBulkChangeDueDateModal, setShowBulkChangeDueDateModal] = useState(false);
 
+  // Check if response indicates session expired (401) and redirect
+  const checkSessionExpired = useCallback((response: Response) => {
+    if (response.status === 401) {
+      router.push('/expired');
+      return true;
+    }
+    return false;
+  }, [router]);
+
   // Fetch all data - isBackground = true means don't show full loading state
   const fetchData = useCallback(async (isBackground = false) => {
     if (!customerId || !invoiceUID || !accountId) {
@@ -119,6 +128,12 @@ function DashboardContent() {
         fetch(`/api/stripe/payment-methods?customerId=${customerId}${tokenParam}${accountParam}${cacheBust}`),
       ]);
 
+      // Check if any response indicates session expired
+      if (checkSessionExpired(customerRes) || checkSessionExpired(invoicesRes) ||
+          checkSessionExpired(paymentsRes) || checkSessionExpired(paymentMethodsRes)) {
+        return;
+      }
+
       const [customerData, invoicesData, paymentsData, paymentMethodsData] = await Promise.all([
         customerRes.json(),
         invoicesRes.json(),
@@ -141,7 +156,7 @@ function DashboardContent() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [customerId, invoiceUID, token]);
+  }, [customerId, invoiceUID, token, checkSessionExpired]);
 
   // Background refresh helper
   const refreshData = useCallback(() => fetchData(true), [fetchData]);
@@ -207,13 +222,23 @@ function DashboardContent() {
     return result;
   };
 
+  // Wrapper for fetch that checks for session expiration
+  const fetchWithAuth = async (url: string, options?: RequestInit) => {
+    const response = await fetch(url, options);
+    if (response.status === 401) {
+      router.push('/expired');
+      throw new Error('Session expired');
+    }
+    return response;
+  };
+
   // Action handlers
   const handleVoidInvoice = async (data: {
     invoiceId: string;
     addCredit: boolean;
     reason?: string;
   }) => {
-    const response = await fetch(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
+    const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -234,7 +259,7 @@ function DashboardContent() {
 
   const handlePauseInvoice = async (invoice: InvoiceData, pause: boolean) => {
     try {
-      const response = await fetch(withToken(`/api/stripe/invoices/${invoice.id}`), {
+      const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${invoice.id}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'pause', pause, accountId }),
@@ -247,6 +272,7 @@ function DashboardContent() {
 
       await refreshData();
     } catch (err) {
+      if (err instanceof Error && err.message === 'Session expired') return;
       setError(err instanceof Error ? err.message : 'Failed to update invoice');
     }
   };
@@ -256,7 +282,7 @@ function DashboardContent() {
     newAmount: number;
     reason: string;
   }) => {
-    const response = await fetch(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
+    const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -277,7 +303,7 @@ function DashboardContent() {
 
   const handleSendReminder = async (invoice: InvoiceData) => {
     try {
-      const response = await fetch(withToken(`/api/stripe/invoices/${invoice.id}`), {
+      const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${invoice.id}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'send-reminder', accountId }),
@@ -290,13 +316,14 @@ function DashboardContent() {
 
       await refreshData();
     } catch (err) {
+      if (err instanceof Error && err.message === 'Session expired') return;
       setError(err instanceof Error ? err.message : 'Failed to send reminder');
     }
   };
 
   const handleDeleteInvoice = async (invoice: InvoiceData) => {
     try {
-      const response = await fetch(withToken(`/api/stripe/invoices/${invoice.id}`), {
+      const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${invoice.id}`), {
         method: 'DELETE',
       });
 
@@ -307,12 +334,13 @@ function DashboardContent() {
 
       await refreshData();
     } catch (err) {
+      if (err instanceof Error && err.message === 'Session expired') return;
       setError(err instanceof Error ? err.message : 'Failed to delete invoice');
     }
   };
 
   const handleRetryInvoice = async (data: { invoiceId: string; paymentMethodId?: string }) => {
-    const response = await fetch(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
+    const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'retry', accountId, paymentMethodId: data.paymentMethodId }),
@@ -331,7 +359,7 @@ function DashboardContent() {
     amount?: number;
     reason?: string;
   }) => {
-    const response = await fetch(withToken('/api/stripe/refunds'), {
+    const response = await fetchWithAuth(withToken('/api/stripe/refunds'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...data, accountId }),
@@ -347,7 +375,7 @@ function DashboardContent() {
 
   const handleSetDefaultPaymentMethod = async (pm: PaymentMethodData) => {
     try {
-      const response = await fetch(withToken('/api/stripe/payment-methods'), {
+      const response = await fetchWithAuth(withToken('/api/stripe/payment-methods'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -365,13 +393,14 @@ function DashboardContent() {
 
       await refreshData();
     } catch (err) {
+      if (err instanceof Error && err.message === 'Session expired') return;
       setError(err instanceof Error ? err.message : 'Failed to update payment method');
     }
   };
 
   const handleDeletePaymentMethod = async (pm: PaymentMethodData) => {
     try {
-      const response = await fetch(withToken(`/api/stripe/payment-methods?paymentMethodId=${pm.id}`), {
+      const response = await fetchWithAuth(withToken(`/api/stripe/payment-methods?paymentMethodId=${pm.id}`), {
         method: 'DELETE',
       });
 
@@ -383,6 +412,7 @@ function DashboardContent() {
       // Optimistic update - remove from list immediately
       setPaymentMethods(prev => prev.filter(p => p.id !== pm.id));
     } catch (err) {
+      if (err instanceof Error && err.message === 'Session expired') return;
       setError(err instanceof Error ? err.message : 'Failed to delete payment method');
       await refreshData(); // Refresh on error to restore correct state
     }
@@ -396,7 +426,7 @@ function DashboardContent() {
       // Delete payment methods in parallel
       const results = await Promise.all(
         pmIds.map(async (pmId) => {
-          const response = await fetch(withToken(`/api/stripe/payment-methods?paymentMethodId=${pmId}`), {
+          const response = await fetchWithAuth(withToken(`/api/stripe/payment-methods?paymentMethodId=${pmId}`), {
             method: 'DELETE',
           });
           return response.json();
@@ -408,6 +438,7 @@ function DashboardContent() {
         throw new Error(`Failed to delete ${failed.length} payment method(s)`);
       }
     } catch (err) {
+      if (err instanceof Error && err.message === 'Session expired') return;
       setError(err instanceof Error ? err.message : 'Failed to delete payment methods');
       await refreshData(); // Refresh on error to restore correct state
     }
@@ -417,7 +448,7 @@ function DashboardContent() {
     // Update each invoice's payment method
     const results = await Promise.all(
       invoiceIds.map(async (invoiceId) => {
-        const response = await fetch(withToken(`/api/stripe/invoices/${invoiceId}`), {
+        const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${invoiceId}`), {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -442,7 +473,7 @@ function DashboardContent() {
     // Update each invoice's due date
     const results = await Promise.all(
       invoiceIds.map(async (invoiceId) => {
-        const response = await fetch(withToken(`/api/stripe/invoices/${invoiceId}`), {
+        const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${invoiceId}`), {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -470,6 +501,7 @@ function DashboardContent() {
         draftInvoices.map(inv => handlePauseInvoice(inv, pause))
       );
     } catch (err) {
+      if (err instanceof Error && err.message === 'Session expired') return;
       setError(err instanceof Error ? err.message : 'Failed to pause/resume invoices');
     }
   };
@@ -478,7 +510,7 @@ function DashboardContent() {
     try {
       await Promise.all(
         invoiceIds.map(async (invoiceId) => {
-          const response = await fetch(withToken(`/api/stripe/invoices/${invoiceId}`), {
+          const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${invoiceId}`), {
             method: 'DELETE',
           });
           const result = await response.json();
@@ -489,6 +521,7 @@ function DashboardContent() {
       );
       await refreshData();
     } catch (err) {
+      if (err instanceof Error && err.message === 'Session expired') return;
       setError(err instanceof Error ? err.message : 'Failed to delete invoices');
     }
   };

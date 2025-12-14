@@ -132,6 +132,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow expired page
+  if (pathname === '/expired') {
+    return NextResponse.next();
+  }
+
   // For main page and API routes, require token authentication
   if (pathname === '/' || pathname.startsWith('/api/stripe')) {
     const token = request.nextUrl.searchParams.get('token');
@@ -143,27 +148,33 @@ export async function middleware(request: NextRequest) {
     }
 
     if (!token) {
-      // No token - return access denied page
-      return new NextResponse(
-        generateErrorHTML('Authentication Required', 'Please access this page through the LEC system.'),
-        {
+      // No token - redirect to expired page (for page requests) or return 401 (for API)
+      if (pathname.startsWith('/api/')) {
+        return new NextResponse(JSON.stringify({ success: false, error: 'Session expired' }), {
           status: 401,
-          headers: { 'Content-Type': 'text/html' },
-        }
-      );
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = '/expired';
+      url.search = '';
+      return NextResponse.redirect(url);
     }
 
     const payload = await verifyToken(token, secret);
 
     if (!payload) {
-      // Invalid or expired token
-      return new NextResponse(
-        generateErrorHTML('Session Expired', 'Your session has expired. Please return to the LEC system and try again.'),
-        {
+      // Invalid or expired token - redirect to expired page (for page requests) or return 401 (for API)
+      if (pathname.startsWith('/api/')) {
+        return new NextResponse(JSON.stringify({ success: false, error: 'Session expired' }), {
           status: 401,
-          headers: { 'Content-Type': 'text/html' },
-        }
-      );
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = '/expired';
+      url.search = '';
+      return NextResponse.redirect(url);
     }
 
     // Token is valid - pass the decoded values in headers for the page/API to use
@@ -193,88 +204,6 @@ export async function middleware(request: NextRequest) {
   }
 
   return NextResponse.next();
-}
-
-/**
- * Generate error HTML page
- */
-function generateErrorHTML(title: string, message: string): string {
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} - LEC Payment Manager</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #f9fafb;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .container {
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      border: 1px solid #e5e7eb;
-      padding: 48px;
-      max-width: 400px;
-      text-align: center;
-    }
-    .icon {
-      width: 64px;
-      height: 64px;
-      background: #fef2f2;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 24px;
-    }
-    .icon svg {
-      width: 32px;
-      height: 32px;
-      color: #ef4444;
-    }
-    h1 {
-      font-size: 24px;
-      font-weight: 600;
-      color: #111827;
-      margin-bottom: 12px;
-    }
-    p {
-      color: #6b7280;
-      line-height: 1.6;
-    }
-    .logo {
-      margin-bottom: 24px;
-    }
-    .logo img {
-      height: 40px;
-      width: auto;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="logo">
-      <img src="https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png" alt="LEC Logo" />
-    </div>
-    <div class="icon">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-      </svg>
-    </div>
-    <h1>${title}</h1>
-    <p>${message}</p>
-  </div>
-</body>
-</html>
-`;
 }
 
 export const config = {
