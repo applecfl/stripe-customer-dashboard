@@ -25,6 +25,7 @@ interface PaymentModalProps {
   invoiceUID: string;
   currency: string;
   token?: string;
+  accountId?: string;
   onSuccess: () => void;
   onPaymentMethodAdded?: () => void;
 }
@@ -48,6 +49,7 @@ interface PaymentFormProps {
   invoiceUID: string;
   currency: string;
   token?: string;
+  accountId?: string;
   onSuccess: () => void;
   onClose: () => void;
   onPaymentMethodAdded?: () => void;
@@ -61,15 +63,23 @@ function PaymentForm({
   invoiceUID,
   currency,
   token,
+  accountId,
   onSuccess,
   onClose,
   onPaymentMethodAdded,
 }: PaymentFormProps) {
-  // Helper to add token to API URLs
+  // Helper to add token and accountId to API URLs
   const withToken = (url: string) => {
-    if (!token) return url;
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}token=${encodeURIComponent(token)}`;
+    let result = url;
+    if (token) {
+      const separator = result.includes('?') ? '&' : '?';
+      result = `${result}${separator}token=${encodeURIComponent(token)}`;
+    }
+    if (accountId) {
+      const separator = result.includes('?') ? '&' : '?';
+      result = `${result}${separator}accountId=${encodeURIComponent(accountId)}`;
+    }
+    return result;
   };
   const stripe = useStripe();
   const elements = useElements();
@@ -366,6 +376,7 @@ function PaymentForm({
           selectedInvoiceIds: invoicesToPay,
           applyToAll: shouldApplyToAll,
           saveCard: showAddCard && saveCard,
+          accountId,
         }),
       });
 
@@ -705,6 +716,7 @@ export function PaymentModal({
   invoiceUID,
   currency,
   token,
+  accountId,
   onSuccess,
   onPaymentMethodAdded,
 }: PaymentModalProps) {
@@ -723,6 +735,7 @@ export function PaymentModal({
           invoiceUID={invoiceUID}
           currency={currency}
           token={token}
+          accountId={accountId}
           onSuccess={onSuccess}
           onClose={onClose}
           onPaymentMethodAdded={onPaymentMethodAdded}

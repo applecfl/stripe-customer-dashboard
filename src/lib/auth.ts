@@ -24,6 +24,7 @@ const TOKEN_EXPIRY_SECONDS = 30 * 60;
 export interface TokenPayload {
   customerId: string;
   invoiceUID: string;
+  accountId: string;
   exp: number; // Expiration timestamp (seconds)
   iat: number; // Issued at timestamp (seconds)
 }
@@ -69,15 +70,16 @@ export function isAllowedIP(ip: string | null): boolean {
 }
 
 /**
- * Generate a signed token for the given customer and invoice
+ * Generate a signed token for the given customer, invoice, and account
  */
-export function generateToken(customerId: string, invoiceUID: string): { token: string; expiresAt: number } {
+export function generateToken(customerId: string, invoiceUID: string, accountId: string): { token: string; expiresAt: number } {
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + TOKEN_EXPIRY_SECONDS;
 
   const payload: TokenPayload = {
     customerId,
     invoiceUID,
+    accountId,
     exp: expiresAt,
     iat: now,
   };
@@ -125,7 +127,7 @@ export function verifyToken(token: string): TokenPayload | null {
     }
 
     // Validate required fields
-    if (!payload.customerId || !payload.invoiceUID) {
+    if (!payload.customerId || !payload.invoiceUID || !payload.accountId) {
       return null;
     }
 

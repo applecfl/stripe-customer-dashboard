@@ -769,11 +769,11 @@ export function FutureInvoicesTable({
           </div>
         )}
 
-        <Table>
+        <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow hoverable={false}>
               {/* Checkbox column */}
-              <TableHead className="w-8 sm:w-10">
+              <TableHead className="w-[40px]">
                 <button
                   onClick={toggleSelectAll}
                   className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
@@ -787,11 +787,11 @@ export function FutureInvoicesTable({
                   )}
                 </button>
               </TableHead>
-              <TableHead className="w-8 sm:w-10"></TableHead>
-              <TableHead align="right" className="w-24 sm:w-32">Amount</TableHead>
-              <TableHead className="w-28 sm:w-44"><span className="hidden sm:inline">Finalize </span>Date</TableHead>
-              <TableHead><span className="hidden sm:inline">Payment </span>Card</TableHead>
-              <TableHead className="w-20 sm:w-32"></TableHead>
+              <TableHead className="w-[50px]"></TableHead>
+              <TableHead className="w-[100px]">Amount</TableHead>
+              <TableHead className="w-[100px]"><span className="hidden sm:inline">Finalize </span>Date</TableHead>
+              <TableHead className="w-[140px]"><span className="hidden sm:inline">Payment </span>Card</TableHead>
+              <TableHead align="right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -853,9 +853,9 @@ export function FutureInvoicesTable({
                   </TableCell>
 
                   {/* Amount Cell */}
-                  <TableCell align="right">
+                  <TableCell>
                     {editingAmount === invoice.id ? (
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center gap-1">
                         <span className="text-gray-500 text-xs sm:text-sm">$</span>
                         <input
                           ref={amountInputRef}
@@ -866,7 +866,7 @@ export function FutureInvoicesTable({
                           onChange={(e) => setEditValue(e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, invoice, 'amount')}
                           onBlur={() => finishEditAmount(invoice)}
-                          className="w-16 sm:w-20 px-1.5 sm:px-2 py-0.5 sm:py-1 text-right text-xs sm:text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-16 sm:w-20 px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs sm:text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           disabled={isSaving}
                         />
                       </div>
@@ -1054,27 +1054,29 @@ export function FutureInvoicesTable({
                           </button>
                         </>
                       ) : (
-                        <>
+                        <div className="flex items-center gap-1">
                           <button
                             onClick={() => handlePauseResume(invoice.id, true)}
                             disabled={pausingId === invoice.id}
-                            className="p-0.5 sm:p-1 hover:bg-amber-50 text-gray-400 hover:text-amber-600 rounded transition-colors disabled:opacity-50"
+                            className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
                             title="Pause invoice"
                           >
                             {pausingId === invoice.id ? (
-                              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <span className="text-xs sm:text-sm">Pause</span>
+                              <Pause className="w-3.5 h-3.5" />
                             )}
+                            <span className="hidden sm:inline">Pause</span>
                           </button>
                           <button
                             onClick={() => confirmDeleteSingle(invoice.id)}
-                            className="p-0.5 sm:p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-colors"
+                            className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
                             title="Delete invoice"
                           >
-                            <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Delete</span>
                           </button>
-                        </>
+                        </div>
                       )}
                     </div>
                   </TableCell>
@@ -1139,11 +1141,11 @@ export function FutureInvoicesTable({
                   </div>
                 )}
 
-                <Table>
+                <Table className="table-fixed w-full">
                   <TableHeader>
                     <TableRow hoverable={false}>
                       {/* Checkbox column */}
-                      <TableHead className="w-8 sm:w-10">
+                      <TableHead className="w-[40px]">
                         <button
                           onClick={toggleSelectAllPaused}
                           className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
@@ -1157,11 +1159,11 @@ export function FutureInvoicesTable({
                           )}
                         </button>
                       </TableHead>
-                      <TableHead className="w-8 sm:w-10"></TableHead>
-                      <TableHead align="right" className="w-24 sm:w-32">Amount</TableHead>
-                      <TableHead className="w-28 sm:w-44">Paused Date</TableHead>
-                      <TableHead><span className="hidden sm:inline">Payment </span>Card</TableHead>
-                      <TableHead className="w-20 sm:w-32"></TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead className="w-[100px]">Amount</TableHead>
+                      <TableHead className="w-[100px]">Paused Date</TableHead>
+                      <TableHead className="w-[140px]"><span className="hidden sm:inline">Payment </span>Card</TableHead>
+                      <TableHead align="right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1204,7 +1206,7 @@ export function FutureInvoicesTable({
                             </div>
                           </TableCell>
 
-                          <TableCell align="right">
+                          <TableCell>
                             <span className="font-semibold text-xs sm:text-sm text-gray-600">
                               {formatCurrency(invoice.amount_due, invoice.currency)}
                             </span>
@@ -1235,25 +1237,27 @@ export function FutureInvoicesTable({
                           </TableCell>
 
                           <TableCell>
-                            <div className="flex items-center gap-0.5 sm:gap-1 justify-end">
+                            <div className="flex items-center gap-1 justify-end">
                               <button
                                 onClick={() => handlePauseResume(invoice.id, false)}
                                 disabled={isPausing}
-                                className="p-0.5 sm:p-1 hover:bg-green-50 text-gray-400 hover:text-green-600 rounded transition-colors disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors disabled:opacity-50"
                                 title="Resume invoice"
                               >
                                 {isPausing ? (
-                                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                 ) : (
-                                  <span className="text-xs sm:text-sm">Resume</span>
+                                  <Play className="w-3.5 h-3.5" />
                                 )}
+                                <span className="hidden sm:inline">Resume</span>
                               </button>
                               <button
                                 onClick={() => confirmDeleteSingle(invoice.id)}
-                                className="p-0.5 sm:p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
                                 title="Delete invoice"
                               >
-                                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Delete</span>
                               </button>
                             </div>
                           </TableCell>

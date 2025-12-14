@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import stripe from '@/lib/stripe';
+import { getStripeForAccount } from '@/lib/stripe';
 import { mapInvoice } from '@/lib/mappers';
 import { InvoiceData, ApiResponse } from '@/types';
 
@@ -10,6 +10,17 @@ export async function GET(
 ): Promise<NextResponse<ApiResponse<InvoiceData>>> {
   try {
     const { invoiceId } = await params;
+    const { searchParams } = new URL(request.url);
+    const accountId = searchParams.get('accountId');
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     const invoice = await stripe.invoices.retrieve(invoiceId, {
       expand: ['lines'],
@@ -36,7 +47,16 @@ export async function POST(
   try {
     const { invoiceId } = await params;
     const body = await request.json();
-    const { amount, paymentMethodId, note } = body;
+    const { amount, paymentMethodId, note, accountId } = body;
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     const invoice = await stripe.invoices.retrieve(invoiceId);
 
@@ -145,7 +165,16 @@ export async function PATCH(
   try {
     const { invoiceId } = await params;
     const body = await request.json();
-    const { action, pause, newAmount, reason, addCredit, paymentMethodId, newDueDate } = body;
+    const { action, pause, newAmount, reason, addCredit, paymentMethodId, newDueDate, accountId } = body;
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     const invoice = await stripe.invoices.retrieve(invoiceId);
 
@@ -310,8 +339,17 @@ export async function PATCH(
           );
         }
 
+        // If a different payment method is provided, update the invoice first
+        if (paymentMethodId) {
+          await stripe.invoices.update(invoiceId, {
+            default_payment_method: paymentMethodId,
+          });
+        }
+
         // Attempt to pay the invoice again
-        await stripe.invoices.pay(invoiceId);
+        await stripe.invoices.pay(invoiceId, {
+          payment_method: paymentMethodId || undefined,
+        });
         break;
       }
 
@@ -430,11 +468,22 @@ export async function PATCH(
 
 // Delete draft invoice
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ invoiceId: string }> }
 ): Promise<NextResponse<ApiResponse<{ deleted: boolean }>>> {
   try {
     const { invoiceId } = await params;
+    const { searchParams } = new URL(request.url);
+    const accountId = searchParams.get('accountId');
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     const invoice = await stripe.invoices.retrieve(invoiceId);
 

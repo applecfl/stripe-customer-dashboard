@@ -24,6 +24,7 @@ interface ChangePaymentMethodModalProps {
   onChangePaymentMethod: (invoiceIds: string[], paymentMethodId: string) => Promise<void>;
   onPaymentMethodAdded?: () => void; // Callback to refresh payment methods
   customerId: string;
+  accountId?: string;
   mode?: 'single' | 'bulk';
 }
 
@@ -37,6 +38,7 @@ function ChangePaymentMethodForm({
   onChangePaymentMethod,
   onPaymentMethodAdded,
   customerId,
+  accountId,
   mode = 'single',
 }: ChangePaymentMethodModalProps) {
   const stripe = useStripe();
@@ -116,6 +118,7 @@ function ChangePaymentMethodForm({
             customerId,
             paymentMethodId: paymentMethod.id,
             setAsDefault: false,
+            accountId,
           }),
         });
 

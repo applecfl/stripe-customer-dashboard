@@ -15,11 +15,12 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 
 interface AddPaymentMethodFormProps {
   customerId: string;
+  accountId?: string;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-function AddPaymentMethodForm({ customerId, onSuccess, onCancel }: AddPaymentMethodFormProps) {
+function AddPaymentMethodForm({ customerId, accountId, onSuccess, onCancel }: AddPaymentMethodFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -64,6 +65,7 @@ function AddPaymentMethodForm({ customerId, onSuccess, onCancel }: AddPaymentMet
           customerId,
           paymentMethodId: paymentMethod.id,
           setAsDefault,
+          accountId,
         }),
       });
 
@@ -156,6 +158,7 @@ interface AddPaymentMethodModalProps {
   isOpen: boolean;
   onClose: () => void;
   customerId: string;
+  accountId?: string;
   onSuccess: () => void;
 }
 
@@ -163,6 +166,7 @@ export function AddPaymentMethodModal({
   isOpen,
   onClose,
   customerId,
+  accountId,
   onSuccess,
 }: AddPaymentMethodModalProps) {
   const handleSuccess = () => {
@@ -175,6 +179,7 @@ export function AddPaymentMethodModal({
       <Elements stripe={stripePromise}>
         <AddPaymentMethodForm
           customerId={customerId}
+          accountId={accountId}
           onSuccess={handleSuccess}
           onCancel={onClose}
         />

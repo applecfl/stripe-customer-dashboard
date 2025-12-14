@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import stripe from '@/lib/stripe';
+import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
 
 interface AddCreditResult {
@@ -26,6 +26,7 @@ export async function POST(
       invoiceUID,
       selectedInvoiceIds,
       applyToAll,
+      accountId,
     } = body;
 
     if (!customerId || !amount || !reason) {
@@ -34,6 +35,15 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // First, add the credit to customer balance
     const creditTransaction = await stripe.customers.createBalanceTransaction(customerId, {

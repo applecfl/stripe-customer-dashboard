@@ -246,12 +246,12 @@ export function PaymentsTable({
                               <p className="text-gray-700">{formatDateTime(payment.created)}</p>
                             </div>
 
-                            {/* InvoiceUID */}
+                            {/* PaymentUID */}
                             {invoiceInfo.invoiceUID && (
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
                                   <Hash className="w-3 h-3" />
-                                  Invoice UID
+                                  Payment UID
                                 </div>
                                 <p className="font-mono text-xs text-gray-700">{invoiceInfo.invoiceUID}</p>
                               </div>
@@ -276,12 +276,12 @@ export function PaymentsTable({
                               </div>
                             )}
 
-                            {/* Invoices paid via PayNow */}
+                            {/* Payments via PayNow */}
                             {invoiceInfo.invoiceIds.length > 0 && (
                               <div className="space-y-1 col-span-full md:col-span-2">
                                 <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
                                   <FileText className="w-3 h-3" />
-                                  Invoices Paid ({invoiceInfo.invoiceIds.length})
+                                  Payments ({invoiceInfo.invoiceIds.length})
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                   {invoiceInfo.invoiceIds.map((id, idx) => (
@@ -299,7 +299,7 @@ export function PaymentsTable({
                                 </div>
                                 {invoiceInfo.totalApplied > 0 && (
                                   <p className="text-xs text-gray-500">
-                                    Total applied to invoices: {formatCurrency(invoiceInfo.totalApplied, payment.currency)}
+                                    Total applied to payments: {formatCurrency(invoiceInfo.totalApplied, payment.currency)}
                                   </p>
                                 )}
                               </div>

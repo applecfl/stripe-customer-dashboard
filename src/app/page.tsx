@@ -23,18 +23,44 @@ import {
   AddPaymentMethodModal,
   ChangePaymentMethodModal,
   ChangeDueDateModal,
+  RetryPaymentModal,
+  SendReminderModal,
 } from '@/components/dashboard';
 import { AlertCircle, RefreshCw, CreditCard, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 
 // Token refresh interval (25 minutes in ms - refresh before 30 min expiry)
 const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000;
 
+// Helper to decode token payload (client-side)
+function decodeTokenPayload(token: string): { customerId: string; invoiceUID: string; accountId: string } | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 2) return null;
+    const payloadStr = atob(parts[0].replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(payloadStr);
+    if (payload.customerId && payload.invoiceUID && payload.accountId) {
+      return {
+        customerId: payload.customerId,
+        invoiceUID: payload.invoiceUID,
+        accountId: payload.accountId,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const customerId = searchParams.get('customerId') || '';
-  const invoiceUID = searchParams.get('invoiceUID') || '';
   const initialToken = searchParams.get('token') || '';
+
+  // Try to extract values from token first, fallback to URL params
+  const tokenPayload = initialToken ? decodeTokenPayload(initialToken) : null;
+  const customerId = tokenPayload?.customerId || searchParams.get('customerId') || '';
+  const invoiceUID = tokenPayload?.invoiceUID || searchParams.get('invoiceUID') || '';
+  const accountId = tokenPayload?.accountId || searchParams.get('accountId') || '';
 
   // Track the current valid token (may be refreshed)
   const [token, setToken] = useState(initialToken);
@@ -58,6 +84,8 @@ function DashboardContent() {
   const [voidInvoiceModal, setVoidInvoiceModal] = useState<InvoiceData | null>(null);
   const [adjustInvoiceModal, setAdjustInvoiceModal] = useState<InvoiceData | null>(null);
   const [refundModal, setRefundModal] = useState<PaymentData | null>(null);
+  const [retryModal, setRetryModal] = useState<InvoiceData | null>(null);
+  const [sendReminderModal, setSendReminderModal] = useState<InvoiceData | null>(null);
   const [showAddPaymentMethodModal, setShowAddPaymentMethodModal] = useState(false);
   const [changePaymentMethodModal, setChangePaymentMethodModal] = useState<InvoiceData | null>(null);
   const [showBulkChangePaymentMethodModal, setShowBulkChangePaymentMethodModal] = useState(false);
@@ -66,7 +94,7 @@ function DashboardContent() {
 
   // Fetch all data - isBackground = true means don't show full loading state
   const fetchData = useCallback(async (isBackground = false) => {
-    if (!customerId || !invoiceUID) {
+    if (!customerId || !invoiceUID || !accountId) {
       setLoading(false);
       return;
     }
@@ -82,12 +110,13 @@ function DashboardContent() {
       // Fetch all data in parallel (include token for auth)
       // Add timestamp to bust cache and ensure fresh data
       const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+      const accountParam = `&accountId=${encodeURIComponent(accountId)}`;
       const cacheBust = `&_t=${Date.now()}`;
       const [customerRes, invoicesRes, paymentsRes, paymentMethodsRes] = await Promise.all([
-        fetch(`/api/stripe/customer/${customerId}?token=${encodeURIComponent(token)}${cacheBust}`),
-        fetch(`/api/stripe/invoices?customerId=${customerId}&invoiceUID=${invoiceUID}${tokenParam}${cacheBust}`),
-        fetch(`/api/stripe/payments?customerId=${customerId}&invoiceUID=${invoiceUID}${tokenParam}${cacheBust}`),
-        fetch(`/api/stripe/payment-methods?customerId=${customerId}${tokenParam}${cacheBust}`),
+        fetch(`/api/stripe/customer/${customerId}?token=${encodeURIComponent(token)}${accountParam}${cacheBust}`),
+        fetch(`/api/stripe/invoices?customerId=${customerId}&invoiceUID=${invoiceUID}${tokenParam}${accountParam}${cacheBust}`),
+        fetch(`/api/stripe/payments?customerId=${customerId}&invoiceUID=${invoiceUID}${tokenParam}${accountParam}${cacheBust}`),
+        fetch(`/api/stripe/payment-methods?customerId=${customerId}${tokenParam}${accountParam}${cacheBust}`),
       ]);
 
       const [customerData, invoicesData, paymentsData, paymentMethodsData] = await Promise.all([
@@ -164,11 +193,18 @@ function DashboardContent() {
     };
   }, [token, router]);
 
-  // Helper to add token to API URLs
+  // Helper to add token and accountId to API URLs
   const withToken = (url: string) => {
-    if (!token) return url;
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}token=${encodeURIComponent(token)}`;
+    let result = url;
+    if (token) {
+      const separator = result.includes('?') ? '&' : '?';
+      result = `${result}${separator}token=${encodeURIComponent(token)}`;
+    }
+    if (accountId) {
+      const separator = result.includes('?') ? '&' : '?';
+      result = `${result}${separator}accountId=${encodeURIComponent(accountId)}`;
+    }
+    return result;
   };
 
   // Action handlers
@@ -184,6 +220,7 @@ function DashboardContent() {
         action: 'void',
         addCredit: data.addCredit,
         reason: data.reason,
+        accountId,
       }),
     });
 
@@ -200,7 +237,7 @@ function DashboardContent() {
       const response = await fetch(withToken(`/api/stripe/invoices/${invoice.id}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'pause', pause }),
+        body: JSON.stringify({ action: 'pause', pause, accountId }),
       });
 
       const result = await response.json();
@@ -226,6 +263,7 @@ function DashboardContent() {
         action: 'adjust',
         newAmount: data.newAmount,
         reason: data.reason,
+        accountId,
       }),
     });
 
@@ -242,7 +280,7 @@ function DashboardContent() {
       const response = await fetch(withToken(`/api/stripe/invoices/${invoice.id}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send-reminder' }),
+        body: JSON.stringify({ action: 'send-reminder', accountId }),
       });
 
       const result = await response.json();
@@ -273,12 +311,12 @@ function DashboardContent() {
     }
   };
 
-  const handleRetryInvoice = async (invoice: InvoiceData) => {
+  const handleRetryInvoice = async (data: { invoiceId: string; paymentMethodId?: string }) => {
     try {
-      const response = await fetch(withToken(`/api/stripe/invoices/${invoice.id}`), {
+      const response = await fetch(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'retry' }),
+        body: JSON.stringify({ action: 'retry', accountId, paymentMethodId: data.paymentMethodId }),
       });
 
       const result = await response.json();
@@ -300,7 +338,7 @@ function DashboardContent() {
     const response = await fetch(withToken('/api/stripe/refunds'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, accountId }),
     });
 
     const result = await response.json();
@@ -320,6 +358,7 @@ function DashboardContent() {
           customerId,
           paymentMethodId: pm.id,
           setAsDefault: true,
+          accountId,
         }),
       });
 
@@ -388,6 +427,7 @@ function DashboardContent() {
           body: JSON.stringify({
             action: 'change-payment-method',
             paymentMethodId,
+            accountId,
           }),
         });
         return response.json();
@@ -412,6 +452,7 @@ function DashboardContent() {
           body: JSON.stringify({
             action: 'change-due-date',
             newDueDate,
+            accountId,
           }),
         });
         return response.json();
@@ -457,18 +498,19 @@ function DashboardContent() {
   };
 
   // Show error if missing required params
-  if (!customerId || !invoiceUID) {
+  if (!customerId || !invoiceUID || !accountId) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-md text-center">
           <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Missing Parameters</h2>
           <p className="text-gray-500 mb-4">
-            Please provide both <code className="bg-gray-100 px-1 rounded">customerId</code> and{' '}
-            <code className="bg-gray-100 px-1 rounded">invoiceUID</code> query parameters.
+            Please provide <code className="bg-gray-100 px-1 rounded">customerId</code>,{' '}
+            <code className="bg-gray-100 px-1 rounded">invoiceUID</code>, and{' '}
+            <code className="bg-gray-100 px-1 rounded">accountId</code> query parameters.
           </p>
           <p className="text-sm text-gray-400">
-            Example: <code className="bg-gray-100 px-1 rounded text-xs">/?customerId=cus_xxx&invoiceUID=your-uid</code>
+            Example: <code className="bg-gray-100 px-1 rounded text-xs">/?customerId=cus_xxx&invoiceUID=your-uid&accountId=111</code>
           </p>
         </div>
       </div>
@@ -528,7 +570,7 @@ function DashboardContent() {
                 </div>
               )}
               <div className="hidden sm:flex items-center gap-2">
-                <span className="text-gray-500">Invoice UID:</span>
+                <span className="text-gray-500">Payment UID:</span>
                 <code className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-mono text-xs max-w-[120px] truncate">
                   {invoiceUID}
                 </code>
@@ -649,7 +691,8 @@ function DashboardContent() {
             onPayInvoice={(invoice) => setPaymentModal({ isOpen: true, invoice })}
             onVoidInvoice={setVoidInvoiceModal}
             onPauseInvoice={handlePauseInvoice}
-            onRetryInvoice={handleRetryInvoice}
+            onRetryInvoice={setRetryModal}
+            onSendReminder={setSendReminderModal}
           />
         )}
 
@@ -708,6 +751,7 @@ function DashboardContent() {
         invoiceUID={invoiceUID}
         currency={customer.currency}
         token={token}
+        accountId={accountId}
         onSuccess={refreshData}
         onPaymentMethodAdded={refreshData}
       />
@@ -733,10 +777,31 @@ function DashboardContent() {
         onRefund={handleRefund}
       />
 
+      <RetryPaymentModal
+        isOpen={!!retryModal}
+        onClose={() => setRetryModal(null)}
+        invoice={retryModal}
+        paymentMethods={paymentMethods}
+        customerId={customer.id}
+        onRetry={handleRetryInvoice}
+        onPaymentMethodAdded={refreshData}
+      />
+
+      <SendReminderModal
+        isOpen={!!sendReminderModal}
+        onClose={() => setSendReminderModal(null)}
+        invoice={sendReminderModal}
+        customer={customer}
+        paymentMethods={paymentMethods}
+        accountId={accountId}
+        paymentLink={sendReminderModal?.hosted_invoice_url || ''}
+      />
+
       <AddPaymentMethodModal
         isOpen={showAddPaymentMethodModal}
         onClose={() => setShowAddPaymentMethodModal(false)}
         customerId={customerId}
+        accountId={accountId}
         onSuccess={refreshData}
       />
 
@@ -748,6 +813,7 @@ function DashboardContent() {
         onChangePaymentMethod={handleChangePaymentMethod}
         onPaymentMethodAdded={refreshData}
         customerId={customer.id}
+        accountId={accountId}
         mode="single"
       />
 
@@ -760,6 +826,7 @@ function DashboardContent() {
         onChangePaymentMethod={handleChangePaymentMethod}
         onPaymentMethodAdded={refreshData}
         customerId={customer.id}
+        accountId={accountId}
         mode="bulk"
       />
 

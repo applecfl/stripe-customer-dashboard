@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateToken, isAllowedIP, getClientIP } from '@/lib/auth';
 
 interface GenerateTokenRequest {
-  CustomerId: string;
+  CustomerID: string;
   InvoiceUID: string;
+  AccountID: string;
 }
 
 interface GenerateTokenResponse {
@@ -31,19 +32,26 @@ export async function POST(
 
     // Parse request body
     const body: GenerateTokenRequest = await request.json();
-    const { CustomerId: customerId, InvoiceUID: invoiceUID } = body;
+    const { CustomerID: customerId, InvoiceUID: invoiceUID, AccountID: accountId } = body;
 
     // Validate required fields
     if (!customerId || typeof customerId !== 'string') {
       return NextResponse.json(
-        { success: false, error: 'customerId is required' },
+        { success: false, error: 'CustomerID is required' },
         { status: 400 }
       );
     }
 
     if (!invoiceUID || typeof invoiceUID !== 'string') {
       return NextResponse.json(
-        { success: false, error: 'invoiceUID is required' },
+        { success: false, error: 'InvoiceUID is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!accountId || typeof accountId !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'AccountID is required' },
         { status: 400 }
       );
     }
@@ -51,13 +59,13 @@ export async function POST(
     // Validate customerId format (should start with cus_)
     if (!customerId.startsWith('cus_')) {
       return NextResponse.json(
-        { success: false, error: 'Invalid customerId format' },
+        { success: false, error: 'Invalid CustomerID format' },
         { status: 400 }
       );
     }
 
     // Generate token
-    const { token, expiresAt } = generateToken(customerId, invoiceUID);
+    const { token, expiresAt } = generateToken(customerId, invoiceUID, accountId);
 
     console.log(`Token generated for customer ${customerId} from IP ${clientIP}`);
 

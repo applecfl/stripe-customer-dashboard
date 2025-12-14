@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import stripe from '@/lib/stripe';
+import { getStripeForAccount } from '@/lib/stripe';
 import { RefundData, ApiResponse } from '@/types';
 
 // Get refunds for a customer
@@ -10,6 +10,7 @@ export async function GET(
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
+    const accountId = searchParams.get('accountId');
 
     if (!customerId) {
       return NextResponse.json(
@@ -17,6 +18,15 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // Get payment intents for the customer first
     const paymentIntents = await stripe.paymentIntents.list({
@@ -65,7 +75,7 @@ export async function POST(
 ): Promise<NextResponse<ApiResponse<RefundData>>> {
   try {
     const body = await request.json();
-    const { paymentIntentId, amount, reason, note } = body;
+    const { paymentIntentId, amount, reason, note, accountId } = body;
 
     if (!paymentIntentId) {
       return NextResponse.json(
@@ -73,6 +83,15 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // Create the refund
     const refundParams: Stripe.RefundCreateParams = {

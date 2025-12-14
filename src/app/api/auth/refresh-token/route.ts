@@ -32,8 +32,8 @@ export async function POST(
       );
     }
 
-    // Generate a new token with the same customer/invoice data
-    const { token, expiresAt } = generateToken(payload.customerId, payload.invoiceUID);
+    // Generate a new token with the same customer/invoice/account data
+    const { token, expiresAt } = generateToken(payload.customerId, payload.invoiceUID, payload.accountId);
 
     console.log(`Token refreshed for customer ${payload.customerId}`);
 

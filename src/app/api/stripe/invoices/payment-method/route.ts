@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import stripe from '@/lib/stripe';
+import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
 
 interface PaymentMethodResult {
@@ -12,7 +12,7 @@ export async function POST(
 ): Promise<NextResponse<ApiResponse<PaymentMethodResult>>> {
   try {
     const body = await request.json();
-    const { invoiceId, paymentMethodId } = body;
+    const { invoiceId, paymentMethodId, accountId } = body;
 
     if (!invoiceId || !paymentMethodId) {
       return NextResponse.json(
@@ -20,6 +20,15 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // Get the current invoice
     const invoice = await stripe.invoices.retrieve(invoiceId);

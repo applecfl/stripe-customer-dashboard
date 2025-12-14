@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import stripe from '@/lib/stripe';
+import { getStripeForAccount } from '@/lib/stripe';
 import { PaymentMethodData, ApiResponse } from '@/types';
 
 // Get payment methods for customer
@@ -9,6 +9,7 @@ export async function GET(
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
+    const accountId = searchParams.get('accountId');
 
     if (!customerId) {
       return NextResponse.json(
@@ -16,6 +17,15 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // Get customer to check default payment method
     const customer = await stripe.customers.retrieve(customerId);
@@ -70,7 +80,7 @@ export async function POST(
 ): Promise<NextResponse<ApiResponse<PaymentMethodData>>> {
   try {
     const body = await request.json();
-    const { customerId, paymentMethodId, setAsDefault } = body;
+    const { customerId, paymentMethodId, setAsDefault, accountId } = body;
 
     if (!customerId || !paymentMethodId) {
       return NextResponse.json(
@@ -78,6 +88,15 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // Attach payment method to customer
     const paymentMethod = await stripe.paymentMethods.attach(paymentMethodId, {
@@ -123,7 +142,7 @@ export async function PATCH(
 ): Promise<NextResponse<ApiResponse<{ success: boolean }>>> {
   try {
     const body = await request.json();
-    const { customerId, paymentMethodId, setAsDefault } = body;
+    const { customerId, paymentMethodId, setAsDefault, accountId } = body;
 
     if (!customerId || !paymentMethodId) {
       return NextResponse.json(
@@ -131,6 +150,15 @@ export async function PATCH(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     if (setAsDefault) {
       await stripe.customers.update(customerId, {
@@ -160,6 +188,7 @@ export async function DELETE(
   try {
     const { searchParams } = new URL(request.url);
     const paymentMethodId = searchParams.get('paymentMethodId');
+    const accountId = searchParams.get('accountId');
 
     if (!paymentMethodId) {
       return NextResponse.json(
@@ -167,6 +196,15 @@ export async function DELETE(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     await stripe.paymentMethods.detach(paymentMethodId);
 

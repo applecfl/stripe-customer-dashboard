@@ -12,3 +12,9 @@ env:
 
   - variable: AUTH_SECRET
     secret: AUTH_SECRET
+
+  - variable: STRIPE_LIST
+    secret: STRIPE_LIST
+
+  - variable: SENDGRID_API_KEY
+    secret: SENDGRID_API_KEY

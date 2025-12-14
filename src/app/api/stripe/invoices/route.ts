@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import stripe from '@/lib/stripe';
+import { getStripeForAccount } from '@/lib/stripe';
 import { mapInvoice } from '@/lib/mappers';
 import { InvoiceData, ApiResponse } from '@/types';
 
@@ -15,6 +15,7 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
     const invoiceUID = searchParams.get('invoiceUID');
+    const accountId = searchParams.get('accountId');
 
     if (!customerId) {
       return NextResponse.json(
@@ -22,6 +23,15 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // Fetch ALL invoices for the customer (handle pagination)
     const allInvoices: Stripe.Invoice[] = [];

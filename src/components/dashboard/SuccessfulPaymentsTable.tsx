@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { InvoiceData, PaymentData, PaymentMethodData } from '@/types';
-import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { formatCurrency, formatDateTime, formatDate } from '@/lib/utils';
 import {
   Card,
   CardHeader,
@@ -26,6 +26,8 @@ import {
   Wallet,
   MessageSquare,
   RotateCcw,
+  Clock,
+  Undo2,
 } from 'lucide-react';
 
 interface SuccessfulPaymentsTableProps {
@@ -54,11 +56,12 @@ export function SuccessfulPaymentsTable({
   const getPaymentInvoiceInfo = (payment: PaymentData) => {
     const invoiceIds = payment.metadata?.invoicesPaid?.split(',').filter(Boolean) || [];
     const invoiceNumbers = payment.metadata?.invoiceNumbersPaid?.split(',').filter(Boolean) || [];
+    const invoiceAmounts = payment.metadata?.invoiceAmounts?.split(',').filter(Boolean).map(a => parseInt(a, 10)) || [];
     const totalApplied = parseInt(payment.metadata?.totalAppliedToInvoices || '0', 10);
     const creditAdded = parseInt(payment.metadata?.creditAdded || '0', 10);
     const reason = payment.metadata?.reason || payment.metadata?.lastPaymentReason;
     const invoiceUID = payment.metadata?.InvoiceUID;
-    return { invoiceIds, invoiceNumbers, totalApplied, creditAdded, reason, invoiceUID };
+    return { invoiceIds, invoiceNumbers, invoiceAmounts, totalApplied, creditAdded, reason, invoiceUID };
   };
 
   if (succeededPayments.length === 0) {
@@ -94,12 +97,12 @@ export function SuccessfulPaymentsTable({
         </div>
       </CardHeader>
       <CardContent noPadding>
-        <Table>
+        <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow hoverable={false}>
-              <TableHead className="w-8 sm:w-10"></TableHead>
-              <TableHead align="right" className="w-24 sm:w-32">Amount</TableHead>
-              <TableHead className="w-24 sm:w-40">Date</TableHead>
+              <TableHead className="w-[50px]"></TableHead>
+              <TableHead className="w-[120px]">Amount</TableHead>
+              <TableHead className="w-[120px]">Date</TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -134,10 +137,10 @@ export function SuccessfulPaymentsTable({
                         </a>
                       </div>
                     </TableCell>
-                    <TableCell align="right">
-                      <div className="text-right">
+                    <TableCell>
+                      <div>
                         {payment.amount_refunded > 0 ? (
-                          <div className="inline-flex flex-col items-end gap-0.5 font-mono text-xs sm:text-sm">
+                          <div className="inline-flex flex-col items-start gap-0.5 font-mono text-xs sm:text-sm">
                             {/* Original amount */}
                             <span className="text-gray-500">
                               {formatCurrency(payment.amount, payment.currency)}
@@ -177,12 +180,17 @@ export function SuccessfulPaymentsTable({
                       {payment.status === 'succeeded' && payment.amount_refunded < payment.amount ? (
                         <button
                           onClick={() => onRefund(payment)}
-                          className="text-xs sm:text-sm text-gray-600 hover:text-indigo-600 transition-colors"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
+                          title="Refund Payment"
                         >
-                          Refund
+                          <Undo2 className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Refund</span>
                         </button>
                       ) : payment.amount_refunded >= payment.amount ? (
-                        <span className="text-[10px] sm:text-xs text-red-400 font-medium"><span className="hidden sm:inline">Fully </span>Refunded</span>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs text-red-500 bg-red-50 rounded-md font-medium">
+                          <Check className="w-3 h-3" />
+                          <span className="hidden sm:inline">Fully </span>Refunded
+                        </span>
                       ) : null}
                     </TableCell>
                   </TableRow>
@@ -218,12 +226,12 @@ export function SuccessfulPaymentsTable({
                             <p className="text-gray-700">{formatDateTime(payment.created)}</p>
                           </div>
 
-                          {/* InvoiceUID */}
+                          {/* PaymentUID */}
                           {invoiceInfo.invoiceUID && (
                             <div className="space-y-1">
                               <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
                                 <Hash className="w-3 h-3" />
-                                Invoice UID
+                                Payment UID
                               </div>
                               <p className="font-mono text-xs text-gray-700">{invoiceInfo.invoiceUID}</p>
                             </div>
@@ -232,51 +240,62 @@ export function SuccessfulPaymentsTable({
 
 
 
-                          {/* Invoices paid via PayNow */}
+                          {/* Payments via PayNow */}
                           {invoiceInfo.invoiceIds.length > 0 && (
-                            <div className="space-y-1 col-span-full md:col-span-2">
+                            <div className="space-y-2 col-span-full">
                               <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
                                 <FileText className="w-3 h-3" />
-                                Invoices Paid ({invoiceInfo.invoiceIds.length})
+                                Payments ({invoiceInfo.invoiceIds.length})
                               </div>
-                              <div className="flex flex-wrap gap-2">
+                              <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
                                 {invoiceInfo.invoiceIds.map((id, idx) => {
-                                  // Check if invoice still exists (partially paid) or was deleted/voided (fully paid)
-                                  const invoiceStillExists = invoices.some(inv => inv.id === id);
-                                  const displayName = invoiceInfo.invoiceNumbers[idx] || id.slice(0, 12);
                                   const invoice = invoices.find(inv => inv.id === id);
+                                  // Use stored amount from metadata if invoice is deleted
+                                  const storedAmount = invoiceInfo.invoiceAmounts[idx];
 
-                                  if (invoice) {
-                                    // Partial payment - invoice still exists, show link
-                                    return (
-                                      <a
-                                        key={id}
-                                        href={`https://dashboard.stripe.com/invoices/${id}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-medium hover:bg-amber-200 transition-colors"
-                                      >
-                                        ${(invoice.amount_due / 100).toFixed(2)}
-                                        <ExternalLink className="w-3 h-3" />
-                                      </a>
-                                    );
-                                  } else {
-                                    // Fully paid - invoice deleted/voided, show without link
-                                    return (
-                                      <span
-                                        key={id}
-                                        className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium"
-                                      >
-                                        {displayName}
-                                        <Check className="w-3 h-3" />
+                                  // Get the date - either finalize date for draft or due_date for others
+                                  const getInvoiceDate = (inv: InvoiceData | undefined) => {
+                                    if (!inv) return null;
+                                    // Check metadata first (custom scheduled date)
+                                    if (inv.metadata?.scheduledFinalizeAt) {
+                                      return parseInt(inv.metadata.scheduledFinalizeAt, 10);
+                                    }
+                                    // Then check automatically_finalizes_at for draft invoices
+                                    if (inv.automatically_finalizes_at) {
+                                      return inv.automatically_finalizes_at;
+                                    }
+                                    // Finally due_date
+                                    return inv.due_date;
+                                  };
+
+                                  const invoiceDate = invoice ? getInvoiceDate(invoice) : null;
+                                  const isFutureDate = invoiceDate && invoiceDate > Math.floor(Date.now() / 1000);
+
+                                  // Determine the amount to display
+                                  const displayAmount = invoice
+                                    ? formatCurrency(invoice.amount_due, invoice.currency)
+                                    : storedAmount
+                                      ? formatCurrency(storedAmount, payment.currency)
+                                      : '-';
+
+                                  return (
+                                    <div key={id} className="flex items-center justify-between px-3 py-2">
+                                      <span className="font-semibold text-sm text-gray-900">
+                                        {displayAmount}
                                       </span>
-                                    );
-                                  }
+                                      {invoiceDate && (
+                                        <span className={`flex items-center gap-1 text-xs ${isFutureDate ? 'text-indigo-600' : 'text-gray-500'}`}>
+                                          {isFutureDate ? <Clock className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
+                                          {formatDate(invoiceDate)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
                                 })}
                               </div>
                               {invoiceInfo.totalApplied > 0 && (
                                 <p className="text-xs text-gray-500">
-                                  Total applied to invoices: {formatCurrency(invoiceInfo.totalApplied, payment.currency)}
+                                  Total applied to payments: {formatCurrency(invoiceInfo.totalApplied, payment.currency)}
                                 </p>
                               )}
                             </div>

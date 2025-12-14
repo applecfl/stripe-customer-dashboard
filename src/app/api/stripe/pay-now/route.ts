@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import stripe from '@/lib/stripe';
+import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
 
 interface PayNowResult {
@@ -28,6 +28,7 @@ export async function POST(
       selectedInvoiceIds,
       applyToAll,
       saveCard,
+      accountId,
     } = body;
 
     if (!customerId || !paymentMethodId || !amount) {
@@ -36,6 +37,15 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // If saveCard is true, attach the payment method to the customer first
     if (saveCard) {
@@ -334,11 +344,13 @@ export async function POST(
     }
 
     // Update the payment intent metadata with results
+    // Store amounts and dates per invoice for display even after invoice is deleted
     await stripe.paymentIntents.update(paymentIntent.id, {
       metadata: {
         ...paymentIntent.metadata,
         invoicesPaid: invoicesPaid.map(ip => ip.invoiceId).join(','),
         invoiceNumbersPaid: invoicesPaid.map(ip => ip.invoiceNumber || ip.invoiceId).join(','),
+        invoiceAmounts: invoicesPaid.map(ip => ip.amountApplied.toString()).join(','),
         totalAppliedToInvoices: (amount - remainingAmount).toString(),
         creditAdded: creditAdded.toString(),
       },

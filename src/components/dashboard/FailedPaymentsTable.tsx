@@ -27,6 +27,12 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
+  Mail,
+  DollarSign,
+  Pause,
+  Play,
+  Ban,
 } from 'lucide-react';
 
 interface FailedPaymentsTableProps {
@@ -38,6 +44,7 @@ interface FailedPaymentsTableProps {
   onVoidInvoice: (invoice: InvoiceData) => void;
   onPauseInvoice: (invoice: InvoiceData, pause: boolean) => void;
   onRetryInvoice: (invoice: InvoiceData) => void;
+  onSendReminder: (invoice: InvoiceData) => void;
 }
 
 export function FailedPaymentsTable({
@@ -49,6 +56,7 @@ export function FailedPaymentsTable({
   onVoidInvoice,
   onPauseInvoice,
   onRetryInvoice,
+  onSendReminder,
 }: FailedPaymentsTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -231,13 +239,13 @@ export function FailedPaymentsTable({
             </button>
           </div>
         )}
-        <Table>
+        <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow hoverable={false}>
-              <TableHead className="w-8 sm:w-10"></TableHead>
-              <TableHead align="right" className="w-24 sm:w-32">Amount</TableHead>
-              <TableHead className="w-28 sm:w-36"><span className="hidden sm:inline">Due </span>Date</TableHead>
-              <TableHead><span className="hidden sm:inline">Payment </span>Card</TableHead>
+              <TableHead className="w-[50px]"></TableHead>
+              <TableHead className="w-[100px]">Amount</TableHead>
+              <TableHead className="w-[100px]"><span className="hidden sm:inline">Due </span>Date</TableHead>
+              <TableHead className="w-[140px]"><span className="hidden sm:inline">Payment </span>Card</TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -260,19 +268,14 @@ export function FailedPaymentsTable({
                         <div className="w-6 h-6 bg-gray-200 rounded hidden sm:block" />
                       </div>
                     </TableCell>
-                    <TableCell align="right">
-                      <div className="flex justify-end">
-                        <div className="h-5 w-16 sm:w-20 bg-gray-200 rounded" />
-                      </div>
+                    <TableCell>
+                      <div className="h-5 w-16 sm:w-20 bg-gray-200 rounded" />
                     </TableCell>
                     <TableCell>
                       <div className="h-5 w-20 sm:w-24 bg-gray-200 rounded" />
                     </TableCell>
                     <TableCell>
                       <div className="h-5 w-16 sm:w-24 bg-gray-200 rounded" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="w-5 h-5 sm:w-6 sm:h-6 bg-gray-200 rounded-full" />
                     </TableCell>
                     <TableCell align="right">
                       <div className="flex justify-end gap-2">
@@ -309,9 +312,9 @@ export function FailedPaymentsTable({
                       </a>
                     </div>
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell>
                     {editingAmount === invoice.id ? (
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center gap-1">
                         <span className="text-gray-500 text-xs sm:text-sm">$</span>
                         <input
                           ref={amountInputRef}
@@ -322,7 +325,7 @@ export function FailedPaymentsTable({
                           onChange={(e) => setEditValue(e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, invoice)}
                           onBlur={() => finishEditAmount(invoice)}
-                          className="w-16 sm:w-20 px-1.5 sm:px-2 py-0.5 sm:py-1 text-right text-xs sm:text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-16 sm:w-20 px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs sm:text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           disabled={isSaving}
                         />
                       </div>
@@ -380,56 +383,6 @@ export function FailedPaymentsTable({
                     })()}
                   </TableCell>
 
-                  <TableCell>
-                    {/* Red exclamation mark with tooltip */}
-                    <div className="relative group">
-                      {/* <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-100 flex items-center justify-center cursor-help">
-                      <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-red-600" />
-                    </div> */}
-                      {/* Tooltip - positioned above with high z-index */}
-                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-[100]">
-                        <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg min-w-[200px]">
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between border-b border-gray-700 pb-2">
-                              <span className="font-medium text-red-400">Payment Failed</span>
-                              <span className="bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded text-[10px]">
-                                {invoice.attempt_count} attempt{invoice.attempt_count !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-
-                            {/* Last failure reason */}
-                            {invoice.last_payment_error && (
-                              <div className="space-y-1">
-                                <p className="text-gray-400 text-[10px] uppercase">Last failure:</p>
-                                <div className="bg-red-500/10 rounded p-2">
-                                  {invoice.last_payment_error.message && (
-                                    <p className="text-red-300 whitespace-normal">
-                                      {invoice.last_payment_error.message}
-                                    </p>
-                                  )}
-                                  {invoice.last_payment_error.decline_code && (
-                                    <p className="text-red-400/70 text-[10px] mt-1">
-                                      Code: <span className="font-mono">{invoice.last_payment_error.decline_code}</span>
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Next retry */}
-                            {invoice.next_payment_attempt && (
-                              <div className="flex items-center gap-1.5 text-gray-300 pt-1 border-t border-gray-700">
-                                <Clock className="w-3 h-3" />
-                                <span>Next retry: {formatDate(invoice.next_payment_attempt)}</span>
-                              </div>
-                            )}
-                          </div>
-                          {/* Tooltip arrow pointing down */}
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </TableCell>
                   <TableCell align="right">
                     {invoiceHasChanges ? (
                       /* Save/Cancel buttons when there are pending changes */
@@ -457,64 +410,93 @@ export function FailedPaymentsTable({
                       </div>
                     ) : (
                       <>
-                        {/* Desktop: inline buttons */}
-                        <div className="hidden sm:flex items-center justify-end gap-2">
+                        {/* Desktop: action buttons with icons */}
+                        <div className="hidden sm:flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => onRetryInvoice(invoice)}
-                            className="text-sm text-gray-600 hover:text-indigo-600 transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors"
+                            title="Retry Payment"
                           >
+                            <RefreshCw className="w-3.5 h-3.5" />
                             Retry
                           </button>
-                          <span className="text-gray-300">|</span>
+                          <button
+                            onClick={() => onSendReminder(invoice)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
+                            title="Send Reminder Email"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                            Remind
+                          </button>
                           <button
                             onClick={() => onPayInvoice(invoice)}
-                            className="text-sm text-gray-600 hover:text-indigo-600 transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
+                            title="Pay Invoice"
                           >
+                            <DollarSign className="w-3.5 h-3.5" />
                             Pay
                           </button>
-                          <span className="text-gray-300">|</span>
                           <button
                             onClick={() => onPauseInvoice(invoice, !invoice.isPaused)}
-                            className="text-sm text-gray-600 hover:text-indigo-600 transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                            title={invoice.isPaused ? 'Resume Auto-retry' : 'Pause Auto-retry'}
                           >
+                            {invoice.isPaused ? (
+                              <Play className="w-3.5 h-3.5" />
+                            ) : (
+                              <Pause className="w-3.5 h-3.5" />
+                            )}
                             {invoice.isPaused ? 'Resume' : 'Pause'}
                           </button>
-                          <span className="text-gray-300">|</span>
                           <button
                             onClick={() => onVoidInvoice(invoice)}
-                            className="text-sm text-red-500 hover:text-red-700 transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                            title="Void Invoice"
                           >
+                            <Ban className="w-3.5 h-3.5" />
                             Void
                           </button>
                         </div>
-                        {/* Mobile: same inline buttons, user can scroll */}
-                        <div className="sm:hidden flex items-center justify-end gap-2">
+                        {/* Mobile: compact icon buttons */}
+                        <div className="sm:hidden flex items-center justify-end gap-1">
                           <button
                             onClick={() => onRetryInvoice(invoice)}
-                            className="text-xs text-gray-600 hover:text-indigo-600 transition-colors whitespace-nowrap"
+                            className="p-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors"
+                            title="Retry Payment"
                           >
-                            Retry
+                            <RefreshCw className="w-4 h-4" />
                           </button>
-                          <span className="text-gray-300">|</span>
+                          <button
+                            onClick={() => onSendReminder(invoice)}
+                            className="p-1.5 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
+                            title="Send Reminder"
+                          >
+                            <Mail className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => onPayInvoice(invoice)}
-                            className="text-xs text-gray-600 hover:text-indigo-600 transition-colors whitespace-nowrap"
+                            className="p-1.5 text-green-600 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
+                            title="Pay Invoice"
                           >
-                            Pay
+                            <DollarSign className="w-4 h-4" />
                           </button>
-                          <span className="text-gray-300">|</span>
                           <button
                             onClick={() => onPauseInvoice(invoice, !invoice.isPaused)}
-                            className="text-xs text-gray-600 hover:text-indigo-600 transition-colors whitespace-nowrap"
+                            className="p-1.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                            title={invoice.isPaused ? 'Resume' : 'Pause'}
                           >
-                            {invoice.isPaused ? 'Resume' : 'Pause'}
+                            {invoice.isPaused ? (
+                              <Play className="w-4 h-4" />
+                            ) : (
+                              <Pause className="w-4 h-4" />
+                            )}
                           </button>
-                          <span className="text-gray-300">|</span>
                           <button
                             onClick={() => onVoidInvoice(invoice)}
-                            className="text-xs text-red-500 hover:text-red-700 transition-colors whitespace-nowrap"
+                            className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                            title="Void Invoice"
                           >
-                            Void
+                            <Ban className="w-4 h-4" />
                           </button>
                         </div>
                       </>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import stripe from '@/lib/stripe';
+import { getStripeForAccount } from '@/lib/stripe';
 import { CustomerData, CreditBalanceTransaction, ApiResponse } from '@/types';
 
 export async function GET(
@@ -8,6 +8,17 @@ export async function GET(
 ): Promise<NextResponse<ApiResponse<{ customer: CustomerData; creditTransactions: CreditBalanceTransaction[] }>>> {
   try {
     const { customerId } = await params;
+    const { searchParams } = new URL(request.url);
+    const accountId = searchParams.get('accountId');
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     const customer = await stripe.customers.retrieve(customerId, {
       expand: ['default_source'],
@@ -90,7 +101,16 @@ export async function POST(
   try {
     const { customerId } = await params;
     const body = await request.json();
-    const { amount, description } = body;
+    const { amount, description, accountId } = body;
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     if (!amount || typeof amount !== 'number') {
       return NextResponse.json(
@@ -135,7 +155,16 @@ export async function PATCH(
   try {
     const { customerId } = await params;
     const body = await request.json();
-    const { pause, invoiceUID } = body;
+    const { pause, invoiceUID, accountId } = body;
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // Get all open invoices for this customer with the invoiceUID
     const invoices = await stripe.invoices.list({

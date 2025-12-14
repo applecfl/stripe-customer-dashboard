@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import stripe from '@/lib/stripe';
+import { getStripeForAccount } from '@/lib/stripe';
 import { PaymentData, ApiResponse } from '@/types';
 
 // Get payments for customer
@@ -11,6 +11,7 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
     const invoiceUID = searchParams.get('invoiceUID');
+    const accountId = searchParams.get('accountId');
 
     if (!customerId) {
       return NextResponse.json(
@@ -18,6 +19,15 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // Get ALL payment intents for the customer (handle pagination)
     const allPaymentIntents: Stripe.PaymentIntent[] = [];
@@ -196,7 +206,7 @@ export async function POST(
 ): Promise<NextResponse<ApiResponse<PaymentData>>> {
   try {
     const body = await request.json();
-    const { amount, currency, paymentMethodId, customerId, description, saveCard } = body;
+    const { amount, currency, paymentMethodId, customerId, description, saveCard, accountId } = body;
 
     if (!amount || !paymentMethodId) {
       return NextResponse.json(
@@ -204,6 +214,15 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
 
     // Create payment intent
     const paymentIntentParams: Parameters<typeof stripe.paymentIntents.create>[0] = {
