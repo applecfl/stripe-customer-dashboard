@@ -50,6 +50,13 @@ export async function GET(
       expand: ['charge', 'payment_intent', 'payment_intent.latest_charge', 'default_payment_method'],
     });
 
+    // Type for accessing raw Stripe invoice properties that may not be in TypeScript types
+    type RawInvoice = Stripe.Invoice & {
+      payment_intent?: string | Stripe.PaymentIntent | null;
+      charge?: string | Stripe.Charge | null;
+    };
+    const rawInvoice = invoice as RawInvoice;
+
     const invoiceCharges: Stripe.Charge[] = [];
     const seenChargeIds = new Set<string>();
 
@@ -62,18 +69,18 @@ export async function GET(
     };
 
     // Method 1: Get charge directly from invoice if it exists
-    if (invoice.charge) {
-      const charge = typeof invoice.charge === 'string'
-        ? await stripe.charges.retrieve(invoice.charge)
-        : invoice.charge;
+    if (rawInvoice.charge) {
+      const charge = typeof rawInvoice.charge === 'string'
+        ? await stripe.charges.retrieve(rawInvoice.charge)
+        : rawInvoice.charge;
       addCharge(charge);
     }
 
     // Method 2: Get charges from payment intent
-    if (invoice.payment_intent) {
-      const piId = typeof invoice.payment_intent === 'string'
-        ? invoice.payment_intent
-        : invoice.payment_intent.id;
+    if (rawInvoice.payment_intent) {
+      const piId = typeof rawInvoice.payment_intent === 'string'
+        ? rawInvoice.payment_intent
+        : rawInvoice.payment_intent.id;
 
       // List all charges for this payment intent (includes failed attempts)
       const piCharges = await stripe.charges.list({
@@ -99,7 +106,9 @@ export async function GET(
 
       for (const charge of customerCharges.data) {
         // Check if charge is related to this invoice (directly or via metadata)
-        if (charge.invoice === invoiceId) {
+        // Use type assertion since 'invoice' may not be in TypeScript types
+        const chargeInvoice = (charge as Stripe.Charge & { invoice?: string | null }).invoice;
+        if (chargeInvoice === invoiceId) {
           addCharge(charge);
         } else if (charge.metadata?.invoiceId === invoiceId) {
           addCharge(charge);
@@ -189,9 +198,9 @@ export async function GET(
       outcome: charge.outcome ? {
         network_status: charge.outcome.network_status,
         reason: charge.outcome.reason,
-        risk_level: charge.outcome.risk_level,
+        risk_level: charge.outcome.risk_level ?? null,
         seller_message: charge.outcome.seller_message,
-        type: charge.outcome.type,
+        type: charge.outcome.type ?? null,
       } : null,
     }));
 

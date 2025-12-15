@@ -127,11 +127,13 @@ export function SuccessfulPaymentsTable({
                           )}
                         </button>
                         <a
-                          href={`https://dashboard.stripe.com/payments/${payment.id}`}
+                          href={payment.id.startsWith('inv_paid_') && payment.invoice
+                            ? `https://dashboard.stripe.com/invoices/${payment.invoice}`
+                            : `https://dashboard.stripe.com/payments/${payment.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors hidden sm:block"
-                          title="Open in Stripe"
+                          title={payment.id.startsWith('inv_paid_') ? "Open Invoice in Stripe" : "Open in Stripe"}
                         >
                           <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 hover:text-indigo-600" />
                         </a>
@@ -200,19 +202,21 @@ export function SuccessfulPaymentsTable({
                     <tr key={`${payment.id}-details`}>
                       <td colSpan={4} className="bg-gray-50 px-4 py-3 border-b">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-                          {/* Payment Intent ID */}
+                          {/* Payment Intent ID or Invoice ID for out-of-band */}
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
                               <Hash className="w-3 h-3" />
-                              Payment Intent
+                              {payment.id.startsWith('inv_paid_') ? 'Invoice (Paid Out-of-Band)' : 'Payment Intent'}
                             </div>
                             <a
-                              href={`https://dashboard.stripe.com/payments/${payment.id}`}
+                              href={payment.id.startsWith('inv_paid_') && payment.invoice
+                                ? `https://dashboard.stripe.com/invoices/${payment.invoice}`
+                                : `https://dashboard.stripe.com/payments/${payment.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="font-mono text-xs text-blue-600 hover:underline flex items-center gap-1"
                             >
-                              {payment.id}
+                              {payment.id.startsWith('inv_paid_') ? payment.invoice : payment.id}
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           </div>
