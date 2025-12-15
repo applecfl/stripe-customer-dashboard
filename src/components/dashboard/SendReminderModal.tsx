@@ -214,11 +214,18 @@ export function SendReminderModal({
             <div className="p-4">
               <p className="text-sm text-gray-700">{error}</p>
             </div>
-            <div className="px-4 pb-4">
+            <div className="px-4 pb-4 flex gap-3">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+              >
+                Close
+              </button>
               <button
                 type="button"
                 onClick={() => setError('')}
-                className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
               >
                 Try Again
               </button>

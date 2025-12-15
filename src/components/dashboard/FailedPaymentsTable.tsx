@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { InvoiceData, PaymentMethodData } from '@/types';
+import { useState, useEffect } from 'react';
+import { InvoiceData } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import {
   Card,
@@ -20,8 +20,6 @@ import {
   Copy,
   Check,
   ExternalLink,
-  Save,
-  X,
   Loader2,
   CreditCard,
   Calendar,
@@ -33,12 +31,39 @@ import {
   Pause,
   Play,
   Ban,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
+
+// Payment attempt type from API
+interface PaymentAttempt {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  created: number;
+  failure_code: string | null;
+  failure_message: string | null;
+  payment_method_details: {
+    brand: string | null;
+    last4: string | null;
+    exp_month: number | null;
+    exp_year: number | null;
+  } | null;
+  outcome: {
+    network_status: string | null;
+    reason: string | null;
+    risk_level: string | null;
+    seller_message: string | null;
+    type: string | null;
+  } | null;
+}
 
 interface FailedPaymentsTableProps {
   invoices: InvoiceData[];
-  paymentMethods?: PaymentMethodData[];
   token?: string;
+  accountId?: string;
   onRefresh: () => void;
   onPayInvoice: (invoice: InvoiceData) => void;
   onVoidInvoice: (invoice: InvoiceData) => void;
@@ -49,8 +74,8 @@ interface FailedPaymentsTableProps {
 
 export function FailedPaymentsTable({
   invoices,
-  paymentMethods = [],
   token,
+  accountId,
   onRefresh,
   onPayInvoice,
   onVoidInvoice,
@@ -60,131 +85,79 @@ export function FailedPaymentsTable({
 }: FailedPaymentsTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  const toggleExpanded = (id: string) => {
-    setExpandedId(expandedId === id ? null : id);
-  };
-
-  // Create a map for quick payment method lookup
-  const paymentMethodMap = new Map(paymentMethods.map(pm => [pm.id, pm]));
-
-  // Get payment method for an invoice
-  const getPaymentMethod = (invoice: InvoiceData): PaymentMethodData | null => {
-    if (invoice.default_payment_method) {
-      return paymentMethodMap.get(invoice.default_payment_method) || null;
-    }
-    return paymentMethods.find(pm => pm.isDefault) || null;
-  };
-
-  // Amount editing state
-  const [editingAmount, setEditingAmount] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
-  const [pendingAmounts, setPendingAmounts] = useState<Record<string, number>>({});
-  const [saving, setSaving] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [paymentAttempts, setPaymentAttempts] = useState<Record<string, PaymentAttempt[]>>({});
+  const [loadingAttempts, setLoadingAttempts] = useState<Set<string>>(new Set());
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
-  const amountInputRef = useRef<HTMLInputElement>(null);
+  // Fetch payment attempts for an invoice
+  const fetchPaymentAttempts = async (invoiceId: string) => {
+    if (!accountId) return;
+
+    setLoadingAttempts(prev => new Set(prev).add(invoiceId));
+    try {
+      let url = `/api/stripe/invoices/${invoiceId}/attempts?accountId=${encodeURIComponent(accountId)}`;
+      if (token) {
+        url += `&token=${encodeURIComponent(token)}`;
+      }
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.success) {
+        setPaymentAttempts(prev => ({
+          ...prev,
+          [invoiceId]: data.data,
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch payment attempts:', error);
+    } finally {
+      setLoadingAttempts(prev => {
+        const next = new Set(prev);
+        next.delete(invoiceId);
+        return next;
+      });
+    }
+  };
+
+  // Only show failed invoices (open with payment attempts)
+  const failedInvoices = invoices
+    .filter(inv => inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0)
+    .sort((a, b) => (b.due_date || b.created) - (a.due_date || a.created));
+
+  // Auto-fetch attempts for all failed invoices on mount/change
+  useEffect(() => {
+    failedInvoices.forEach(invoice => {
+      if (!paymentAttempts[invoice.id] && !loadingAttempts.has(invoice.id)) {
+        fetchPaymentAttempts(invoice.id);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [failedInvoices.map(i => i.id).join(','), accountId]);
+
+  const toggleExpanded = (id: string) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+    } else {
+      setExpandedId(id);
+    }
+  };
 
   // Clear refreshing state when invoice data changes
   useEffect(() => {
     setRefreshingId(prev => prev ? null : prev);
   }, [invoices]);
 
-  // Helper to add token to API URLs
-  const withToken = (url: string) => {
-    if (!token) return url;
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}token=${encodeURIComponent(token)}`;
-  };
+  // Get the latest error info from attempts
+  const getLatestError = (invoiceId: string): { message: string; date: number } | null => {
+    const attempts = paymentAttempts[invoiceId];
+    if (!attempts || attempts.length === 0) return null;
 
-  // Focus input when editing starts
-  useEffect(() => {
-    if (editingAmount && amountInputRef.current) {
-      amountInputRef.current.focus();
-      amountInputRef.current.select();
+    // Find the most recent failed attempt
+    const failedAttempt = attempts.find(a => a.status === 'failed');
+    if (failedAttempt) {
+      const message = failedAttempt.failure_message || failedAttempt.outcome?.seller_message || 'Payment failed';
+      return { message, date: failedAttempt.created };
     }
-  }, [editingAmount]);
-
-  // Start editing amount
-  const startEditAmount = (invoice: InvoiceData) => {
-    const currentAmount = pendingAmounts[invoice.id] ?? invoice.amount_due;
-    setEditingAmount(invoice.id);
-    setEditValue((currentAmount / 100).toFixed(2));
-  };
-
-  // Finish editing amount
-  const finishEditAmount = (invoice: InvoiceData) => {
-    const newAmount = Math.round(parseFloat(editValue) * 100);
-    if (!isNaN(newAmount) && newAmount > 0 && newAmount !== invoice.amount_due) {
-      setPendingAmounts(prev => ({
-        ...prev,
-        [invoice.id]: newAmount,
-      }));
-    }
-    setEditingAmount(null);
-  };
-
-  // Cancel changes
-  const cancelChanges = (invoiceId: string) => {
-    setPendingAmounts(prev => {
-      const newAmounts = { ...prev };
-      delete newAmounts[invoiceId];
-      return newAmounts;
-    });
-  };
-
-  // Save amount changes
-  const saveChanges = async (invoice: InvoiceData) => {
-    const newAmount = pendingAmounts[invoice.id];
-    if (newAmount === undefined || newAmount === invoice.amount_due) return;
-
-    setSaving(invoice.id);
-    setError(null);
-
-    try {
-      const res = await fetch(withToken('/api/stripe/invoices/adjust'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          invoiceId: invoice.id,
-          newAmount,
-        }),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to update amount');
-      }
-
-      cancelChanges(invoice.id);
-      setRefreshingId(invoice.id);
-      onRefresh();
-    } catch (err) {
-      console.error('Failed to save amount:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save amount');
-    } finally {
-      setSaving(null);
-    }
-  };
-
-  // Handle key events
-  const handleKeyDown = (e: React.KeyboardEvent, invoice: InvoiceData) => {
-    if (e.key === 'Enter') {
-      finishEditAmount(invoice);
-    } else if (e.key === 'Escape') {
-      setEditingAmount(null);
-    }
-  };
-
-  // Check if invoice has pending changes
-  const hasChanges = (invoice: InvoiceData): boolean => {
-    const pendingAmount = pendingAmounts[invoice.id];
-    return pendingAmount !== undefined && pendingAmount !== invoice.amount_due;
-  };
-
-  // Get displayed amount
-  const getDisplayedAmount = (invoice: InvoiceData): number => {
-    return pendingAmounts[invoice.id] ?? invoice.amount_due;
+    return null;
   };
 
   const copyToClipboard = async (id: string) => {
@@ -192,11 +165,6 @@ export function FailedPaymentsTable({
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
-
-  // Only show failed invoices (open with payment attempts)
-  const failedInvoices = invoices
-    .filter(inv => inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0)
-    .sort((a, b) => (b.due_date || b.created) - (a.due_date || a.created));
 
   if (failedInvoices.length === 0) {
     return (
@@ -231,32 +199,19 @@ export function FailedPaymentsTable({
         </div>
       </CardHeader>
       <CardContent noPadding>
-        {error && (
-          <div className="mx-4 mt-3 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
         <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow hoverable={false}>
               <TableHead className="w-[50px]"></TableHead>
-              <TableHead className="w-[100px]">Amount</TableHead>
-              <TableHead className="w-[100px]"><span className="hidden sm:inline">Due </span>Date</TableHead>
-              <TableHead className="w-[140px]"><span className="hidden sm:inline">Payment </span>Card</TableHead>
+              <TableHead className="w-[90px]">Amount</TableHead>
+              <TableHead className="w-[90px]"><span className="hidden sm:inline">Due </span>Date</TableHead>
+              <TableHead className="hidden sm:table-cell"><span className="hidden sm:inline">Error</span></TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {failedInvoices.map((invoice) => {
-              const invoiceHasChanges = hasChanges(invoice);
-              const isSaving = saving === invoice.id;
               const isRefreshing = refreshingId === invoice.id;
-              const displayedAmount = getDisplayedAmount(invoice);
-              const amountChanged = pendingAmounts[invoice.id] !== undefined &&
-                pendingAmounts[invoice.id] !== invoice.amount_due;
 
               // Show skeleton row while refreshing
               if (isRefreshing) {
@@ -274,8 +229,8 @@ export function FailedPaymentsTable({
                     <TableCell>
                       <div className="h-5 w-20 sm:w-24 bg-gray-200 rounded" />
                     </TableCell>
-                    <TableCell>
-                      <div className="h-5 w-16 sm:w-24 bg-gray-200 rounded" />
+                    <TableCell className="hidden sm:table-cell">
+                      <div className="h-5 w-32 bg-gray-200 rounded" />
                     </TableCell>
                     <TableCell align="right">
                       <div className="flex justify-end gap-2">
@@ -286,10 +241,26 @@ export function FailedPaymentsTable({
                 );
               }
 
+              const isExpanded = expandedId === invoice.id;
+              const attempts = paymentAttempts[invoice.id] || [];
+              const isLoadingAttempts = loadingAttempts.has(invoice.id);
+
               return (
-                <TableRow key={invoice.id} className={`bg-red-50/50 ${invoiceHasChanges ? 'bg-amber-50/50' : ''}`}>
+                <>
+                <TableRow key={invoice.id} className="bg-red-50/50">
                   <TableCell>
                     <div className="flex items-center gap-0.5 sm:gap-1">
+                      <button
+                        onClick={() => toggleExpanded(invoice.id)}
+                        className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                        title={isExpanded ? 'Hide attempts' : 'Show attempts'}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                        )}
+                      </button>
                       <button
                         onClick={() => copyToClipboard(invoice.id)}
                         className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
@@ -313,40 +284,16 @@ export function FailedPaymentsTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    {editingAmount === invoice.id ? (
-                      <div className="flex items-center gap-1">
-                        <span className="text-gray-500 text-xs sm:text-sm">$</span>
-                        <input
-                          ref={amountInputRef}
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={(e) => handleKeyDown(e, invoice)}
-                          onBlur={() => finishEditAmount(invoice)}
-                          className="w-16 sm:w-20 px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs sm:text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          disabled={isSaving}
-                        />
-                      </div>
-                    ) : (
-                      <div>
-                        <button
-                          onClick={() => startEditAmount(invoice)}
-                          className={`font-semibold text-xs sm:text-sm px-1.5 sm:px-2 py-0.5 sm:py-1 rounded transition-colors ${amountChanged
-                            ? 'text-amber-700 bg-amber-100 hover:bg-amber-200'
-                            : 'text-red-700 hover:text-indigo-600 hover:bg-indigo-50'
-                            }`}
-                        >
-                          {formatCurrency(displayedAmount, invoice.currency)}
-                        </button>
-                        {invoice.amount_remaining > 0 && invoice.amount_remaining !== invoice.amount_due && !amountChanged && (
-                          <p className="text-[10px] sm:text-xs text-amber-600">
-                            {formatCurrency(invoice.amount_remaining, invoice.currency)} <span className="hidden sm:inline">remaining</span>
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    <div>
+                      <span className="font-semibold text-xs sm:text-sm text-red-700">
+                        {formatCurrency(invoice.amount_due, invoice.currency)}
+                      </span>
+                      {invoice.amount_remaining > 0 && invoice.amount_remaining !== invoice.amount_due && (
+                        <p className="text-[10px] sm:text-xs text-amber-600">
+                          {formatCurrency(invoice.amount_remaining, invoice.currency)} <span className="hidden sm:inline">remaining</span>
+                        </p>
+                      )}
+                    </div>
                   </TableCell>
 
                   {/* Date Cell */}
@@ -354,63 +301,87 @@ export function FailedPaymentsTable({
                     <div className="flex items-center gap-1 sm:gap-1.5 text-gray-600">
                       <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400" />
                       <span className="text-xs sm:text-sm">
-                        {invoice.due_date
+                        {invoice.due_date && invoice.due_date > 0
                           ? formatDate(invoice.due_date)
-                          : 'Not set'}
+                          : invoice.created
+                            ? formatDate(invoice.created)
+                            : 'Not set'}
                       </span>
                     </div>
                   </TableCell>
 
-                  {/* Payment Method Cell */}
-                  <TableCell>
+                  {/* Error Message Cell - desktop only */}
+                  <TableCell className="hidden sm:table-cell">
                     {(() => {
-                      const pm = getPaymentMethod(invoice);
-                      return pm ? (
-                        <div className="flex items-center gap-1.5 sm:gap-2 text-gray-600">
-                          <div className="w-6 h-4 sm:w-8 sm:h-5 rounded bg-gray-100 flex items-center justify-center">
-                            <CreditCard className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-500" />
+                      const isLoading = loadingAttempts.has(invoice.id);
+                      const errorInfo = getLatestError(invoice.id);
+                      const errorMessage = errorInfo?.message || invoice.last_payment_error?.message;
+                      const errorDate = errorInfo?.date;
+                      const nextRetry = invoice.next_payment_attempt;
+
+                      if (isLoading) {
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
+                            <span className="text-xs text-gray-400">Loading...</span>
                           </div>
-                          <span className="text-xs sm:text-sm">
-                            <span className="capitalize hidden sm:inline">{pm.card?.brand}</span>
-                            <span className="hidden sm:inline">{' •••• '}</span>
-                            <span className="sm:hidden">••</span>
-                            {pm.card?.last4}
+                        );
+                      }
+
+                      if (errorMessage) {
+                        return (
+                          <div className="flex items-start gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex flex-col">
+                              <span className="text-xs text-red-600 line-clamp-2">
+                                {errorMessage}
+                              </span>
+                              <div className="flex flex-wrap gap-x-2 mt-0.5">
+                                {errorDate && (
+                                  <span className="text-[10px] text-gray-400">
+                                    Failed: {new Date(errorDate * 1000).toLocaleDateString()}
+                                  </span>
+                                )}
+                                {nextRetry && !invoice.isPaused && (
+                                  <span className="text-[10px] text-amber-600">
+                                    Next retry: {new Date(nextRetry * 1000).toLocaleDateString()}
+                                  </span>
+                                )}
+                                {invoice.isPaused && (
+                                  <span className="text-[10px] text-gray-500 italic">
+                                    Auto-retry paused
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Show next retry even without error message
+                      if (nextRetry && !invoice.isPaused) {
+                        return (
+                          <span className="text-[10px] text-amber-600">
+                            Next retry: {new Date(nextRetry * 1000).toLocaleDateString()}
                           </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs sm:text-sm text-gray-400">No card</span>
-                      );
+                        );
+                      }
+
+                      if (invoice.isPaused) {
+                        return (
+                          <span className="text-[10px] text-gray-500 italic">
+                            Auto-retry paused
+                          </span>
+                        );
+                      }
+
+                      return <span className="text-xs text-gray-400">—</span>;
                     })()}
                   </TableCell>
 
                   <TableCell align="right">
-                    {invoiceHasChanges ? (
-                      /* Save/Cancel buttons when there are pending changes */
-                      <div className="flex items-center justify-end gap-1 sm:gap-2">
-                        <button
-                          onClick={() => saveChanges(invoice)}
-                          disabled={isSaving}
-                          className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm rounded transition-colors disabled:opacity-50"
-                        >
-                          {isSaving ? (
-                            <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin" />
-                          ) : (
-                            <Save className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                          )}
-                          <span className="hidden sm:inline">Save</span>
-                        </button>
-                        <button
-                          onClick={() => cancelChanges(invoice.id)}
-                          disabled={isSaving}
-                          className="p-0.5 sm:p-1 hover:bg-gray-100 text-gray-500 rounded transition-colors"
-                          title="Cancel"
-                        >
-                          <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        {/* Desktop: action buttons with icons */}
+                    <>
+                      {/* Desktop: action buttons with icons */}
                         <div className="hidden sm:flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => onRetryInvoice(invoice)}
@@ -499,10 +470,132 @@ export function FailedPaymentsTable({
                             <Ban className="w-4 h-4" />
                           </button>
                         </div>
-                      </>
-                    )}
+                    </>
                   </TableCell>
                 </TableRow>
+                {/* Expanded payment attempts section */}
+                {isExpanded && (
+                  <tr key={`${invoice.id}-expanded`}>
+                    <td colSpan={5} className="bg-gray-50 border-b border-gray-200">
+                      <div className="px-4 py-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                            <Clock className="w-4 h-4" />
+                            Payment Attempts
+                            {attempts.length > 0 && ` (${attempts.length})`}
+                          </h4>
+                          <span className="text-xs text-gray-500">
+                            {invoice.due_date && invoice.due_date > 0
+                              ? `Due: ${formatDate(invoice.due_date)}`
+                              : invoice.created
+                                ? `Created: ${formatDate(invoice.created)}`
+                                : ''}
+                          </span>
+                        </div>
+                        {/* Next auto-retry info */}
+                        {invoice.next_payment_attempt && !invoice.isPaused && (
+                          <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-md flex items-center gap-2">
+                            <RefreshCw className="w-4 h-4 text-amber-600" />
+                            <span className="text-xs text-amber-700">
+                              Next automatic retry: <strong>{new Date(invoice.next_payment_attempt * 1000).toLocaleString()}</strong>
+                            </span>
+                          </div>
+                        )}
+                        {invoice.isPaused && (
+                          <div className="mb-3 p-2 bg-gray-100 border border-gray-200 rounded-md flex items-center gap-2">
+                            <Pause className="w-4 h-4 text-gray-500" />
+                            <span className="text-xs text-gray-600">
+                              Automatic retry is <strong>paused</strong>
+                            </span>
+                          </div>
+                        )}
+                        {isLoadingAttempts ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                            <span className="ml-2 text-sm text-gray-500">Loading attempts...</span>
+                          </div>
+                        ) : attempts.length === 0 ? (
+                          <div className="py-2">
+                            <p className="text-sm text-gray-500">No payment attempt records found.</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Stripe reports {invoice.attempt_count} attempt{invoice.attempt_count > 1 ? 's' : ''}, but detailed records may have expired (older than 30 days).
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {attempts.map((attempt) => (
+                              <div
+                                key={attempt.id}
+                                className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg ${
+                                  attempt.status === 'succeeded'
+                                    ? 'bg-green-50 border border-green-200'
+                                    : 'bg-red-50 border border-red-200'
+                                }`}
+                              >
+                                <div className="flex items-start sm:items-center gap-3">
+                                  <div className={`p-1.5 rounded-full ${
+                                    attempt.status === 'succeeded' ? 'bg-green-100' : 'bg-red-100'
+                                  }`}>
+                                    {attempt.status === 'succeeded' ? (
+                                      <CheckCircle className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                      <XCircle className="w-4 h-4 text-red-600" />
+                                    )}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-sm font-medium ${
+                                        attempt.status === 'succeeded' ? 'text-green-700' : 'text-red-700'
+                                      }`}>
+                                        {formatCurrency(attempt.amount, attempt.currency)}
+                                      </span>
+                                      {attempt.payment_method_details && (
+                                        <span className="text-xs text-gray-500">
+                                          <span className="capitalize">{attempt.payment_method_details.brand}</span>
+                                          {' •••• '}
+                                          {attempt.payment_method_details.last4}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-gray-500 mt-0.5">
+                                      {new Date(attempt.created * 1000).toLocaleString()}
+                                    </div>
+                                    {attempt.failure_message && (
+                                      <div className="text-xs text-red-600 mt-1 flex items-start gap-1">
+                                        <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                        <span>{attempt.failure_message}</span>
+                                      </div>
+                                    )}
+                                    {attempt.outcome?.seller_message && !attempt.failure_message && (
+                                      <div className="text-xs text-gray-600 mt-1">
+                                        {attempt.outcome.seller_message}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="mt-2 sm:mt-0 text-right">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                    attempt.status === 'succeeded'
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-red-100 text-red-700'
+                                  }`}>
+                                    {attempt.status === 'succeeded' ? 'Succeeded' : 'Failed'}
+                                  </span>
+                                  {attempt.failure_code && (
+                                    <div className="text-[10px] text-gray-400 mt-1">
+                                      Code: {attempt.failure_code}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </>
               );
             })}
           </TableBody>

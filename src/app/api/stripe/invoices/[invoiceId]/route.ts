@@ -82,7 +82,9 @@ export async function POST(
         confirm: true,
         metadata: {
           invoiceId: invoice.id,
+          selectedInvoiceIds: invoice.id,
           partialPayment: 'true',
+          source: 'dashboard_pay_invoice',
           ...(note && { note }),
         },
         automatic_payment_methods: {

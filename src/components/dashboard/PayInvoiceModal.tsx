@@ -538,11 +538,18 @@ export function PayInvoiceModal({
               </ul>
             </div>
           )}
-          <div className="p-4">
+          <div className="p-4 flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+            >
+              Close
+            </button>
             <button
               type="button"
               onClick={() => setResult(null)}
-              className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+              className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
             >
               Try Again
             </button>

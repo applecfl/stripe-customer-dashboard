@@ -684,7 +684,7 @@ function DashboardContent() {
               }`}
             >
               <Clock className="w-4 h-4" />
-              <span className="hidden sm:inline">Future Payments</span>
+              <span className="hidden sm:inline">Future</span>
               <span className="sm:hidden">Future</span>
               <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
                 activeTab === 'future' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
@@ -716,8 +716,8 @@ function DashboardContent() {
         {activeTab === 'failed' && (
           <FailedPaymentsTable
             invoices={invoices}
-            paymentMethods={paymentMethods}
             token={token}
+            accountId={accountId}
             onRefresh={refreshData}
             onPayInvoice={(invoice) => setPaymentModal({ isOpen: true, invoice })}
             onVoidInvoice={setVoidInvoiceModal}
