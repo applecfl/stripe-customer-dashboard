@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { PaymentMethodData, InvoiceData } from '@/types';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatCurrency } from '@/lib/utils';
 import {
   Card,
   CardHeader,
@@ -16,7 +16,7 @@ import {
   TableCell,
   TableEmptyState,
 } from '@/components/ui';
-import { CreditCard, Star, Trash2, Plus } from 'lucide-react';
+import { CreditCard, Star, Trash2, Plus, FileText, AlertTriangle } from 'lucide-react';
 
 interface PaymentMethodsTableProps {
   paymentMethods: PaymentMethodData[];
@@ -61,15 +61,17 @@ export function PaymentMethodsTable({
     return ids;
   }, [invoices]);
 
-  // Count invoices per payment method
-  const invoiceCountByPm = useMemo(() => {
-    const counts = new Map<string, number>();
+  // Get invoices per payment method with details
+  const invoicesByPm = useMemo(() => {
+    const map = new Map<string, InvoiceData[]>();
     invoices.forEach(inv => {
       if ((inv.status === 'open' || inv.status === 'draft') && inv.default_payment_method) {
-        counts.set(inv.default_payment_method, (counts.get(inv.default_payment_method) || 0) + 1);
+        const existing = map.get(inv.default_payment_method) || [];
+        existing.push(inv);
+        map.set(inv.default_payment_method, existing);
       }
     });
-    return counts;
+    return map;
   }, [invoices]);
 
   // Check if a payment method can be deleted (not default, not linked to invoices)
@@ -165,7 +167,8 @@ export function PaymentMethodsTable({
               )}
               <TableHead>Card</TableHead>
               <TableHead>Expiry</TableHead>
-              <TableHead>Added</TableHead>
+              <TableHead className="hidden sm:table-cell">Added</TableHead>
+              <TableHead className="hidden md:table-cell">Linked Invoices</TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -177,8 +180,7 @@ export function PaymentMethodsTable({
               />
             ) : (
               paymentMethods.map((pm) => {
-                const isLinkedToInvoices = linkedPaymentMethodIds.has(pm.id);
-                const invoiceCount = invoiceCountByPm.get(pm.id) || 0;
+                const linkedInvoices = invoicesByPm.get(pm.id) || [];
                 const deletable = canDelete(pm);
 
                 return (
@@ -226,7 +228,45 @@ export function PaymentMethodsTable({
                         {pm.card?.exp_year}
                       </span>
                     </TableCell>
-                    <TableCell>{formatDate(pm.created)}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{formatDate(pm.created)}</TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {linkedInvoices.length === 0 ? (
+                        <span className="text-xs text-gray-400">—</span>
+                      ) : (
+                        <div className="space-y-1 max-h-24 overflow-y-auto">
+                          {linkedInvoices.slice(0, 3).map(inv => {
+                            const isFailed = inv.status === 'open' && inv.attempt_count > 0;
+                            return (
+                              <div
+                                key={inv.id}
+                                className={`flex items-center gap-1.5 text-xs ${isFailed ? 'text-red-600' : 'text-gray-600'}`}
+                              >
+                                {isFailed ? (
+                                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                                ) : (
+                                  <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                                )}
+                                <span className="font-medium">
+                                  {formatCurrency(inv.amount_due, inv.currency)}
+                                </span>
+                                <span className="text-gray-400">•</span>
+                                <span>
+                                  {formatDate(inv.due_date || inv.created)}
+                                </span>
+                                {isFailed && (
+                                  <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded">Failed</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {linkedInvoices.length > 3 && (
+                            <span className="text-[10px] text-gray-400">
+                              +{linkedInvoices.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell align="right">
                       <div className="flex items-center justify-end gap-1">
                         {!pm.isDefault && (
