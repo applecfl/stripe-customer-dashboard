@@ -8,7 +8,7 @@ interface SendReminderRequest {
   customerEmails: string[];
   amount: number;
   currency: string;
-  failedDate: string;
+  dueDate: string;
   cardLast4: string | null;
   cardBrand: string | null;
   paymentLink: string;
@@ -28,7 +28,7 @@ export async function POST(
       customerEmails,
       amount,
       currency,
-      failedDate,
+      dueDate,
       cardLast4,
       cardBrand,
       paymentLink,
@@ -85,7 +85,7 @@ export async function POST(
           <tr>
             <td style="padding: 40px 40px 20px; text-align: center;">
               <img src="${logoUrl}" alt="${organizationName}" style="max-width: 180px; height: auto; margin-bottom: 20px;" />
-              <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #18181b;">Payment Reminder</h1>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #18181b;">Payment Reminder - Due ${dueDate}</h1>
             </td>
           </tr>
 
@@ -105,8 +105,8 @@ export async function POST(
                   <td style="padding: 24px;">
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                       <tr>
-                        <td style="padding: 8px 0; font-size: 14px; color: #71717a;">Failed Date</td>
-                        <td align="right" style="padding: 8px 0; font-size: 14px; font-weight: 500; color: #18181b;">${failedDate}</td>
+                        <td style="padding: 8px 0; font-size: 14px; color: #71717a;">Date</td>
+                        <td align="right" style="padding: 8px 0; font-size: 14px; font-weight: 500; color: #18181b;">${dueDate}</td>
                       </tr>
                       ${cardLast4 ? `
                       <tr>
@@ -173,13 +173,13 @@ export async function POST(
 
     // Plain text version
     const textContent = `
-Payment Reminder
+Payment Reminder - Due ${dueDate}
 
 Hi ${customerName || 'there'},
 
 We noticed that your recent payment to ${organizationName} was unsuccessful.
 
-Failed Date: ${failedDate}
+Date: ${dueDate}
 ${cardLast4 ? `Card Used: ${cardBrand ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1) : 'Card'} •••• ${cardLast4}` : ''}
 Amount Due: ${formattedAmount}
 
@@ -206,7 +206,7 @@ ${organizationName}
       html: htmlContent,
       customArgs: {
         accountId,
-        failedDate,
+        dueDate,
         type: 'payment_reminder',
       },
     };

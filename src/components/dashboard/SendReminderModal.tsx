@@ -42,18 +42,19 @@ export function SendReminderModal({
     ? paymentMethods.find(pm => pm.id === invoice.default_payment_method)
     : paymentMethods.find(pm => pm.isDefault) || paymentMethods[0];
 
-  // Format the failed charge date (short month like "Aug 21, 2025")
-  const failedDate = invoice
-    ? new Date(invoice.created * 1000).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      })
-    : '';
+  // Get the correct invoice date (same logic as FailedPaymentsTable)
+  // Priority: scheduledFinalizeAt → effective_at → due_date → created
+  const getInvoiceDate = (inv: InvoiceData): number | null => {
+    if (inv.metadata?.scheduledFinalizeAt) return parseInt(inv.metadata.scheduledFinalizeAt, 10);
+    if (inv.effective_at) return inv.effective_at;
+    if (inv.due_date) return inv.due_date;
+    return inv.created;
+  };
 
-  // Format the due date (short month like "Aug 21, 2025")
-  const dueDate = invoice?.due_date
-    ? new Date(invoice.due_date * 1000).toLocaleDateString('en-US', {
+  // Format the invoice date (short month like "Aug 21, 2025")
+  const invoiceTimestamp = invoice ? getInvoiceDate(invoice) : null;
+  const invoiceDate = invoiceTimestamp
+    ? new Date(invoiceTimestamp * 1000).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
@@ -69,8 +70,8 @@ export function SendReminderModal({
     : '';
 
   // Default subject - includes due date if available
-  const defaultSubject = dueDate
-    ? `Payment Reminder - ${formattedAmount} Due ${dueDate}`
+  const defaultSubject = invoiceDate
+    ? `Payment Reminder - ${formattedAmount} Due ${invoiceDate}`
     : `Payment Reminder - ${formattedAmount} Due`;
 
   // Collect initial emails from extendedInfo and customer
@@ -97,13 +98,13 @@ export function SendReminderModal({
       customerName: customer.name || '',
       organizationName: 'LEC',
       logoUrl: 'https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png',
-      failedDate,
+      dueDate: invoiceDate,
       cardLast4: paymentMethod?.card?.last4 || null,
       cardBrand: paymentMethod?.card?.brand || null,
       formattedAmount,
       paymentLink,
     });
-  }, [invoice, customer, failedDate, paymentMethod, formattedAmount, paymentLink]);
+  }, [invoice, customer, invoiceDate, paymentMethod, formattedAmount, paymentLink]);
 
   // Initialize when modal opens
   useEffect(() => {
@@ -230,7 +231,7 @@ export function SendReminderModal({
           customerEmails: emails,
           amount: invoice.amount_due,
           currency: invoice.currency,
-          failedDate,
+          dueDate: invoiceDate,
           cardLast4: paymentMethod?.card?.last4 || null,
           cardBrand: paymentMethod?.card?.brand || null,
           paymentLink,
@@ -263,8 +264,8 @@ export function SendReminderModal({
   };
 
   // Modal title with due date
-  const modalTitle = dueDate
-    ? `Send Payment Reminder - Due ${dueDate}`
+  const modalTitle = invoiceDate
+    ? `Send Payment Reminder - Due ${invoiceDate}`
     : 'Send Payment Reminder';
 
   // Success state
