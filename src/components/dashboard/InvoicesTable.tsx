@@ -140,7 +140,7 @@ export function InvoicesTable({
               <TableHead align="right">Amount</TableHead>
               <TableHead align="right">Paid</TableHead>
               <TableHead align="right">Remaining</TableHead>
-              <TableHead>Due Date</TableHead>
+              <TableHead>Date</TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
           </TableHeader>

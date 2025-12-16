@@ -87,7 +87,7 @@ export function PaymentsTable({
               <TableHead>Status</TableHead>
               <TableHead align="right">Amount</TableHead>
               <TableHead align="right">Refunded</TableHead>
-              <TableHead>Invoice</TableHead>
+              <TableHead>Payment</TableHead>
               <TableHead>Date</TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
@@ -262,7 +262,7 @@ export function PaymentsTable({
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
                                   <FileText className="w-3 h-3" />
-                                  Stripe Invoice
+                                  Stripe Payment
                                 </div>
                                 <a
                                   href={`https://dashboard.stripe.com/invoices/${payment.invoice}`}
@@ -299,7 +299,7 @@ export function PaymentsTable({
                                 </div>
                                 {invoiceInfo.totalApplied > 0 && (
                                   <p className="text-xs text-gray-500">
-                                    Total applied to payments: {formatCurrency(invoiceInfo.totalApplied, payment.currency)}
+                                    Total applied: {formatCurrency(invoiceInfo.totalApplied, payment.currency)}
                                   </p>
                                 )}
                               </div>

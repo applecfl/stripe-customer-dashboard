@@ -168,7 +168,7 @@ export function PaymentMethodsTable({
               <TableHead>Card</TableHead>
               <TableHead>Expiry</TableHead>
               <TableHead className="hidden sm:table-cell">Added</TableHead>
-              <TableHead className="hidden md:table-cell">Linked Invoices</TableHead>
+              <TableHead className="hidden md:table-cell">Linked Payments</TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -293,7 +293,7 @@ export function PaymentMethodsTable({
                             variant="ghost"
                             size="sm"
                             disabled
-                            title={pm.isDefault ? "Can't delete default card" : "Card is linked to invoices"}
+                            title={pm.isDefault ? "Can't delete default card" : "Card is linked to payments"}
                           >
                             <Trash2 className="w-4 h-4 text-gray-300" />
                           </Button>

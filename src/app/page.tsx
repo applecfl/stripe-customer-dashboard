@@ -611,24 +611,13 @@ function DashboardContent() {
       {/* Header Bar */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <img
-                src="https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png"
-                alt="LEC Logo"
-                className="h-6 sm:h-8 w-auto flex-shrink-0"
-              />
-              <span className="font-semibold text-gray-900 text-sm sm:text-base truncate">Payment Manager</span>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-4 text-sm flex-shrink-0">
-
-              <div className="hidden sm:flex items-center gap-2">
-                <span className="text-gray-500">Payment UID:</span>
-                <code className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-mono text-xs max-w-[120px] truncate">
-                  {invoiceUID}
-                </code>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <img
+              src="https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png"
+              alt="LEC Logo"
+              className="h-6 sm:h-8 w-auto flex-shrink-0"
+            />
+            <span className="font-semibold text-gray-900 text-sm sm:text-base truncate">Payment Manager</span>
           </div>
         </div>
       </div>
@@ -659,6 +648,10 @@ function DashboardContent() {
         <CustomerHeader
           customer={customer}
           extendedInfo={extendedInfo}
+          invoiceUID={invoiceUID}
+          invoices={invoices}
+          payments={payments}
+          otherPayments={otherPayments}
           onAddPaymentMethod={() => setShowAddPaymentMethodModal(true)}
           onPayNow={() => setPaymentModal({ isOpen: true })}
         />
@@ -704,8 +697,8 @@ function DashboardContent() {
                 }`}
             >
               <Clock className="w-4 h-4" />
-              <span className="hidden sm:inline">Future</span>
-              <span className="sm:hidden">Future</span>
+              <span className="hidden sm:inline">Scheduled</span>
+              <span className="sm:hidden">Scheduled</span>
               <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${activeTab === 'future' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
                 }`}>
                 {invoices.filter(inv => inv.status === 'draft').length}
@@ -776,7 +769,7 @@ function DashboardContent() {
                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
                 >
                   <CreditCard className="w-4 h-4" />
-                  Change Payment Method for All Invoices
+                  Change Payment Method for All Payments
                 </button>
               </div>
             )}

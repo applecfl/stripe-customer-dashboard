@@ -42,6 +42,7 @@ export function mapInvoice(invoice: Stripe.Invoice): InvoiceData {
     attempt_count: invoice.attempt_count ?? 0,
     auto_advance: invoice.auto_advance ?? false,
     automatically_finalizes_at: invoice.automatically_finalizes_at ?? null,
+    effective_at: invoice.effective_at ?? null,
   };
 }
 

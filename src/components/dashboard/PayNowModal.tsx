@@ -196,7 +196,7 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
           <div>
             <p className="font-medium text-green-800">Pay Now</p>
             <p className="text-sm text-green-600 mt-1">
-              Make a one-time payment. Select invoices to apply payment to, or leave unselected to add as credit.
+              Make a one-time payment. Select payments to apply to, or leave unselected to add as credit.
             </p>
           </div>
         </div>
@@ -266,7 +266,7 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
         <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">
-                Apply to Invoices
+                Apply to Payments
               </label>
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-1.5 cursor-pointer">
@@ -351,7 +351,7 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
             </div>
             {(selectedInvoiceIds.length > 0 || applyToAll) && (
               <p className="text-xs text-gray-500 mt-2">
-                Total to pay selected invoices: {formatCurrency(applyToAll ? payableInvoices.reduce((sum, inv) => {
+                Total to pay selected: {formatCurrency(applyToAll ? payableInvoices.reduce((sum, inv) => {
                   const metaPaid = inv.metadata?.totalPaid ? parseInt(inv.metadata.totalPaid) : 0;
                   return sum + (inv.status === 'draft' ? Math.max(0, inv.amount_due - metaPaid) : inv.amount_remaining);
                 }, 0) : selectedTotal, currency)}
@@ -359,15 +359,15 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
             )}
             <p className="text-xs text-gray-500 mt-1">
               {(selectedInvoiceIds.length > 0 || applyToAll)
-                ? 'Payment will be applied sequentially to selected invoices. Excess will be added as credit. Draft invoices will be finalized before payment.'
-                : 'No invoices selected - payment will be added as customer credit linked to this Payment UID.'}
+                ? 'Payment will be applied sequentially to selected items. Excess will be added as credit. Drafts will be finalized before payment.'
+                : 'No payments selected - amount will be added as customer credit linked to this Payment UID.'}
             </p>
           </div>
 
         {payableInvoices.length === 0 && !showAllInvoices && (
           <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
             <p className="text-sm text-gray-600">
-              No failed invoices. Check "Show all" to see draft and open invoices.
+              No failed payments. Check "Show all" to see draft and open payments.
             </p>
           </div>
         )}
@@ -375,7 +375,7 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
         {payableInvoices.length === 0 && showAllInvoices && (
           <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
             <p className="text-sm text-blue-700">
-              No open or draft invoices available. Payment will be added as customer credit linked to this Payment UID.
+              No open or draft payments available. Amount will be added as customer credit linked to this Payment UID.
             </p>
           </div>
         )}

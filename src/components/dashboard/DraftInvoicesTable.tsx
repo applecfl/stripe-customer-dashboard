@@ -683,7 +683,7 @@ export function FutureInvoicesTable({
       >
         <div className="flex items-center gap-2">
           <Clock className="w-5 h-5 text-indigo-600" />
-          Future Payment
+          Scheduled Payments
         </div>
       </CardHeader>
 
@@ -784,7 +784,7 @@ export function FutureInvoicesTable({
               </TableHead>
               <TableHead className="w-[50px]"></TableHead>
               <TableHead className="w-[100px]">Amount</TableHead>
-              <TableHead className="w-[100px]"><span className="hidden sm:inline">Finalize </span>Date</TableHead>
+              <TableHead className="w-[100px]">Date</TableHead>
               <TableHead className="w-[140px]"><span className="hidden sm:inline">Payment </span>Card</TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
@@ -1060,7 +1060,7 @@ export function FutureInvoicesTable({
                               onClick={() => handlePauseResume(invoice.id, false)}
                               disabled={pausingId === invoice.id}
                               className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors disabled:opacity-50"
-                              title="Resume invoice"
+                              title="Resume payment"
                             >
                               {pausingId === invoice.id ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1074,7 +1074,7 @@ export function FutureInvoicesTable({
                               onClick={() => confirmPause(invoice)}
                               disabled={pausingId === invoice.id}
                               className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
-                              title="Pause invoice"
+                              title="Pause payment"
                             >
                               {pausingId === invoice.id ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1087,7 +1087,7 @@ export function FutureInvoicesTable({
                           <button
                             onClick={() => confirmDeleteSingle(invoice.id)}
                             className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                            title="Delete invoice"
+                            title="Delete payment"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             <span className="hidden sm:inline">Delete</span>
@@ -1107,18 +1107,18 @@ export function FutureInvoicesTable({
       <Modal
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ isOpen: false, invoiceIds: [], isBulk: false })}
-        title={deleteModal.isBulk ? 'Delete Invoices' : 'Delete Invoice'}
+        title={deleteModal.isBulk ? 'Delete Payments' : 'Delete Payment'}
         size="sm"
       >
         <div className="space-y-4">
           <p className="text-gray-600">
             {deleteModal.isBulk
-              ? `Are you sure you want to delete ${deleteModal.invoiceIds.length} invoice${deleteModal.invoiceIds.length !== 1 ? 's' : ''}? This action cannot be undone.`
-              : 'Are you sure you want to delete this invoice? This action cannot be undone.'}
+              ? `Are you sure you want to delete ${deleteModal.invoiceIds.length} payment${deleteModal.invoiceIds.length !== 1 ? 's' : ''}? This action cannot be undone.`
+              : 'Are you sure you want to delete this payment? This action cannot be undone.'}
           </p>
           {deleteModal.isBulk && (
             <div className="bg-gray-50 rounded-lg p-3 max-h-32 overflow-y-auto">
-              <p className="text-xs font-medium text-gray-500 mb-2">Invoices to delete:</p>
+              <p className="text-xs font-medium text-gray-500 mb-2">Payments to delete:</p>
               {deleteModal.invoiceIds.map(id => {
                 const invoice = allDraftInvoices.find(inv => inv.id === id);
                 return (
@@ -1287,7 +1287,7 @@ export function FutureInvoicesTable({
           setPauseModal({ isOpen: false, invoiceId: null, invoice: null });
           setPauseReason('');
         }}
-        title={pauseModal.invoice ? `Pause Invoice: ${formatDate(getDisplayedDate(pauseModal.invoice) || pauseModal.invoice.created)} - ${formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}` : 'Pause Invoice'}
+        title={pauseModal.invoice ? `Pause Payment: ${formatDate(getDisplayedDate(pauseModal.invoice) || pauseModal.invoice.created)} - ${formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}` : 'Pause Payment'}
         size="md"
       >
         <div className="space-y-4">
@@ -1296,10 +1296,10 @@ export function FutureInvoicesTable({
               <Pause className="w-5 h-5 text-amber-600 mt-0.5" />
               <div>
                 <p className="font-medium text-amber-800">
-                  Are you sure you want to pause this invoice?
+                  Are you sure you want to pause this payment?
                 </p>
                 <p className="text-sm text-amber-600 mt-1">
-                  The invoice will not be automatically finalized or charged until resumed.
+                  The payment will not be automatically finalized or charged until resumed.
                 </p>
               </div>
             </div>
@@ -1323,7 +1323,7 @@ export function FutureInvoicesTable({
           {/* Reason (optional) */}
           <Textarea
             label="Reason (optional)"
-            placeholder="Why are you pausing this invoice..."
+            placeholder="Why are you pausing this payment..."
             value={pauseReason}
             onChange={(e) => setPauseReason(e.target.value)}
             rows={3}

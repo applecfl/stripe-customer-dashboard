@@ -43,6 +43,8 @@ export interface InvoiceData {
   // Draft invoice scheduling
   auto_advance: boolean;
   automatically_finalizes_at: number | null;
+  // Finalization timestamp (when invoice became open)
+  effective_at: number | null;
 }
 
 export interface InvoiceLineItem {
@@ -170,6 +172,9 @@ export interface ExtendedCustomerInfo {
   motherName?: string;
   motherEmail?: string;
   motherCell?: string;
+  // Payment summary info
+  totalAmount?: number;
+  paymentName?: string;
 }
 
 // Other payments (Zelle, Cash, etc.) from external system

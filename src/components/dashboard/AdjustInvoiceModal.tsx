@@ -55,7 +55,7 @@ export function AdjustInvoiceModal({
       });
       handleClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to adjust invoice');
+      setError(err instanceof Error ? err.message : 'Failed to adjust payment');
     } finally {
       setLoading(false);
     }
@@ -75,12 +75,12 @@ export function AdjustInvoiceModal({
     : 0;
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Adjust Invoice Amount" size="md">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Adjust Payment Amount" size="md">
       <form onSubmit={handleSubmit}>
-        {/* Invoice Summary */}
+        {/* Payment Summary */}
         <div className="bg-gray-50 rounded-xl p-4 mb-6">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Invoice</span>
+            <span className="text-sm text-gray-500">Payment</span>
             <span className="font-mono text-sm">{invoice.number || invoice.id.slice(0, 12)}</span>
           </div>
           <div className="flex items-center justify-between">
@@ -145,7 +145,7 @@ export function AdjustInvoiceModal({
           </Button>
           <Button type="submit" loading={loading}>
             <Edit3 className="w-4 h-4" />
-            Adjust Invoice
+            Adjust Payment
           </Button>
         </ModalFooter>
       </form>

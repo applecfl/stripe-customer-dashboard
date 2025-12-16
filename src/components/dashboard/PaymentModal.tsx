@@ -41,6 +41,21 @@ const getInvoiceSortPriority = (invoice: InvoiceData): number => {
 const isFailedInvoice = (inv: InvoiceData) =>
   inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0;
 
+// Get the correct finalize/scheduled date for an invoice
+// Priority: scheduledFinalizeAt → effective_at (finalized date) → automatically_finalizes_at → due_date → created
+const getInvoiceDate = (inv: InvoiceData): number | null => {
+  // Check scheduledFinalizeAt first - this is the original scheduled date preserved in metadata
+  if (inv.metadata?.scheduledFinalizeAt) return parseInt(inv.metadata.scheduledFinalizeAt, 10);
+  // For finalized (open/paid) invoices, effective_at is when it was finalized
+  if (inv.effective_at) return inv.effective_at;
+  // For drafts, check automatically_finalizes_at
+  if (inv.automatically_finalizes_at) return inv.automatically_finalizes_at;
+  // Then check due_date
+  if (inv.due_date) return inv.due_date;
+  // Fallback to created
+  return inv.created;
+};
+
 interface PaymentFormProps {
   invoice?: InvoiceData | null;
   invoices: InvoiceData[];
@@ -436,7 +451,7 @@ function PaymentForm({
           value={amount}
           onChange={(e) => handleAmountChange(e.target.value)}
           hint={amountLockedByInput
-            ? 'Amount is fixed. Select/deselect invoices below.'
+            ? 'Amount is fixed. Select/deselect payments below.'
             : 'Select payments below or enter amount manually'}
         />
 
@@ -512,10 +527,10 @@ function PaymentForm({
                     )}
                     <div className="flex-1 min-w-0 flex items-center gap-2">
                       <span className={`text-sm truncate ${isFailed ? 'text-red-700' : isDisabled ? 'text-gray-400' : 'text-gray-900'}`}>
-                        {formatDate(inv.due_date || inv.created)}
+                        {formatDate(getInvoiceDate(inv))}
                       </span>
                       {isFailed && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded flex-shrink-0">Failed</span>}
-                      {inv.status === 'draft' && <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded flex-shrink-0">Draft</span>}
+                      {inv.status === 'draft' && <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1 rounded flex-shrink-0">Scheduled</span>}
                     </div>
                     {/* Amount display with breakdown */}
                     <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -539,7 +554,7 @@ function PaymentForm({
               })}
             </div>
           ) : (
-            <p className="text-xs text-gray-500">No invoices available to pay.</p>
+            <p className="text-xs text-gray-500">No payments available.</p>
           )}
         </div>
 
@@ -726,7 +741,7 @@ export function PaymentModal({
 
   // Format title with date and price when invoice is provided
   const title = invoice
-    ? `${formatDate(invoice.due_date || invoice.created)} - ${formatCurrency(invoice.amount_remaining, invoice.currency)}`
+    ? `${formatDate(getInvoiceDate(invoice))} - ${formatCurrency(invoice.amount_remaining, invoice.currency)}`
     : 'Make Payment';
 
   // Show success modal

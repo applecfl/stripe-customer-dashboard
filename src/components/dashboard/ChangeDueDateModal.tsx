@@ -88,7 +88,7 @@ export function ChangeDueDateModal({
         {mode === 'single' && invoice && (
           <div className="bg-gray-50 rounded-xl p-4 mb-6">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-gray-500">Invoice</span>
+              <span className="text-sm text-gray-500">Payment</span>
               <span className="font-mono text-sm">{invoice.number || invoice.id.slice(0, 12)}</span>
             </div>
             <div className="flex items-center justify-between mb-3">
@@ -112,10 +112,10 @@ export function ChangeDueDateModal({
               <Calendar className="w-5 h-5 text-indigo-600 mt-0.5" />
               <div>
                 <p className="font-medium text-indigo-800">
-                  Scheduling {targetInvoices.length} draft invoice{targetInvoices.length !== 1 ? 's' : ''}
+                  Scheduling {targetInvoices.length} draft payment{targetInvoices.length !== 1 ? 's' : ''}
                 </p>
                 <p className="text-sm text-indigo-600 mt-1">
-                  This will set when the invoices will be automatically finalized.
+                  This will set when the payments will be automatically finalized.
                 </p>
               </div>
             </div>
@@ -129,7 +129,7 @@ export function ChangeDueDateModal({
             type="date"
             value={finalizationDate}
             onChange={(e) => setFinalizationDate(e.target.value)}
-            hint="The invoice will be automatically finalized on this date"
+            hint="The payment will be automatically finalized on this date"
           />
 
           {error && (

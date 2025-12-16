@@ -118,7 +118,7 @@ export function OneTimePaymentModal({
             <div>
               <p className="font-medium text-indigo-800">Process a one-time payment</p>
               <p className="text-sm text-indigo-600 mt-1">
-                This payment will not be linked to any invoice.
+                This payment will not be linked to any existing payment.
               </p>
             </div>
           </div>

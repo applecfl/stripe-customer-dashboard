@@ -64,6 +64,19 @@ interface PaymentAttempt {
   } | null;
 }
 
+// Get the correct finalize/scheduled date for an invoice
+// Priority: scheduledFinalizeAt → effective_at (finalized date) → due_date → created
+const getInvoiceDate = (inv: InvoiceData): number | null => {
+  // Check scheduledFinalizeAt first - this is the original scheduled date preserved in metadata
+  if (inv.metadata?.scheduledFinalizeAt) return parseInt(inv.metadata.scheduledFinalizeAt, 10);
+  // For finalized (open/paid) invoices, effective_at is when it was finalized
+  if (inv.effective_at) return inv.effective_at;
+  // Then check due_date
+  if (inv.due_date) return inv.due_date;
+  // Fallback to created
+  return inv.created;
+};
+
 interface FailedPaymentsTableProps {
   invoices: InvoiceData[];
   token?: string;
@@ -136,7 +149,7 @@ export function FailedPaymentsTable({
   // Only show failed invoices (open with payment attempts)
   const failedInvoices = invoices
     .filter(inv => inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0)
-    .sort((a, b) => (b.due_date || b.created) - (a.due_date || a.created));
+    .sort((a, b) => (getInvoiceDate(b) || 0) - (getInvoiceDate(a) || 0));
 
   // Auto-fetch attempts for all failed invoices on mount/change
   useEffect(() => {
@@ -255,7 +268,7 @@ export function FailedPaymentsTable({
             <TableRow hoverable={false}>
               <TableHead className="w-[50px]"></TableHead>
               <TableHead className="w-[90px]">Amount</TableHead>
-              <TableHead className="w-[90px]"><span className="hidden sm:inline">Due </span>Date</TableHead>
+              <TableHead className="w-[90px]">Date</TableHead>
               <TableHead className="hidden sm:table-cell"><span className="hidden sm:inline">Error</span></TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
@@ -352,11 +365,7 @@ export function FailedPaymentsTable({
                     <div className="flex items-center gap-1 sm:gap-1.5 text-gray-600">
                       <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400" />
                       <span className="text-xs sm:text-sm">
-                        {invoice.due_date && invoice.due_date > 0
-                          ? formatDate(invoice.due_date)
-                          : invoice.created
-                            ? formatDate(invoice.created)
-                            : 'Not set'}
+                        {formatDate(getInvoiceDate(invoice))}
                       </span>
                     </div>
                   </TableCell>
@@ -421,7 +430,7 @@ export function FailedPaymentsTable({
                           <button
                             onClick={() => onPayInvoice(invoice)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
-                            title="Pay Invoice"
+                            title="Pay Now"
                           >
                             <DollarSign className="w-3.5 h-3.5" />
                             Pay
@@ -441,7 +450,7 @@ export function FailedPaymentsTable({
                           <button
                             onClick={() => onVoidInvoice(invoice)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                            title="Void Invoice"
+                            title="Void Payment"
                           >
                             <Ban className="w-3.5 h-3.5" />
                             Void
@@ -466,7 +475,7 @@ export function FailedPaymentsTable({
                           <button
                             onClick={() => onPayInvoice(invoice)}
                             className="p-1.5 text-green-600 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
-                            title="Pay Invoice"
+                            title="Pay Now"
                           >
                             <DollarSign className="w-4 h-4" />
                           </button>
@@ -484,7 +493,7 @@ export function FailedPaymentsTable({
                           <button
                             onClick={() => onVoidInvoice(invoice)}
                             className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                            title="Void Invoice"
+                            title="Void Payment"
                           >
                             <Ban className="w-4 h-4" />
                           </button>
@@ -504,11 +513,7 @@ export function FailedPaymentsTable({
                             {attempts.length > 0 && ` (${attempts.length})`}
                           </h4>
                           <span className="text-xs text-gray-500">
-                            {invoice.due_date && invoice.due_date > 0
-                              ? `Due: ${formatDate(invoice.due_date)}`
-                              : invoice.created
-                                ? `Created: ${formatDate(invoice.created)}`
-                                : ''}
+                            {formatDate(getInvoiceDate(invoice))}
                           </span>
                         </div>
                         {isLoadingAttempts ? (
@@ -609,7 +614,7 @@ export function FailedPaymentsTable({
         isOpen={pauseModal.isOpen}
         onClose={closePauseModal}
         title={pauseModal.invoice
-          ? `${pauseModal.isPause ? 'Pause' : 'Resume'} Auto-retry: ${formatDate(pauseModal.invoice.due_date || pauseModal.invoice.created)} - ${formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}`
+          ? `${pauseModal.isPause ? 'Pause' : 'Resume'} Auto-retry: ${formatDate(getInvoiceDate(pauseModal.invoice))} - ${formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}`
           : ''
         }
         size="md"
@@ -644,9 +649,9 @@ export function FailedPaymentsTable({
           {pauseModal.invoice && (
             <div className="bg-gray-50 rounded-xl p-4 mb-6">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm text-gray-500">Due Date</span>
+                <span className="text-sm text-gray-500">Date</span>
                 <span className="text-sm text-gray-700">
-                  {formatDate(pauseModal.invoice.due_date || pauseModal.invoice.created)}
+                  {formatDate(getInvoiceDate(pauseModal.invoice))}
                 </span>
               </div>
               <div className="flex items-center justify-between">

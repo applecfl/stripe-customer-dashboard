@@ -12,6 +12,9 @@ interface GenerateTokenRequest {
   MotherName?: string;
   MotherEmail?: string;
   MotherCell?: string | number;
+  // Payment summary info
+  Total?: number;
+  Description?: string;
   // Other payments (Zelle, Cash, etc.)
   OtherPayments?: Array<{
     PaymentDate: string;
@@ -56,6 +59,8 @@ export async function POST(
       MotherName,
       MotherEmail,
       MotherCell,
+      Total,
+      Description,
       OtherPayments,
     } = body;
 
@@ -89,9 +94,9 @@ export async function POST(
       );
     }
 
-    // Build extended info if any parent data is provided
+    // Build extended info if any data is provided
     const extendedInfo: ExtendedCustomerInfo | undefined =
-      (FatherName || FatherEmail || FatherCell || MotherName || MotherEmail || MotherCell)
+      (FatherName || FatherEmail || FatherCell || MotherName || MotherEmail || MotherCell || Total || Description)
         ? {
             fatherName: FatherName,
             fatherEmail: FatherEmail,
@@ -99,6 +104,8 @@ export async function POST(
             motherName: MotherName,
             motherEmail: MotherEmail,
             motherCell: MotherCell ? String(MotherCell) : undefined,
+            totalAmount: Total,
+            paymentName: Description,
           }
         : undefined;
 

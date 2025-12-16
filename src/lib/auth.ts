@@ -29,6 +29,9 @@ export interface ExtendedCustomerInfo {
   motherName?: string;
   motherEmail?: string;
   motherCell?: string;
+  // Payment summary info
+  totalAmount?: number;
+  paymentName?: string;
 }
 
 // Other payments (Zelle, Cash, etc.) from external system

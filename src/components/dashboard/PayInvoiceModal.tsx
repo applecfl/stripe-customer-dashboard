@@ -272,11 +272,11 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
             onChange={(e) => setApplyToInvoice(e.target.checked)}
             className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
           />
-          <span className="text-sm font-medium text-gray-700">Apply payment to this invoice</span>
+          <span className="text-sm font-medium text-gray-700">Apply payment to this item</span>
         </label>
         <div className={`space-y-2 ${!applyToInvoice ? 'opacity-50' : ''}`}>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Invoice</span>
+            <span className="text-sm text-gray-500">Payment</span>
             <span className="font-mono text-sm">{invoice.number || invoice.id.slice(0, 12)}</span>
           </div>
           <div className="flex items-center justify-between">
