@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
+import { useState, useEffect, useCallback, Suspense, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   CustomerData,
@@ -86,6 +86,33 @@ function DashboardContent() {
   const [payments, setPayments] = useState<PaymentData[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodData[]>([]);
   const [creditTransactions, setCreditTransactions] = useState<CreditBalanceTransaction[]>([]);
+
+  // Calculate outstanding amount (in cents) - same logic as CustomerHeader
+  const outstandingAmount = useMemo(() => {
+    // Paid = successful payments + other payments (Zelle, Cash, etc.)
+    const paidFromStripe = payments
+      .filter(p => p.status === 'succeeded')
+      .reduce((sum, p) => sum + (p.amount - p.amount_refunded), 0);
+    const paidFromOther = otherPayments?.reduce((sum, p) => sum + (p.amount * 100), 0) || 0;
+    const paid = paidFromStripe + paidFromOther;
+
+    // Scheduled = draft invoices
+    const scheduled = invoices
+      .filter(inv => inv.status === 'draft')
+      .reduce((sum, inv) => sum + inv.amount_due, 0);
+
+    // Failed = open invoices with attempt_count > 0
+    const failed = invoices
+      .filter(inv => inv.status === 'open' && inv.attempt_count > 0)
+      .reduce((sum, inv) => sum + inv.amount_remaining, 0);
+
+    // Total from token
+    const totalFromToken = extendedInfo?.totalAmount ? extendedInfo.totalAmount * 100 : 0;
+    const total = totalFromToken > 0 ? totalFromToken : (paid + scheduled + failed);
+
+    // Outstanding = total - paid - scheduled - failed
+    return Math.max(0, total - paid - scheduled - failed);
+  }, [payments, invoices, otherPayments, extendedInfo]);
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -799,6 +826,7 @@ function DashboardContent() {
         accountId={accountId}
         onSuccess={refreshData}
         onPaymentMethodAdded={refreshData}
+        outstandingAmount={outstandingAmount}
       />
 
       <VoidInvoiceModal
