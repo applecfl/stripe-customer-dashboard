@@ -158,7 +158,7 @@ export function FailedPaymentsTable({
         fetchPaymentAttempts(invoice.id);
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [failedInvoices.map(i => i.id).join(','), accountId]);
 
   const toggleExpanded = (id: string) => {
@@ -269,7 +269,7 @@ export function FailedPaymentsTable({
               <TableHead className="w-[50px]"></TableHead>
               <TableHead className="w-[90px]">Amount</TableHead>
               <TableHead className="w-[90px]">Date</TableHead>
-              <TableHead className="hidden sm:table-cell"><span className="hidden sm:inline">Error</span></TableHead>
+              <TableHead className="hidden sm:table-cell"><span className="hidden sm:inline">Description</span></TableHead>
               <TableHead align="right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -311,105 +311,85 @@ export function FailedPaymentsTable({
 
               return (
                 <>
-                <TableRow key={invoice.id} className={invoice.isPaused ? "bg-red-100/70" : "bg-red-50/50"}>
-                  <TableCell>
-                    <div className="flex items-center gap-0.5 sm:gap-1">
-                      <button
-                        onClick={() => toggleExpanded(invoice.id)}
-                        className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
-                        title={isExpanded ? 'Hide attempts' : 'Show attempts'}
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                  <TableRow key={invoice.id} className={invoice.isPaused ? "bg-red-100/70" : "bg-red-50/50"}>
+                    <TableCell>
+                      <div className="flex items-center gap-0.5 sm:gap-1">
+                        <button
+                          onClick={() => toggleExpanded(invoice.id)}
+                          className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                          title={isExpanded ? 'Hide details' : 'Show details'}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                          )}
+                        </button>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <span className="font-semibold text-xs sm:text-sm text-red-700">
+                          {formatCurrency(invoice.amount_due, invoice.currency)}
+                        </span>
+                        {invoice.amount_remaining > 0 && invoice.amount_remaining !== invoice.amount_due && (
+                          <p className="text-[10px] sm:text-xs text-amber-600">
+                            {formatCurrency(invoice.amount_remaining, invoice.currency)} <span className="hidden sm:inline">remaining</span>
+                          </p>
                         )}
-                      </button>
-                      <button
-                        onClick={() => copyToClipboard(invoice.id)}
-                        className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
-                        title={invoice.id}
-                      >
-                        {copiedId === invoice.id ? (
-                          <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-                        )}
-                      </button>
-                      <a
-                        href={`https://dashboard.stripe.com/invoices/${invoice.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors hidden sm:block"
-                        title="Open in Stripe"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 hover:text-indigo-600" />
-                      </a>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <span className="font-semibold text-xs sm:text-sm text-red-700">
-                        {formatCurrency(invoice.amount_due, invoice.currency)}
-                      </span>
-                      {invoice.amount_remaining > 0 && invoice.amount_remaining !== invoice.amount_due && (
-                        <p className="text-[10px] sm:text-xs text-amber-600">
-                          {formatCurrency(invoice.amount_remaining, invoice.currency)} <span className="hidden sm:inline">remaining</span>
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
+                      </div>
+                    </TableCell>
 
-                  {/* Date Cell */}
-                  <TableCell>
-                    <div className="flex items-center gap-1 sm:gap-1.5 text-gray-600">
-                      <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400" />
-                      <span className="text-xs sm:text-sm">
-                        {formatDate(getInvoiceDate(invoice))}
-                      </span>
-                    </div>
-                  </TableCell>
+                    {/* Date Cell */}
+                    <TableCell>
+                      <div className="flex items-center gap-1 sm:gap-1.5 text-gray-600">
+                        <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400" />
+                        <span className="text-xs sm:text-sm">
+                          {formatDate(getInvoiceDate(invoice))}
+                        </span>
+                      </div>
+                    </TableCell>
 
-                  {/* Error Message Cell - desktop only */}
-                  <TableCell className="hidden sm:table-cell">
-                    {(() => {
-                      const errorInfo = getLatestError(invoice.id);
-                      const errorMessage = errorInfo?.message || invoice.last_payment_error?.message;
-                      const errorDate = errorInfo?.date;
-                      const nextRetry = invoice.next_payment_attempt;
+                    {/* Error Message Cell - desktop only */}
+                    <TableCell className="hidden sm:table-cell">
+                      {(() => {
+                        const errorInfo = getLatestError(invoice.id);
+                        const errorMessage = errorInfo?.message || invoice.last_payment_error?.message;
+                        const errorDate = errorInfo?.date;
+                        const nextRetry = invoice.next_payment_attempt;
 
-                      return (
-                        <div className="flex items-start gap-1.5">
-                          <AlertCircle className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
-                          <div className="flex flex-col">
-                            <span className="text-xs text-red-600 line-clamp-2">
-                              {errorMessage || 'Payment failed'}
-                            </span>
-                            <div className="flex flex-wrap gap-x-2 mt-0.5">
-                              {errorDate && (
-                                <span className="text-[10px] text-gray-400">
-                                  Failed: {new Date(errorDate * 1000).toLocaleDateString()}
-                                </span>
-                              )}
-                              {invoice.isPaused ? (
-                                <span className="text-[10px] text-red-500 font-medium">
-                                  Auto-retry stopped
-                                </span>
-                              ) : nextRetry ? (
-                                <span className="text-[10px] text-amber-600">
-                                  Next retry: {new Date(nextRetry * 1000).toLocaleDateString()}
-                                </span>
-                              ) : null}
+                        return (
+                          <div className="flex items-start gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex flex-col">
+                              <span className="text-xs text-red-600 line-clamp-2">
+                                {errorMessage || 'Payment failed'}
+                              </span>
+                              <div className="flex flex-wrap gap-x-2 mt-0.5">
+                                {errorDate && (
+                                  <span className="text-[10px] text-gray-400">
+                                    Failed: {new Date(errorDate * 1000).toLocaleDateString()}
+                                  </span>
+                                )}
+                                {invoice.isPaused ? (
+                                  <span className="text-[10px] text-red-500 font-medium">
+                                    Auto-retry stopped
+                                  </span>
+                                ) : nextRetry ? (
+                                  <span className="text-[10px] text-amber-600">
+                                    Next retry: {new Date(nextRetry * 1000).toLocaleDateString()}
+                                  </span>
+                                ) : null}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })()}
-                  </TableCell>
+                        );
+                      })()}
+                    </TableCell>
 
-                  <TableCell align="right">
-                    <>
-                      {/* Desktop: action buttons with icons */}
+                    <TableCell align="right">
+                      <>
+                        {/* Desktop: action buttons with icons */}
                         <div className="hidden sm:flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => onRetryInvoice(invoice)}
@@ -430,10 +410,10 @@ export function FailedPaymentsTable({
                           <button
                             onClick={() => onPayInvoice(invoice)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
-                            title="Pay Now"
+                            title="Make Payment"
                           >
                             <DollarSign className="w-3.5 h-3.5" />
-                            Pay
+                            Make Payment
                           </button>
                           <button
                             onClick={() => openPauseModal(invoice, !invoice.isPaused)}
@@ -475,7 +455,7 @@ export function FailedPaymentsTable({
                           <button
                             onClick={() => onPayInvoice(invoice)}
                             className="p-1.5 text-green-600 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
-                            title="Pay Now"
+                            title="Make Payment"
                           >
                             <DollarSign className="w-4 h-4" />
                           </button>
@@ -498,110 +478,127 @@ export function FailedPaymentsTable({
                             <Ban className="w-4 h-4" />
                           </button>
                         </div>
-                    </>
-                  </TableCell>
-                </TableRow>
-                {/* Expanded payment attempts section */}
-                {isExpanded && (
-                  <tr key={`${invoice.id}-expanded`}>
-                    <td colSpan={5} className="bg-gray-50 border-b border-gray-200">
-                      <div className="px-4 py-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                            <Clock className="w-4 h-4" />
-                            Payment Attempts
-                            {attempts.length > 0 && ` (${attempts.length})`}
-                          </h4>
-                          <span className="text-xs text-gray-500">
-                            {formatDate(getInvoiceDate(invoice))}
-                          </span>
-                        </div>
-                        {isLoadingAttempts ? (
-                          <div className="flex items-center justify-center py-4">
-                            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                            <span className="ml-2 text-sm text-gray-500">Loading attempts...</span>
-                          </div>
-                        ) : attempts.length === 0 ? (
-                          <div className="py-2">
-                            <p className="text-sm text-gray-500">No payment attempt records found.</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              Stripe reports {invoice.attempt_count} attempt{invoice.attempt_count > 1 ? 's' : ''}, but detailed records may have expired (older than 30 days).
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {attempts.map((attempt) => (
-                              <div
-                                key={attempt.id}
-                                className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg ${
-                                  attempt.status === 'succeeded'
-                                    ? 'bg-green-50 border border-green-200'
-                                    : 'bg-red-50 border border-red-200'
-                                }`}
+                      </>
+                    </TableCell>
+                  </TableRow>
+                  {/* Expanded payment attempts section */}
+                  {isExpanded && (
+                    <tr key={`${invoice.id}-expanded`}>
+                      <td colSpan={5} className="bg-gray-50 border-b border-gray-200">
+                        <div className="px-4 py-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                              <Clock className="w-4 h-4" />
+                              Payment Attempts
+                              {attempts.length > 0 && ` (${attempts.length})`}
+                            </h4>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => copyToClipboard(invoice.id)}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                                title={`Copy Invoice ID: ${invoice.id}`}
                               >
-                                <div className="flex items-start sm:items-center gap-3">
-                                  <div className={`p-1.5 rounded-full ${
-                                    attempt.status === 'succeeded' ? 'bg-green-100' : 'bg-red-100'
-                                  }`}>
-                                    {attempt.status === 'succeeded' ? (
-                                      <CheckCircle className="w-4 h-4 text-green-600" />
-                                    ) : (
-                                      <XCircle className="w-4 h-4 text-red-600" />
-                                    )}
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <span className={`text-sm font-medium ${
-                                        attempt.status === 'succeeded' ? 'text-green-700' : 'text-red-700'
+                                {copiedId === invoice.id ? (
+                                  <Check className="w-3.5 h-3.5 text-green-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                                <span className="hidden sm:inline">Copy ID</span>
+                              </button>
+                              <a
+                                href={`https://dashboard.stripe.com/invoices/${invoice.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                title="Open in Stripe"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Stripe</span>
+                              </a>
+                            </div>
+                          </div>
+                          {isLoadingAttempts ? (
+                            <div className="flex items-center justify-center py-4">
+                              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                              <span className="ml-2 text-sm text-gray-500">Loading attempts...</span>
+                            </div>
+                          ) : attempts.length === 0 ? (
+                            <div className="py-2">
+                              <p className="text-sm text-gray-500">No payment attempt records found.</p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                Stripe reports {invoice.attempt_count} attempt{invoice.attempt_count > 1 ? 's' : ''}, but detailed records may have expired (older than 30 days).
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {attempts.map((attempt) => (
+                                <div
+                                  key={attempt.id}
+                                  className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg ${attempt.status === 'succeeded'
+                                      ? 'bg-green-50 border border-green-200'
+                                      : 'bg-red-50 border border-red-200'
+                                    }`}
+                                >
+                                  <div className="flex items-start sm:items-center gap-3">
+                                    <div className={`p-1.5 rounded-full ${attempt.status === 'succeeded' ? 'bg-green-100' : 'bg-red-100'
                                       }`}>
-                                        {formatCurrency(attempt.amount, attempt.currency)}
-                                      </span>
-                                      {attempt.payment_method_details && (
-                                        <span className="text-xs text-gray-500">
-                                          <span className="capitalize">{attempt.payment_method_details.brand}</span>
-                                          {' •••• '}
-                                          {attempt.payment_method_details.last4}
-                                        </span>
+                                      {attempt.status === 'succeeded' ? (
+                                        <CheckCircle className="w-4 h-4 text-green-600" />
+                                      ) : (
+                                        <XCircle className="w-4 h-4 text-red-600" />
                                       )}
                                     </div>
-                                    <div className="text-xs text-gray-500 mt-0.5">
-                                      {new Date(attempt.created * 1000).toLocaleString()}
-                                    </div>
-                                    {attempt.failure_message && (
-                                      <div className="text-xs text-red-600 mt-1 flex items-start gap-1">
-                                        <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                                        <span>{attempt.failure_message}</span>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`text-sm font-medium ${attempt.status === 'succeeded' ? 'text-green-700' : 'text-red-700'
+                                          }`}>
+                                          {formatCurrency(attempt.amount, attempt.currency)}
+                                        </span>
+                                        {attempt.payment_method_details && (
+                                          <span className="text-xs text-gray-500">
+                                            <span className="capitalize">{attempt.payment_method_details.brand}</span>
+                                            {' •••• '}
+                                            {attempt.payment_method_details.last4}
+                                          </span>
+                                        )}
                                       </div>
-                                    )}
-                                    {attempt.outcome?.seller_message && !attempt.failure_message && (
-                                      <div className="text-xs text-gray-600 mt-1">
-                                        {attempt.outcome.seller_message}
+                                      <div className="text-xs text-gray-500 mt-0.5">
+                                        {new Date(attempt.created * 1000).toLocaleString()}
+                                      </div>
+                                      {attempt.failure_message && (
+                                        <div className="text-xs text-red-600 mt-1 flex items-start gap-1">
+                                          <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                          <span>{attempt.failure_message}</span>
+                                        </div>
+                                      )}
+                                      {attempt.outcome?.seller_message && !attempt.failure_message && (
+                                        <div className="text-xs text-gray-600 mt-1">
+                                          {attempt.outcome.seller_message}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 sm:mt-0 text-right">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${attempt.status === 'succeeded'
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'bg-red-100 text-red-700'
+                                      }`}>
+                                      {attempt.status === 'succeeded' ? 'Succeeded' : 'Failed'}
+                                    </span>
+                                    {attempt.failure_code && (
+                                      <div className="text-[10px] text-gray-400 mt-1">
+                                        Code: {attempt.failure_code}
                                       </div>
                                     )}
                                   </div>
                                 </div>
-                                <div className="mt-2 sm:mt-0 text-right">
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                    attempt.status === 'succeeded'
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {attempt.status === 'succeeded' ? 'Succeeded' : 'Failed'}
-                                  </span>
-                                  {attempt.failure_code && (
-                                    <div className="text-[10px] text-gray-400 mt-1">
-                                      Code: {attempt.failure_code}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </>
               );
             })}

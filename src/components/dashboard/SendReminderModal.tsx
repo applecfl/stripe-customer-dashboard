@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { InvoiceData, CustomerData, PaymentMethodData } from '@/types';
+import { InvoiceData, CustomerData, PaymentMethodData, ExtendedCustomerInfo } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { generatePaymentReminderHtml } from '@/lib/emailTemplate';
 import { Modal, ModalFooter, Button, Input } from '@/components/ui';
-import { Send, AlertCircle, CheckCircle, X, RotateCcw, Bold, Italic, Link, List } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle, X, RotateCcw, Bold, Italic, Link, List, Plus } from 'lucide-react';
 
 interface SendReminderModalProps {
   isOpen: boolean;
@@ -15,6 +15,7 @@ interface SendReminderModalProps {
   paymentMethods: PaymentMethodData[];
   accountId: string;
   paymentLink: string;
+  extendedInfo?: ExtendedCustomerInfo;
 }
 
 export function SendReminderModal({
@@ -25,12 +26,15 @@ export function SendReminderModal({
   paymentMethods,
   accountId,
   paymentLink,
+  extendedInfo,
 }: SendReminderModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [subject, setSubject] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
+  const [emails, setEmails] = useState<string[]>([]);
+  const [newEmail, setNewEmail] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Find the payment method used (from invoice's default or customer's default)
@@ -38,10 +42,19 @@ export function SendReminderModal({
     ? paymentMethods.find(pm => pm.id === invoice.default_payment_method)
     : paymentMethods.find(pm => pm.isDefault) || paymentMethods[0];
 
-  // Format the failed charge date
+  // Format the failed charge date (short month like "Aug 21, 2025")
   const failedDate = invoice
     ? new Date(invoice.created * 1000).toLocaleDateString('en-US', {
-        month: 'long',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : '';
+
+  // Format the due date (short month like "Aug 21, 2025")
+  const dueDate = invoice?.due_date
+    ? new Date(invoice.due_date * 1000).toLocaleDateString('en-US', {
+        month: 'short',
         day: 'numeric',
         year: 'numeric',
       })
@@ -55,8 +68,27 @@ export function SendReminderModal({
       }).format(invoice.amount_due / 100)
     : '';
 
-  // Default subject
-  const defaultSubject = `Payment Reminder - ${formattedAmount} Due`;
+  // Default subject - includes due date if available
+  const defaultSubject = dueDate
+    ? `Payment Reminder - ${formattedAmount} Due ${dueDate}`
+    : `Payment Reminder - ${formattedAmount} Due`;
+
+  // Collect initial emails from extendedInfo and customer
+  const getInitialEmails = (): string[] => {
+    const emailSet = new Set<string>();
+    // Add customer email first
+    if (customer?.email) {
+      emailSet.add(customer.email);
+    }
+    // Add emails from extendedInfo (father and mother)
+    if (extendedInfo?.fatherEmail) {
+      emailSet.add(extendedInfo.fatherEmail);
+    }
+    if (extendedInfo?.motherEmail) {
+      emailSet.add(extendedInfo.motherEmail);
+    }
+    return Array.from(emailSet);
+  };
 
   // Generate the base HTML template
   const baseHtml = useMemo(() => {
@@ -77,9 +109,11 @@ export function SendReminderModal({
   useEffect(() => {
     if (isOpen && baseHtml) {
       setSubject(defaultSubject);
+      setEmails(getInitialEmails());
+      setNewEmail('');
       setHasChanges(false);
     }
-  }, [isOpen, baseHtml, defaultSubject]);
+  }, [isOpen, baseHtml, defaultSubject, customer, extendedInfo]);
 
   // Setup editable iframe when baseHtml changes
   useEffect(() => {
@@ -145,6 +179,26 @@ export function SendReminderModal({
   };
   const handleList = () => execCommand('insertUnorderedList');
 
+  // Email management functions
+  const addEmail = () => {
+    const email = newEmail.trim().toLowerCase();
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !emails.includes(email)) {
+      setEmails([...emails, email]);
+      setNewEmail('');
+    }
+  };
+
+  const removeEmail = (emailToRemove: string) => {
+    setEmails(emails.filter(e => e !== emailToRemove));
+  };
+
+  const handleEmailKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addEmail();
+    }
+  };
+
   if (!invoice || !customer) return null;
 
   const getEmailHtml = (): string => {
@@ -158,8 +212,8 @@ export function SendReminderModal({
   };
 
   const handleSend = async () => {
-    if (!customer.email) {
-      setError('Customer does not have an email address');
+    if (emails.length === 0) {
+      setError('Please add at least one email address');
       return;
     }
 
@@ -173,7 +227,7 @@ export function SendReminderModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerName: customer.name,
-          customerEmail: customer.email,
+          customerEmails: emails,
           amount: invoice.amount_due,
           currency: invoice.currency,
           failedDate,
@@ -208,6 +262,11 @@ export function SendReminderModal({
     onClose();
   };
 
+  // Modal title with due date
+  const modalTitle = dueDate
+    ? `Send Payment Reminder - Due ${dueDate}`
+    : 'Send Payment Reminder';
+
   // Success state
   if (success) {
     return (
@@ -219,7 +278,7 @@ export function SendReminderModal({
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Email Sent Successfully!</h3>
           <p className="text-gray-600 text-sm">
             A payment reminder has been sent to{' '}
-            <span className="font-medium">{customer.email}</span>
+            <span className="font-medium">{emails.length} recipient{emails.length !== 1 ? 's' : ''}</span>
           </p>
         </div>
         <ModalFooter>
@@ -235,20 +294,53 @@ export function SendReminderModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Send Payment Reminder"
+      title={modalTitle}
       size="full"
     >
       <div className="flex flex-col h-[calc(100vh-200px)] min-h-[500px]">
         {/* Email Header - To, Subject */}
         <div className="border-b border-gray-200 pb-4 mb-4 space-y-3">
-          {/* To Field */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-500 w-16">To:</label>
-            <div className="flex-1 flex items-center gap-2">
-              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
-                {customer.name || 'Customer'}
-              </span>
-              <span className="text-sm text-gray-500">&lt;{customer.email || 'No email'}&gt;</span>
+          {/* To Field - Multiple emails */}
+          <div className="flex items-start gap-3">
+            <label className="text-sm font-medium text-gray-500 w-16 pt-2">To:</label>
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2 p-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent min-h-[42px]">
+                {emails.map((email) => (
+                  <span
+                    key={email}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm"
+                  >
+                    {email}
+                    <button
+                      type="button"
+                      onClick={() => removeEmail(email)}
+                      className="hover:bg-indigo-200 rounded-full p-0.5 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 flex-1 min-w-[200px]">
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    onKeyDown={handleEmailKeyDown}
+                    className="flex-1 outline-none text-sm py-1 min-w-[150px]"
+                    placeholder={emails.length === 0 ? "Add email address..." : "Add another email..."}
+                  />
+                  <button
+                    type="button"
+                    onClick={addEmail}
+                    disabled={!newEmail.trim()}
+                    className="p-1 text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add email"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Press Enter or click + to add an email</p>
             </div>
           </div>
 
@@ -262,16 +354,6 @@ export function SendReminderModal({
               className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
               placeholder="Email subject..."
             />
-          </div>
-
-          {/* Amount Info */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-500 w-16">Amount:</label>
-            <span className="text-sm font-semibold text-red-600">
-              {formatCurrency(invoice.amount_due, invoice.currency)}
-            </span>
-            <span className="text-sm text-gray-400">•</span>
-            <span className="text-sm text-gray-500">Failed on {failedDate}</span>
           </div>
         </div>
 
@@ -333,11 +415,11 @@ export function SendReminderModal({
         </div>
 
         {/* No Email Warning */}
-        {!customer.email && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4 flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700">
-              This customer does not have an email address on file. Please add one before sending a reminder.
+        {emails.length === 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4 flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-700">
+              Please add at least one email address to send the reminder.
             </p>
           </div>
         )}
@@ -391,7 +473,7 @@ export function SendReminderModal({
         <Button variant="secondary" onClick={handleClose} disabled={loading}>
           Cancel
         </Button>
-        <Button onClick={handleSend} loading={loading} disabled={!customer.email}>
+        <Button onClick={handleSend} loading={loading} disabled={emails.length === 0}>
           <Send className="w-4 h-4" />
           Send Reminder
         </Button>

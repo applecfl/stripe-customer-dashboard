@@ -5,7 +5,7 @@ import { getStripeAccountInfo } from '@/lib/stripe';
 
 interface SendReminderRequest {
   customerName: string;
-  customerEmail: string;
+  customerEmails: string[];
   amount: number;
   currency: string;
   failedDate: string;
@@ -25,7 +25,7 @@ export async function POST(
     const body: SendReminderRequest = await request.json();
     const {
       customerName,
-      customerEmail,
+      customerEmails,
       amount,
       currency,
       failedDate,
@@ -43,9 +43,9 @@ export async function POST(
     const organizationName = accountInfo?.name || 'LEC';
     const logoUrl = 'https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png';
 
-    if (!customerEmail) {
+    if (!customerEmails || customerEmails.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Customer email is required' },
+        { success: false, error: 'At least one customer email is required' },
         { status: 400 }
       );
     }
@@ -194,12 +194,9 @@ Thank you,
 ${organizationName}
     `.trim();
 
-    // Send via SendGrid client
+    // Send via SendGrid client to all recipients
     const msg = {
-      to: {
-        email: customerEmail,
-        name: customerName || undefined,
-      },
+      to: customerEmails.map(email => ({ email })),
       from: {
         email: 'leconnect@lecfl.com',
         name: organizationName,

@@ -868,6 +868,7 @@ function DashboardContent() {
         paymentMethods={paymentMethods}
         accountId={accountId}
         paymentLink={sendReminderModal?.hosted_invoice_url || ''}
+        extendedInfo={extendedInfo}
       />
 
       <AddPaymentMethodModal

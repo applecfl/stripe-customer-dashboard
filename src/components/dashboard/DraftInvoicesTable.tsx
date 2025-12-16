@@ -24,6 +24,7 @@ import {
   Check,
   CreditCard,
   ChevronDown,
+  ChevronUp,
   Calendar,
   Loader2,
   X,
@@ -35,6 +36,7 @@ import {
   MinusSquare,
   Pause,
   Play,
+  Hash,
 } from 'lucide-react';
 
 interface FutureInvoicesTableProps {
@@ -72,6 +74,7 @@ export function FutureInvoicesTable({
   onUpdatingChange,
 }: FutureInvoicesTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Track pending changes per invoice
   const [pendingChanges, setPendingChanges] = useState<Record<string, PendingChanges>>({});
@@ -700,6 +703,17 @@ export function FutureInvoicesTable({
         {/* Bulk Actions Toolbar */}
         {selectedIds.size > 0 && (
           <div className="mx-2 sm:mx-4 mt-2 sm:mt-3 p-2 sm:p-3 bg-indigo-50 rounded-lg flex flex-wrap items-center gap-1.5 sm:gap-3">
+            <button
+              onClick={toggleSelectAll}
+              className="p-0.5 sm:p-1 hover:bg-indigo-100 rounded transition-colors"
+              title={isAllSelected ? 'Unselect all' : 'Select all'}
+            >
+              {isAllSelected ? (
+                <CheckSquare className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+              ) : (
+                <MinusSquare className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+              )}
+            </button>
             <span className="text-xs sm:text-sm font-medium text-indigo-700">
               {selectedIds.size} selected
             </span>
@@ -768,21 +782,8 @@ export function FutureInvoicesTable({
           <TableHeader>
             <TableRow hoverable={false}>
               {/* Checkbox column */}
-              <TableHead className="w-[40px]">
-                <button
-                  onClick={toggleSelectAll}
-                  className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
-                >
-                  {isAllSelected ? (
-                    <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
-                  ) : isSomeSelected ? (
-                    <MinusSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
-                  ) : (
-                    <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-                  )}
-                </button>
-              </TableHead>
-              <TableHead className="w-[50px]"></TableHead>
+              <TableHead className="w-[40px]"></TableHead>
+              <TableHead className="w-[40px]"></TableHead>
               <TableHead className="w-[100px]">Amount</TableHead>
               <TableHead className="w-[100px]">Date</TableHead>
               <TableHead className="w-[140px]"><span className="hidden sm:inline">Payment </span>Card</TableHead>
@@ -812,7 +813,10 @@ export function FutureInvoicesTable({
                 ? `bg-red-100/70 ${isSelected ? '!bg-red-100' : ''}`
                 : `${invoiceHasChanges ? 'bg-amber-50/50' : ''} ${isSelected ? 'bg-indigo-50/50' : ''}`;
 
+              const isExpanded = expandedId === invoice.id;
+
               return (
+                <>
                 <TableRow key={invoice.id} className={rowClassName}>
                   {/* Checkbox Cell */}
                   <TableCell>
@@ -828,28 +832,17 @@ export function FutureInvoicesTable({
                     </button>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-0.5 sm:gap-1">
-                      <button
-                        onClick={() => copyToClipboard(invoice.id)}
-                        className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
-                        title={invoice.id}
-                      >
-                        {copiedId === invoice.id ? (
-                          <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-                        )}
-                      </button>
-                      <a
-                        href={`https://dashboard.stripe.com/invoices/${invoice.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors hidden sm:block"
-                        title="Open in Stripe"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 hover:text-indigo-600" />
-                      </a>
-                    </div>
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : invoice.id)}
+                      className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                      title={isExpanded ? 'Hide details' : 'Show details'}
+                    >
+                      {isExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                      )}
+                    </button>
                   </TableCell>
 
                   {/* Amount Cell */}
@@ -1097,6 +1090,46 @@ export function FutureInvoicesTable({
                     </div>
                   </TableCell>
                 </TableRow>
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <tr key={`${invoice.id}-expanded`}>
+                    <td colSpan={6} className="bg-gray-50 px-4 py-3 border-b">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1.5 text-gray-500 text-xs">
+                            <Hash className="w-3 h-3" />
+                            <span className="font-mono">{invoice.id}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => copyToClipboard(invoice.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                            title={`Copy Invoice ID: ${invoice.id}`}
+                          >
+                            {copiedId === invoice.id ? (
+                              <Check className="w-3.5 h-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            <span className="hidden sm:inline">Copy ID</span>
+                          </button>
+                          <a
+                            href={`https://dashboard.stripe.com/invoices/${invoice.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                            title="Open in Stripe"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Stripe</span>
+                          </a>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </>
               );
             })}
           </TableBody>

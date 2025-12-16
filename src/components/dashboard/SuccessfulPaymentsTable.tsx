@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { InvoiceData, PaymentData, PaymentMethodData, OtherPayment } from '@/types';
 import { formatCurrency, formatDateTime, formatDate } from '@/lib/utils';
 import {
@@ -29,7 +29,30 @@ import {
   Clock,
   Undo2,
   Banknote,
+  Copy,
+  CreditCard,
 } from 'lucide-react';
+
+// Zelle SVG icon component
+const ZelleIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M13.559 24h-2.841a.483.483 0 0 1-.483-.483v-5.317H3.188c-.307 0-.508-.043-.622-.131a.772.772 0 0 1-.248-.49.678.678 0 0 1 .087-.428c.075-.13.179-.277.313-.44l9.548-11.87H4.052a.56.56 0 0 1-.56-.56V.559c0-.309.251-.559.56-.559h8.613a.483.483 0 0 1 .483.483v5.334h7.047c.306 0 .507.043.621.13.114.088.195.243.248.49a.678.678 0 0 1-.087.427c-.075.131-.179.278-.313.44l-9.548 11.871h8.773a.56.56 0 0 1 .56.56v3.723a.56.56 0 0 1-.56.56h-5.33v.483a.483.483 0 0 1-.483.483l.043-.001Z" />
+  </svg>
+);
+
+// Helper to get payment type icon
+const getPaymentTypeIcon = (paymentType: string, className?: string) => {
+  const type = paymentType.toLowerCase();
+  if (type === 'zelle') {
+    return <ZelleIcon className={className || "w-4 h-4 text-purple-600"} />;
+  } else if (type === 'cash') {
+    return <Banknote className={className || "w-4 h-4 text-green-600"} />;
+  } else if (type === 'check') {
+    return <FileText className={className || "w-4 h-4 text-blue-600"} />;
+  }
+  // Default to banknote for other types
+  return <Banknote className={className || "w-4 h-4 text-amber-600"} />;
+};
 
 interface SuccessfulPaymentsTableProps {
   invoices: InvoiceData[];
@@ -46,6 +69,13 @@ export function SuccessfulPaymentsTable({
   onRefund,
 }: SuccessfulPaymentsTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyToClipboard = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   const succeededPayments = payments
     .filter(p => p.status === 'succeeded')
@@ -125,13 +155,14 @@ export function SuccessfulPaymentsTable({
               const invoiceInfo = getPaymentInvoiceInfo(payment);
 
               return (
-                <>
-                  <TableRow key={payment.id} className={payment.amount_refunded > 0 ? 'bg-gray-50/50' : ''}>
+                <React.Fragment key={payment.id}>
+                  <TableRow className={payment.amount_refunded > 0 ? 'bg-gray-50/50' : ''}>
                     <TableCell>
                       <div className="flex items-center gap-0.5 sm:gap-1">
                         <button
                           onClick={() => toggleExpanded(`pay-${payment.id}`)}
                           className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                          title={isExpanded ? 'Hide details' : 'Show details'}
                         >
                           {isExpanded ? (
                             <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
@@ -139,17 +170,9 @@ export function SuccessfulPaymentsTable({
                             <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
                           )}
                         </button>
-                        <a
-                          href={payment.id.startsWith('inv_paid_') && payment.invoice
-                            ? `https://dashboard.stripe.com/invoices/${payment.invoice}`
-                            : `https://dashboard.stripe.com/payments/${payment.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors hidden sm:block"
-                          title={payment.id.startsWith('inv_paid_') ? "Open Invoice in Stripe" : "Open in Stripe"}
-                        >
-                          <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 hover:text-indigo-600" />
-                        </a>
+                        <div className="p-0.5 sm:p-1" title="Stripe Payment">
+                          <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -173,9 +196,17 @@ export function SuccessfulPaymentsTable({
                             </span>
                           </div>
                         ) : (
-                          <span className="font-semibold text-green-600 text-xs sm:text-sm">
-                            {formatCurrency(payment.amount, payment.currency)}
-                          </span>
+                          <>
+                            <span className="font-semibold text-green-600 text-xs sm:text-sm">
+                              {formatCurrency(payment.amount, payment.currency)}
+                            </span>
+                            {/* Description from metadata or payment */}
+                            {(invoiceInfo.reason || payment.description) && (
+                              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                {invoiceInfo.reason || payment.description}
+                              </p>
+                            )}
+                          </>
                         )}
                       </div>
                     </TableCell>
@@ -224,6 +255,33 @@ export function SuccessfulPaymentsTable({
                   {isExpanded && (
                     <tr key={`${payment.id}-details`}>
                       <td colSpan={4} className="bg-gray-50 px-4 py-3 border-b">
+                        {/* Header with copy and external link buttons */}
+                        <div className="flex items-center justify-end gap-2 mb-3">
+                          <button
+                            onClick={() => copyToClipboard(payment.id.startsWith('inv_paid_') && payment.invoice ? payment.invoice! : payment.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                            title={`Copy ${payment.id.startsWith('inv_paid_') ? 'Invoice' : 'Payment'} ID`}
+                          >
+                            {copiedId === (payment.id.startsWith('inv_paid_') && payment.invoice ? payment.invoice : payment.id) ? (
+                              <Check className="w-3.5 h-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            <span className="hidden sm:inline">Copy ID</span>
+                          </button>
+                          <a
+                            href={payment.id.startsWith('inv_paid_') && payment.invoice
+                              ? `https://dashboard.stripe.com/invoices/${payment.invoice}`
+                              : `https://dashboard.stripe.com/payments/${payment.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                            title="Open in Stripe"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Stripe</span>
+                          </a>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                           {/* Payment Intent ID or Invoice ID for out-of-band */}
                           <div className="space-y-1">
@@ -231,17 +289,9 @@ export function SuccessfulPaymentsTable({
                               <Hash className="w-3 h-3" />
                               {payment.id.startsWith('inv_paid_') ? 'Invoice (Paid Out-of-Band)' : 'Payment Intent'}
                             </div>
-                            <a
-                              href={payment.id.startsWith('inv_paid_') && payment.invoice
-                                ? `https://dashboard.stripe.com/invoices/${payment.invoice}`
-                                : `https://dashboard.stripe.com/payments/${payment.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-xs text-blue-600 hover:underline flex items-center gap-1"
-                            >
+                            <span className="font-mono text-xs text-gray-700">
                               {payment.id.startsWith('inv_paid_') ? payment.invoice : payment.id}
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
+                            </span>
                           </div>
 
                           {/* Payment Date */}
@@ -371,7 +421,7 @@ export function SuccessfulPaymentsTable({
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               );
             })}
 
@@ -379,10 +429,12 @@ export function SuccessfulPaymentsTable({
             {sortedOtherPayments.map((payment, index) => {
               const paymentDate = new Date(payment.paymentDate);
               const isExpanded = expandedId === `other-${index}`;
+              const isZelle = payment.paymentType.toLowerCase() === 'zelle';
+              const isCash = payment.paymentType.toLowerCase() === 'cash';
 
               return (
-                <>
-                  <TableRow key={`other-${index}`} className="bg-amber-50/30">
+                <React.Fragment key={`other-${index}`}>
+                  <TableRow className={isZelle ? "bg-purple-50/30" : isCash ? "bg-green-50/30" : "bg-amber-50/30"}>
                     <TableCell>
                       <div className="flex items-center gap-0.5 sm:gap-1">
                         <button
@@ -396,14 +448,22 @@ export function SuccessfulPaymentsTable({
                           )}
                         </button>
                         <div className="p-0.5 sm:p-1" title={payment.paymentType}>
-                          <Banknote className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600" />
+                          {getPaymentTypeIcon(payment.paymentType, "w-3.5 h-3.5 sm:w-4 sm:h-4")}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-semibold text-green-600 text-xs sm:text-sm">
-                        {formatCurrency(payment.amount * 100, 'usd')}
-                      </span>
+                      <div>
+                        <span className="font-semibold text-green-600 text-xs sm:text-sm">
+                          {formatCurrency(payment.amount * 100, 'usd')}
+                        </span>
+                        {/* Description under amount */}
+                        {payment.description && (
+                          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 line-clamp-1">
+                            {payment.description}
+                          </p>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div>
@@ -414,14 +474,17 @@ export function SuccessfulPaymentsTable({
                             year: 'numeric',
                           })}
                         </span>
-                        <p className="text-[10px] sm:text-xs text-amber-700 font-medium mt-0.5">
-                          {payment.paymentType}
-                        </p>
                       </div>
                     </TableCell>
                     <TableCell align="right">
-                      <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs text-amber-700 bg-amber-100 rounded-md font-medium">
-                        <Check className="w-3 h-3" />
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs rounded-md font-medium ${
+                        isZelle
+                          ? 'text-purple-700 bg-purple-100'
+                          : isCash
+                            ? 'text-green-700 bg-green-100'
+                            : 'text-amber-700 bg-amber-100'
+                      }`}>
+                        {getPaymentTypeIcon(payment.paymentType, "w-3 h-3")}
                         {payment.paymentType}
                       </span>
                     </TableCell>
@@ -430,7 +493,7 @@ export function SuccessfulPaymentsTable({
                   {/* Expanded Details for Other Payments */}
                   {isExpanded && (
                     <tr key={`other-${index}-details`}>
-                      <td colSpan={4} className="bg-amber-50 px-4 py-3 border-b">
+                      <td colSpan={4} className={`px-4 py-3 border-b ${isZelle ? 'bg-purple-50' : isCash ? 'bg-green-50' : 'bg-amber-50'}`}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                           {/* Payment Type */}
                           <div className="space-y-1">
@@ -438,7 +501,10 @@ export function SuccessfulPaymentsTable({
                               <Wallet className="w-3 h-3" />
                               Payment Method
                             </div>
-                            <p className="text-gray-700 font-medium">{payment.paymentType}</p>
+                            <p className={`font-medium flex items-center gap-1.5 ${isZelle ? 'text-purple-700' : isCash ? 'text-green-700' : 'text-amber-700'}`}>
+                              {getPaymentTypeIcon(payment.paymentType, "w-4 h-4")}
+                              {payment.paymentType}
+                            </p>
                           </div>
 
                           {/* Payment Date */}
@@ -471,7 +537,7 @@ export function SuccessfulPaymentsTable({
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               );
             })}
           </TableBody>
