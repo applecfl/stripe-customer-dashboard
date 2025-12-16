@@ -55,6 +55,7 @@ interface PaymentFormProps {
   onPaymentMethodAdded?: () => void;
   onFormSuccess: () => void;
   onFormError: (error: string) => void;
+  isOpen: boolean;
 }
 
 function PaymentForm({
@@ -71,6 +72,7 @@ function PaymentForm({
   onPaymentMethodAdded,
   onFormSuccess,
   onFormError,
+  isOpen,
 }: PaymentFormProps) {
   // Helper to add token and accountId to API URLs
   const withToken = (url: string) => {
@@ -88,16 +90,23 @@ function PaymentForm({
   const stripe = useStripe();
   const elements = useElements();
 
-  const [amount, setAmount] = useState('');
-  const [manualAmountEntered, setManualAmountEntered] = useState(false);
+  // Initialize amount with invoice amount if provided
+  const [amount, setAmount] = useState(() =>
+    invoice ? (invoice.amount_remaining / 100).toFixed(2) : ''
+  );
+  // amountLockedByInput: true when user typed amount first (amount is fixed, invoices are read-only when budget exhausted)
+  // false when user is selecting invoices first (amount follows selection)
+  const [amountLockedByInput, setAmountLockedByInput] = useState(() => !!invoice);
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [showAddCard, setShowAddCard] = useState(false);
   const [saveCard, setSaveCard] = useState(false);
 
-  // For invoice selection
-  const [selectedAdditionalInvoices, setSelectedAdditionalInvoices] = useState<string[]>([]);
+  // For invoice selection - now includes the primary invoice if provided
+  const [selectedInvoices, setSelectedInvoices] = useState<string[]>(() =>
+    invoice ? [invoice.id] : []
+  );
   const [showAllInvoices, setShowAllInvoices] = useState(false); // Default to hide drafts
 
   // Helper to get effective remaining amount for an invoice
@@ -110,14 +119,14 @@ function PaymentForm({
   };
 
   // Get failed invoices only (for calculating total failed amount)
+  // Now includes the primary invoice if it's a failed invoice
   const failedInvoices = useMemo(() => {
     return invoices
       .filter(inv => {
-        if (invoice && inv.id === invoice.id) return false;
         return inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0;
       })
       .sort((a, b) => getInvoiceSortPriority(a) - getInvoiceSortPriority(b));
-  }, [invoices, invoice]);
+  }, [invoices]);
 
   // Calculate total amount of all failed payments
   const totalFailedAmount = useMemo(() => {
@@ -125,18 +134,14 @@ function PaymentForm({
   }, [failedInvoices]);
 
   // Get all payable invoices sorted by priority (failed first, then draft)
-  // Draft invoices only shown if: showAllInvoices OR excess amount > totalFailedAmount
+  // Draft invoices only shown if: showAllInvoices OR amount > totalFailedAmount
+  // Now includes the primary invoice in the list (no longer excluded)
   const payableInvoices = useMemo(() => {
     const payAmountValue = amount ? Math.round(parseFloat(amount) * 100) : 0;
-    const primaryAmount = invoice?.amount_remaining || 0;
-    // For specific invoice payment: use excess amount; for general payment: use full amount
-    const amountForDraftCheck = invoice ? Math.max(0, payAmountValue - primaryAmount) : payAmountValue;
-    const shouldShowDrafts = showAllInvoices || amountForDraftCheck > totalFailedAmount;
+    const shouldShowDrafts = showAllInvoices || payAmountValue > totalFailedAmount;
 
     return invoices
       .filter(inv => {
-        // Exclude the primary invoice if provided
-        if (invoice && inv.id === invoice.id) return false;
         // Always include failed invoices (open with attempts > 0)
         if (inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0) return true;
         // Include draft invoices only if shouldShowDrafts
@@ -147,33 +152,29 @@ function PaymentForm({
         return false;
       })
       .sort((a, b) => getInvoiceSortPriority(a) - getInvoiceSortPriority(b));
-  }, [invoices, invoice, showAllInvoices, amount, totalFailedAmount]);
+  }, [invoices, showAllInvoices, amount, totalFailedAmount]);
 
   // Calculate amounts
   const payAmount = amount ? Math.round(parseFloat(amount) * 100) : 0;
-  const primaryInvoiceAmount = invoice?.amount_remaining || 0;
-  const excessAmount = Math.max(0, payAmount - primaryInvoiceAmount);
 
   // Calculate total from selected invoices (for auto-sum mode)
   const selectedInvoicesTotal = useMemo(() => {
-    return selectedAdditionalInvoices.reduce((sum, invId) => {
+    return selectedInvoices.reduce((sum, invId) => {
       const inv = payableInvoices.find(i => i.id === invId);
       if (inv) {
         return sum + getEffectiveRemaining(inv);
       }
       return sum;
     }, 0);
-  }, [selectedAdditionalInvoices, payableInvoices]);
+  }, [selectedInvoices, payableInvoices]);
 
   // Calculate how much of the payment applies to each invoice (for display)
   const invoicePaymentBreakdown = useMemo(() => {
     const breakdown: Record<string, { willPay: number; remaining: number }> = {};
-    // For specific invoice: use excess; for general: use full amount
-    const availableAmount = invoice ? excessAmount : payAmount;
-    let remaining = availableAmount;
+    let remaining = payAmount;
 
-    // Always use selectedAdditionalInvoices (user can modify after auto-selection)
-    for (const invId of selectedAdditionalInvoices) {
+    // Apply to selected invoices in order
+    for (const invId of selectedInvoices) {
       const inv = payableInvoices.find(i => i.id === invId);
       if (inv && remaining > 0) {
         const invAmount = getEffectiveRemaining(inv);
@@ -187,16 +188,11 @@ function PaymentForm({
     }
 
     return breakdown;
-  }, [invoice, excessAmount, payAmount, selectedAdditionalInvoices, payableInvoices]);
+  }, [payAmount, selectedInvoices, payableInvoices]);
 
-  // Calculate remaining credit
+  // Calculate remaining credit (amount not applied to any invoice)
   const remainingCredit = useMemo(() => {
     let totalApplied = 0;
-
-    // Add primary invoice amount if paying specific invoice
-    if (invoice) {
-      totalApplied += Math.min(payAmount, primaryInvoiceAmount);
-    }
 
     // Add all amounts applied to selected invoices
     Object.values(invoicePaymentBreakdown).forEach(breakdown => {
@@ -204,13 +200,18 @@ function PaymentForm({
     });
 
     return Math.max(0, payAmount - totalApplied);
-  }, [payAmount, invoice, primaryInvoiceAmount, invoicePaymentBreakdown]);
+  }, [payAmount, invoicePaymentBreakdown]);
 
   // Reset form when modal opens or invoice changes
   useEffect(() => {
+    if (!isOpen) return; // Only run when modal is open
+
     if (invoice) {
-      setAmount((invoice.amount_remaining / 100).toFixed(2));
-      setManualAmountEntered(true);
+      // Pre-select the specific invoice and set its amount
+      const invoiceAmount = (invoice.amount_remaining / 100).toFixed(2);
+      setAmount(invoiceAmount);
+      setAmountLockedByInput(true); // Amount is locked when opening with specific invoice
+      setSelectedInvoices([invoice.id]);
       const invoicePm = invoice.default_payment_method
         ? paymentMethods.find(pm => pm.id === invoice.default_payment_method)
         : null;
@@ -218,36 +219,36 @@ function PaymentForm({
       setPaymentMethodId(invoicePm?.id || defaultPm?.id || paymentMethods[0]?.id || '');
     } else {
       setAmount('');
-      setManualAmountEntered(false);
+      setAmountLockedByInput(false);
+      setSelectedInvoices([]);
       const defaultPm = paymentMethods.find(pm => pm.isDefault);
       setPaymentMethodId(defaultPm?.id || paymentMethods[0]?.id || '');
     }
     setNote('');
-    setSelectedAdditionalInvoices([]);
     setShowAddCard(false);
     setSaveCard(false);
     setShowAllInvoices(false);
-  }, [invoice, paymentMethods]);
+  }, [isOpen, invoice, paymentMethods]);
 
-  // Auto-update amount when invoices are selected (and no manual amount)
+  // Auto-update amount when invoices are selected (only when amount is NOT locked by manual input)
   useEffect(() => {
-    if (!manualAmountEntered && selectedAdditionalInvoices.length > 0) {
+    if (!amountLockedByInput && selectedInvoices.length > 0) {
       setAmount((selectedInvoicesTotal / 100).toFixed(2));
-    } else if (!manualAmountEntered && selectedAdditionalInvoices.length === 0 && !invoice) {
+    } else if (!amountLockedByInput && selectedInvoices.length === 0) {
       setAmount('');
     }
-  }, [selectedAdditionalInvoices, selectedInvoicesTotal, manualAmountEntered, invoice]);
+  }, [selectedInvoices, selectedInvoicesTotal, amountLockedByInput]);
 
   const handleAmountChange = (value: string) => {
     setAmount(value);
     if (value && parseFloat(value) > 0) {
-      setManualAmountEntered(true);
-      // Auto-select ONLY failed invoices
+      // Lock amount - user typed it manually, so amount is fixed
+      setAmountLockedByInput(true);
+      // Auto-select failed invoices based on amount
       const payAmountValue = Math.round(parseFloat(value) * 100);
-      const availableAmount = invoice ? Math.max(0, payAmountValue - (invoice.amount_remaining || 0)) : payAmountValue;
 
-      if (availableAmount > 0) {
-        let remaining = availableAmount;
+      if (payAmountValue > 0) {
+        let remaining = payAmountValue;
         const autoSelected: string[] = [];
         for (const inv of payableInvoices) {
           if (remaining <= 0) break;
@@ -260,23 +261,44 @@ function PaymentForm({
             }
           }
         }
-        setSelectedAdditionalInvoices(autoSelected);
+        setSelectedInvoices(autoSelected);
       } else {
-        setSelectedAdditionalInvoices([]);
+        setSelectedInvoices([]);
       }
     } else if (!value) {
-      setManualAmountEntered(false);
-      setSelectedAdditionalInvoices([]);
+      // Clear amount - unlock so user can select invoices
+      setAmountLockedByInput(false);
+      setSelectedInvoices([]);
     }
   };
 
-  const handleAdditionalInvoiceToggle = (invoiceId: string) => {
-    // Allow toggling invoices regardless of whether amount was manually entered
-    setSelectedAdditionalInvoices(prev =>
-      prev.includes(invoiceId)
+  const handleInvoiceToggle = (invoiceId: string) => {
+    setSelectedInvoices(prev => {
+      const newSelected = prev.includes(invoiceId)
         ? prev.filter(id => id !== invoiceId)
-        : [...prev, invoiceId]
-    );
+        : [...prev, invoiceId];
+
+      // Only update amount if NOT locked by manual input
+      if (!amountLockedByInput) {
+        // Calculate new total and update amount based on selection
+        const newTotal = newSelected.reduce((sum, invId) => {
+          const inv = payableInvoices.find(i => i.id === invId);
+          if (inv) {
+            return sum + getEffectiveRemaining(inv);
+          }
+          return sum;
+        }, 0);
+
+        if (newSelected.length > 0) {
+          setAmount((newTotal / 100).toFixed(2));
+        } else {
+          setAmount('');
+        }
+      }
+      // If amount is locked, don't change it - just toggle selection
+
+      return newSelected;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -352,17 +374,12 @@ function PaymentForm({
         finalPaymentMethodId = paymentMethod.id;
       }
 
-      // Build the list of invoices to pay
-      const invoicesToPay: string[] = [];
-      if (invoice) {
-        invoicesToPay.push(invoice.id);
-      }
-      // Always use selectedAdditionalInvoices (user can modify after auto-selection)
-      invoicesToPay.push(...selectedAdditionalInvoices);
+      // Build the list of invoices to pay - now unified, using selectedInvoices directly
+      const invoicesToPay: string[] = [...selectedInvoices];
 
       // Call our unified payment API
-      // Apply to all only if no specific invoices are selected
-      const shouldApplyToAll = !invoice && invoicesToPay.length === 0;
+      // Apply to all only if no invoices are selected
+      const shouldApplyToAll = invoicesToPay.length === 0;
 
       const response = await fetch(withToken('/api/stripe/pay-now'), {
         method: 'POST',
@@ -397,39 +414,17 @@ function PaymentForm({
 
   const handleClose = () => {
     setAmount('');
-    setManualAmountEntered(false);
+    setAmountLockedByInput(false);
     setPaymentMethodId('');
     setNote('');
     setShowAddCard(false);
     setSaveCard(false);
-    setSelectedAdditionalInvoices([]);
+    setSelectedInvoices([]);
     onClose();
   };
 
   return (
     <form onSubmit={handleSubmit}>
-      {/* Primary Invoice Summary (if paying specific invoice) */}
-      {invoice && (
-        <div className="bg-gray-50 rounded-xl p-4 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Due Date</span>
-            <span className="text-sm text-gray-700">{formatDate(invoice.due_date || invoice.created)}</span>
-          </div>
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Total Amount</span>
-            <span className="font-semibold">
-              {formatCurrency(invoice.amount_due, invoice.currency)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Remaining</span>
-            <span className="font-semibold text-amber-600">
-              {formatCurrency(invoice.amount_remaining, invoice.currency)}
-            </span>
-          </div>
-        </div>
-      )}
-
       <div className="space-y-4">
         {/* Payment Amount */}
         <Input
@@ -437,124 +432,116 @@ function PaymentForm({
           type="number"
           step="0.01"
           min="0.01"
-          placeholder={invoice ? (invoice.amount_remaining / 100).toFixed(2) : '0.00'}
+          placeholder="0.00"
           value={amount}
           onChange={(e) => handleAmountChange(e.target.value)}
-          hint={manualAmountEntered
-            ? 'Amount will be applied to invoices in order (failed first, then draft)'
+          hint={amountLockedByInput
+            ? 'Amount is fixed. Select/deselect invoices below.'
             : 'Select payments below or enter amount manually'}
         />
 
-        {/* Invoice Selection - Show in Make Payment mode OR when excess amount on specific invoice */}
-        {(!invoice || excessAmount > 0) && (
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-gray-600" />
-                <span className="text-sm font-medium text-gray-800">
-                  {invoice
-                    ? 'Additional payments to make with excess:'
-                    : manualAmountEntered
-                      ? 'Payments to be made:'
-                      : 'Select payments:'}
+        {/* Invoice Selection - Always show the list of payable invoices */}
+        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-gray-600" />
+              <span className="text-sm font-medium text-gray-800">
+                {amountLockedByInput ? 'Payments to be made:' : 'Select payments:'}
+              </span>
+              {remainingCredit > 0 && (
+                <span className="text-indigo-700 text-xs font-medium">
+                  +{formatCurrency(remainingCredit, currency)} credit
                 </span>
-                {remainingCredit > 0 && (
-
-                  <span className="text-indigo-700 text-xs font-medium">
-                    Amount to apply {formatCurrency(remainingCredit, currency)}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                {selectedAdditionalInvoices.length > 0 && !manualAmountEntered && (
-                  <span className="text-xs font-medium text-indigo-600">
-                    Total: {formatCurrency(selectedInvoicesTotal, currency)}
-                  </span>
-                )}
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showAllInvoices}
-                    onChange={(e) => setShowAllInvoices(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-xs text-gray-600">Show all</span>
-                </label>
-              </div>
+              )}
             </div>
-            {payableInvoices.length > 0 ? (
-              <div className="border border-gray-200 rounded-lg bg-white divide-y divide-gray-100 max-h-48 overflow-y-auto">
-                {payableInvoices.map((inv) => {
-                  const effectiveRemaining = getEffectiveRemaining(inv);
-                  const isFailed = isFailedInvoice(inv);
-                  const breakdown = invoicePaymentBreakdown[inv.id];
-                  const isSelected = selectedAdditionalInvoices.includes(inv.id);
-                  const willBeFullyPaid = breakdown && breakdown.remaining === 0;
+            <div className="flex items-center gap-3">
+              {selectedInvoices.length > 0 && !amountLockedByInput && (
+                <span className="text-xs font-medium text-indigo-600">
+                  Total: {formatCurrency(selectedInvoicesTotal, currency)}
+                </span>
+              )}
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAllInvoices}
+                  onChange={(e) => setShowAllInvoices(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-xs text-gray-600">Show all</span>
+              </label>
+            </div>
+          </div>
+          {payableInvoices.length > 0 ? (
+            <div className="border border-gray-200 rounded-lg bg-white divide-y divide-gray-100 max-h-48 overflow-y-auto">
+              {payableInvoices.map((inv) => {
+                const effectiveRemaining = getEffectiveRemaining(inv);
+                const isFailed = isFailedInvoice(inv);
+                const breakdown = invoicePaymentBreakdown[inv.id];
+                const isSelected = selectedInvoices.includes(inv.id);
+                const willBeFullyPaid = breakdown && breakdown.remaining === 0;
 
-                  return (
-                    <label
-                      key={inv.id}
-                      className={`flex items-center gap-2 p-2 cursor-pointer transition-colors ${isSelected
-                        ? willBeFullyPaid
-                          ? 'bg-green-50'
-                          : 'bg-amber-50'
-                        : isFailed
-                          ? 'bg-red-50/50 hover:bg-red-50'
-                          : 'hover:bg-gray-50'
-                        }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleAdditionalInvoiceToggle(inv.id)}
-                        className="w-4 h-4 rounded border-gray-300 text-indigo-600"
-                      />
-                      {isFailed ? (
-                        <AlertTriangle className="w-3 h-3 text-red-500 flex-shrink-0" />
-                      ) : (
-                        <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0 flex items-center gap-2">
-                        <span className={`text-sm truncate ${isFailed ? 'text-red-700' : 'text-gray-900'}`}>
-                          {formatDate(inv.due_date || inv.created)}
-                        </span>
-                        {isFailed && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded flex-shrink-0">Failed</span>}
-                        {inv.status === 'draft' && <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded flex-shrink-0">Draft</span>}
-                      </div>
-                      {/* Amount display with breakdown */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {isSelected && breakdown ? (
-                          <>
-                            <span className="text-xs text-gray-400 line-through">
-                              {formatCurrency(effectiveRemaining, inv.currency)}
-                            </span>
-                            <span className={`text-xs font-medium ${willBeFullyPaid ? 'text-green-600' : 'text-amber-600'}`}>
-                              {willBeFullyPaid ? '$0.00' : formatCurrency(breakdown.remaining, inv.currency)}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-xs text-gray-500">
+                // When amount is locked by input, disable unselected invoices if remaining credit is 0
+                const isDisabled = amountLockedByInput && !isSelected && remainingCredit <= 0;
+
+                return (
+                  <label
+                    key={inv.id}
+                    className={`flex items-center gap-2 p-2 transition-colors ${
+                      isDisabled
+                        ? 'cursor-not-allowed opacity-50 bg-gray-100'
+                        : isSelected
+                          ? willBeFullyPaid
+                            ? 'bg-green-50 cursor-pointer'
+                            : 'bg-amber-50 cursor-pointer'
+                          : isFailed
+                            ? 'bg-red-50/50 hover:bg-red-50 cursor-pointer'
+                            : 'hover:bg-gray-50 cursor-pointer'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => !isDisabled && handleInvoiceToggle(inv.id)}
+                      disabled={isDisabled}
+                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 disabled:opacity-50"
+                    />
+                    {isFailed ? (
+                      <AlertTriangle className="w-3 h-3 text-red-500 flex-shrink-0" />
+                    ) : (
+                      <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className={`text-sm truncate ${isFailed ? 'text-red-700' : isDisabled ? 'text-gray-400' : 'text-gray-900'}`}>
+                        {formatDate(inv.due_date || inv.created)}
+                      </span>
+                      {isFailed && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded flex-shrink-0">Failed</span>}
+                      {inv.status === 'draft' && <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded flex-shrink-0">Draft</span>}
+                    </div>
+                    {/* Amount display with breakdown */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {isSelected && breakdown ? (
+                        <>
+                          <span className="text-xs text-gray-400 line-through">
                             {formatCurrency(effectiveRemaining, inv.currency)}
                           </span>
-                        )}
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-500">No invoices available to pay.</p>
-            )}
-            {/* Excess credit info */}
-            {(() => {
-              // Calculate available amount for additional invoices
-              const availableForAdditional = invoice ? excessAmount : payAmount;
-              if (availableForAdditional <= 0) return null;
-
-              return null;
-            })()}
-          </div>
-        )}
+                          <span className={`text-xs font-medium ${willBeFullyPaid ? 'text-green-600' : 'text-amber-600'}`}>
+                            {willBeFullyPaid ? '$0.00' : formatCurrency(breakdown.remaining, inv.currency)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className={`text-xs ${isDisabled ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {formatCurrency(effectiveRemaining, inv.currency)}
+                        </span>
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">No invoices available to pay.</p>
+          )}
+        </div>
 
         {/* Payment Method Selection */}
         <div className="space-y-2">
@@ -835,6 +822,7 @@ export function PaymentModal({
           onPaymentMethodAdded={onPaymentMethodAdded}
           onFormSuccess={handleFormSuccess}
           onFormError={handleFormError}
+          isOpen={isOpen}
         />
       </Elements>
     </Modal>

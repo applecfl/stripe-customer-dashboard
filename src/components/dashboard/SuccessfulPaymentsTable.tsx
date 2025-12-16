@@ -179,21 +179,31 @@ export function SuccessfulPaymentsTable({
                       </div>
                     </TableCell>
                     <TableCell align="right">
-                      {payment.status === 'succeeded' && payment.amount_refunded < payment.amount ? (
-                        <button
-                          onClick={() => onRefund(payment)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
-                          title="Refund Payment"
-                        >
-                          <Undo2 className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Refund</span>
-                        </button>
-                      ) : payment.amount_refunded >= payment.amount ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs text-red-500 bg-red-50 rounded-md font-medium">
-                          <Check className="w-3 h-3" />
-                          <span className="hidden sm:inline">Fully </span>Refunded
-                        </span>
-                      ) : null}
+                      <div className="flex flex-col items-end gap-1">
+                        {payment.status === 'succeeded' && payment.amount_refunded < payment.amount ? (
+                          <>
+                            <button
+                              onClick={() => onRefund(payment)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
+                              title="Refund Payment"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Refund</span>
+                            </button>
+                            {payment.amount_refunded > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[12px] text-red-600 bg-red-50 rounded font-medium">
+                                <RotateCcw className="w-2.5 h-2.5" />
+                                Partial refund
+                              </span>
+                            )}
+                          </>
+                        ) : payment.amount_refunded >= payment.amount ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs text-red-500 bg-red-50 rounded-md font-medium">
+                            <Check className="w-3 h-3" />
+                            <span className="hidden sm:inline">Fully </span>Refunded
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
 

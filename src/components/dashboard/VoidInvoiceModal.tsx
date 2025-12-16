@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { InvoiceData } from '@/types';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import { Modal, ModalFooter, Button, Textarea } from '@/components/ui';
 import { XCircle, Wallet } from 'lucide-react';
 
@@ -58,8 +58,11 @@ export function VoidInvoiceModal({
 
   if (!invoice) return null;
 
+  // Format title with date and amount like other modals
+  const title = `Void Invoice: ${formatDate(invoice.due_date || invoice.created)} - ${formatCurrency(invoice.amount_due, invoice.currency)}`;
+
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Void Invoice" size="md">
+    <Modal isOpen={isOpen} onClose={handleClose} title={title} size="md">
       <form onSubmit={handleSubmit}>
         {/* Warning */}
         <div className="bg-red-50 rounded-xl p-4 mb-6 border border-red-200">
@@ -79,13 +82,13 @@ export function VoidInvoiceModal({
         {/* Invoice Summary */}
         <div className="bg-gray-50 rounded-xl p-4 mb-6">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Invoice</span>
-            <span className="font-mono text-sm">{invoice.number || invoice.id.slice(0, 12)}</span>
+            <span className="text-sm text-gray-500">Due Date</span>
+            <span className="text-sm text-gray-700">{formatDate(invoice.due_date || invoice.created)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Remaining Amount</span>
+            <span className="text-sm text-gray-500">Amount</span>
             <span className="font-semibold text-gray-900">
-              {formatCurrency(invoice.amount_remaining, invoice.currency)}
+              {formatCurrency(invoice.amount_due, invoice.currency)}
             </span>
           </div>
         </div>

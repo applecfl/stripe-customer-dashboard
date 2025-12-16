@@ -16,6 +16,7 @@ import {
   Modal,
   ModalFooter,
   Button,
+  Textarea,
 } from '@/components/ui';
 import {
   Clock,
@@ -42,6 +43,7 @@ interface FutureInvoicesTableProps {
   token?: string;
   accountId?: string;
   onRefresh: () => void;
+  onUpdatingChange?: (isUpdating: boolean) => void;
   // Keep old props for compatibility but we won't use them
   onChangeDueDate?: (invoice: InvoiceData) => void;
   onAdjustAmount?: (invoice: InvoiceData) => void;
@@ -67,6 +69,7 @@ export function FutureInvoicesTable({
   token,
   accountId,
   onRefresh,
+  onUpdatingChange,
 }: FutureInvoicesTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -101,10 +104,14 @@ export function FutureInvoicesTable({
 
   // Pause/Resume state
   const [pausingId, setPausingId] = useState<string | null>(null);
-  const [showPaused, setShowPaused] = useState(true);
 
-  // Paused invoices selection state
-  const [selectedPausedIds, setSelectedPausedIds] = useState<Set<string>>(new Set());
+  // Pause confirmation modal state
+  const [pauseModal, setPauseModal] = useState<{
+    isOpen: boolean;
+    invoiceId: string | null;
+    invoice: InvoiceData | null;
+  }>({ isOpen: false, invoiceId: null, invoice: null });
+  const [pauseReason, setPauseReason] = useState('');
 
   const amountInputRef = useRef<HTMLInputElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -129,19 +136,18 @@ export function FutureInvoicesTable({
     return inv.due_date || inv.created;
   };
 
-  // Filter to only draft invoices, split into active and paused
+  // Filter to only draft invoices - show all in one table sorted by date
   const allDraftInvoices = invoices.filter(inv => inv.status === 'draft');
 
-  const activeInvoices = allDraftInvoices
-    .filter(inv => !inv.isPaused)
-    .sort((a, b) => getFinalizeDate(a) - getFinalizeDate(b));
-
-  const pausedInvoices = allDraftInvoices
-    .filter(inv => inv.isPaused)
-    .sort((a, b) => getFinalizeDate(a) - getFinalizeDate(b));
-
-  // For backward compatibility, draftInvoices refers to active ones
-  const draftInvoices = activeInvoices;
+  // Sort all draft invoices by date (active first, then paused)
+  const draftInvoices = allDraftInvoices
+    .sort((a, b) => {
+      // Sort paused invoices to the bottom
+      if (a.isPaused && !b.isPaused) return 1;
+      if (!a.isPaused && b.isPaused) return -1;
+      // Then sort by date
+      return getFinalizeDate(a) - getFinalizeDate(b);
+    });
 
   // Create a map for quick payment method lookup
   const paymentMethodMap = new Map(paymentMethods.map(pm => [pm.id, pm]));
@@ -397,30 +403,6 @@ export function FutureInvoicesTable({
   const isAllSelected = draftInvoices.length > 0 && selectedIds.size === draftInvoices.length;
   const isSomeSelected = selectedIds.size > 0 && selectedIds.size < draftInvoices.length;
 
-  // Paused invoices selection helpers
-  const toggleSelectPaused = (invoiceId: string) => {
-    setSelectedPausedIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(invoiceId)) {
-        newSet.delete(invoiceId);
-      } else {
-        newSet.add(invoiceId);
-      }
-      return newSet;
-    });
-  };
-
-  const toggleSelectAllPaused = () => {
-    if (selectedPausedIds.size === pausedInvoices.length) {
-      setSelectedPausedIds(new Set());
-    } else {
-      setSelectedPausedIds(new Set(pausedInvoices.map(inv => inv.id)));
-    }
-  };
-
-  const isAllPausedSelected = pausedInvoices.length > 0 && selectedPausedIds.size === pausedInvoices.length;
-  const isSomePausedSelected = selectedPausedIds.size > 0 && selectedPausedIds.size < pausedInvoices.length;
-
   // Delete invoice(s)
   const handleDelete = async () => {
     if (deleteModal.invoiceIds.length === 0) return;
@@ -441,13 +423,8 @@ export function FutureInvoicesTable({
         }
       }
 
-      // Clear selection after successful deletion (from both active and paused)
+      // Clear selection after successful deletion
       setSelectedIds(prev => {
-        const newSet = new Set(prev);
-        deleteModal.invoiceIds.forEach(id => newSet.delete(id));
-        return newSet;
-      });
-      setSelectedPausedIds(prev => {
         const newSet = new Set(prev);
         deleteModal.invoiceIds.forEach(id => newSet.delete(id));
         return newSet;
@@ -472,44 +449,6 @@ export function FutureInvoicesTable({
   const confirmDeleteBulk = () => {
     if (selectedIds.size === 0) return;
     setDeleteModal({ isOpen: true, invoiceIds: Array.from(selectedIds), isBulk: true });
-  };
-
-  // Open delete confirmation for selected paused invoices
-  const confirmDeleteBulkPaused = () => {
-    if (selectedPausedIds.size === 0) return;
-    setDeleteModal({ isOpen: true, invoiceIds: Array.from(selectedPausedIds), isBulk: true });
-  };
-
-  // Bulk resume paused invoices
-  const handleBulkResume = async () => {
-    setBulkSaving(true);
-    setError(null);
-
-    try {
-      for (const invoiceId of Array.from(selectedPausedIds)) {
-        const res = await fetch(withToken(`/api/stripe/invoices/${invoiceId}`), {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'pause',
-            pause: false,
-            accountId,
-          }),
-        });
-        const data = await res.json();
-        if (!data.success) {
-          throw new Error(data.error || `Failed to resume invoice ${invoiceId}`);
-        }
-      }
-
-      setSelectedPausedIds(new Set());
-      onRefresh();
-    } catch (err) {
-      console.error('Failed to bulk resume:', err);
-      setError(err instanceof Error ? err.message : 'Failed to resume invoices');
-    } finally {
-      setBulkSaving(false);
-    }
   };
 
   // Bulk change amount
@@ -626,6 +565,12 @@ export function FutureInvoicesTable({
     }
   };
 
+  // Open pause confirmation modal
+  const confirmPause = (invoice: InvoiceData) => {
+    setPauseModal({ isOpen: true, invoiceId: invoice.id, invoice });
+    setPauseReason('');
+  };
+
   // Pause/Resume single invoice
   const handlePauseResume = async (invoiceId: string, pause: boolean) => {
     setPausingId(invoiceId);
@@ -645,6 +590,9 @@ export function FutureInvoicesTable({
       if (!data.success) {
         throw new Error(data.error || `Failed to ${pause ? 'pause' : 'resume'} invoice`);
       }
+      // Close modal if open
+      setPauseModal({ isOpen: false, invoiceId: null, invoice: null });
+      setPauseReason('');
       onRefresh();
     } catch (err) {
       console.error(`Failed to ${pause ? 'pause' : 'resume'} invoice:`, err);
@@ -685,6 +633,14 @@ export function FutureInvoicesTable({
       setBulkSaving(false);
     }
   };
+
+  // Check if any operation is in progress
+  const isUpdating = saving !== null || bulkSaving || pausingId !== null || deleting;
+
+  // Notify parent of loading state changes
+  useEffect(() => {
+    onUpdatingChange?.(isUpdating);
+  }, [isUpdating, onUpdatingChange]);
 
   if (allDraftInvoices.length === 0) {
     return null;
@@ -825,8 +781,13 @@ export function FutureInvoicesTable({
 
               const isSelected = selectedIds.has(invoice.id);
 
+              // Determine row background: paused = red, selected = indigo, changes = amber
+              const rowClassName = invoice.isPaused
+                ? `bg-red-100/70 ${isSelected ? '!bg-red-100' : ''}`
+                : `${invoiceHasChanges ? 'bg-amber-50/50' : ''} ${isSelected ? 'bg-indigo-50/50' : ''}`;
+
               return (
-                <TableRow key={invoice.id} className={`${invoiceHasChanges ? 'bg-amber-50/50' : ''} ${isSelected ? 'bg-indigo-50/50' : ''}`}>
+                <TableRow key={invoice.id} className={rowClassName}>
                   {/* Checkbox Cell */}
                   <TableCell>
                     <button
@@ -1068,19 +1029,35 @@ export function FutureInvoicesTable({
                         </>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handlePauseResume(invoice.id, true)}
-                            disabled={pausingId === invoice.id}
-                            className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
-                            title="Pause invoice"
-                          >
-                            {pausingId === invoice.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Pause className="w-3.5 h-3.5" />
-                            )}
-                            <span className="hidden sm:inline">Pause</span>
-                          </button>
+                          {invoice.isPaused ? (
+                            <button
+                              onClick={() => handlePauseResume(invoice.id, false)}
+                              disabled={pausingId === invoice.id}
+                              className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors disabled:opacity-50"
+                              title="Resume invoice"
+                            >
+                              {pausingId === invoice.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Play className="w-3.5 h-3.5" />
+                              )}
+                              <span className="hidden sm:inline">Resume</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => confirmPause(invoice)}
+                              disabled={pausingId === invoice.id}
+                              className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
+                              title="Pause invoice"
+                            >
+                              {pausingId === invoice.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Pause className="w-3.5 h-3.5" />
+                              )}
+                              <span className="hidden sm:inline">Pause</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => confirmDeleteSingle(invoice.id)}
                             className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
@@ -1098,191 +1075,6 @@ export function FutureInvoicesTable({
             })}
           </TableBody>
         </Table>
-
-        {/* Paused Invoices Section */}
-        {pausedInvoices.length > 0 && (
-          <div className="border-t border-gray-200">
-            <button
-              onClick={() => setShowPaused(!showPaused)}
-              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <Pause className="w-4 h-4 text-amber-500" />
-                <span className="text-sm font-medium text-gray-700">
-                  Paused Invoices ({pausedInvoices.length})
-                </span>
-              </div>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPaused ? 'rotate-180' : ''}`} />
-            </button>
-
-            {showPaused && (
-              <>
-                {/* Bulk Actions Toolbar for Paused Invoices */}
-                {selectedPausedIds.size > 0 && (
-                  <div className="mx-2 sm:mx-4 mt-2 sm:mt-3 p-2 sm:p-3 bg-green-50 rounded-lg flex flex-wrap items-center gap-1.5 sm:gap-3">
-                    <span className="text-xs sm:text-sm font-medium text-green-700">
-                      {selectedPausedIds.size} selected
-                    </span>
-                    <div className="flex flex-wrap items-center gap-1 sm:gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleBulkResume}
-                        disabled={bulkSaving}
-                        className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
-                      >
-                        {bulkSaving ? <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : <Play className="w-3 h-3 sm:w-4 sm:h-4" />}
-                        <span className="hidden sm:inline">Resume</span>
-                      </Button>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={confirmDeleteBulkPaused}
-                        className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
-                      >
-                        <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                        <span className="hidden sm:inline">Delete</span>
-                      </Button>
-                    </div>
-                    <button
-                      onClick={() => setSelectedPausedIds(new Set())}
-                      className="ml-auto text-xs sm:text-sm text-gray-500 hover:text-gray-700"
-                    >
-                      <span className="hidden sm:inline">Clear selection</span>
-                      <X className="w-4 h-4 sm:hidden" />
-                    </button>
-                  </div>
-                )}
-
-                <Table className="table-fixed w-full">
-                  <TableHeader>
-                    <TableRow hoverable={false}>
-                      {/* Checkbox column */}
-                      <TableHead className="w-[40px]">
-                        <button
-                          onClick={toggleSelectAllPaused}
-                          className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
-                        >
-                          {isAllPausedSelected ? (
-                            <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
-                          ) : isSomePausedSelected ? (
-                            <MinusSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
-                          ) : (
-                            <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-                          )}
-                        </button>
-                      </TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                      <TableHead className="w-[100px]">Amount</TableHead>
-                      <TableHead className="w-[100px]">Paused Date</TableHead>
-                      <TableHead className="w-[140px]"><span className="hidden sm:inline">Payment </span>Card</TableHead>
-                      <TableHead align="right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pausedInvoices.map((invoice) => {
-                      const pm = getPaymentMethod(invoice);
-                      const pausedAt = invoice.metadata?.pausedAt
-                        ? new Date(parseInt(invoice.metadata.pausedAt)).toLocaleDateString()
-                        : 'Unknown';
-                      const isPausing = pausingId === invoice.id;
-                      const isPausedSelected = selectedPausedIds.has(invoice.id);
-
-                      return (
-                        <TableRow key={invoice.id} className={`bg-amber-50/30 ${isPausedSelected ? 'bg-green-50/50' : ''}`}>
-                          {/* Checkbox Cell */}
-                          <TableCell>
-                            <button
-                              onClick={() => toggleSelectPaused(invoice.id)}
-                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
-                            >
-                              {isPausedSelected ? (
-                                <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
-                              ) : (
-                                <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-                              )}
-                            </button>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-0.5 sm:gap-1">
-                              <button
-                                onClick={() => copyToClipboard(invoice.id)}
-                                className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
-                                title={invoice.id}
-                              >
-                                {copiedId === invoice.id ? (
-                                  <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-                                )}
-                              </button>
-                            </div>
-                          </TableCell>
-
-                          <TableCell>
-                            <span className="font-semibold text-xs sm:text-sm text-gray-600">
-                              {formatCurrency(invoice.amount_due, invoice.currency)}
-                            </span>
-                          </TableCell>
-
-                          <TableCell>
-                            <span className="text-xs sm:text-sm text-gray-500">
-                              {pausedAt}
-                            </span>
-                          </TableCell>
-
-                          <TableCell>
-                            {pm ? (
-                              <div className="flex items-center gap-1.5 sm:gap-2 text-gray-500">
-                                <div className="w-6 h-4 sm:w-8 sm:h-5 rounded bg-gray-100 flex items-center justify-center">
-                                  <CreditCard className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400" />
-                                </div>
-                                <span className="text-xs sm:text-sm">
-                                  <span className="capitalize hidden sm:inline">{pm.card?.brand}</span>
-                                  <span className="hidden sm:inline">{' •••• '}</span>
-                                  <span className="sm:hidden">••</span>
-                                  {pm.card?.last4}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-xs sm:text-sm text-gray-400">No card</span>
-                            )}
-                          </TableCell>
-
-                          <TableCell>
-                            <div className="flex items-center gap-1 justify-end">
-                              <button
-                                onClick={() => handlePauseResume(invoice.id, false)}
-                                disabled={isPausing}
-                                className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors disabled:opacity-50"
-                                title="Resume invoice"
-                              >
-                                {isPausing ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <Play className="w-3.5 h-3.5" />
-                                )}
-                                <span className="hidden sm:inline">Resume</span>
-                              </button>
-                              <button
-                                onClick={() => confirmDeleteSingle(invoice.id)}
-                                className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                                title="Delete invoice"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span className="hidden sm:inline">Delete</span>
-                              </button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </>
-            )}
-          </div>
-        )}
       </CardContent>
 
       {/* Delete Confirmation Modal */}
@@ -1450,6 +1242,87 @@ export function FutureInvoicesTable({
           <ModalFooter>
             <Button variant="outline" onClick={() => setBulkCardModal(false)} disabled={bulkSaving}>
               Cancel
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+
+      {/* Pause Confirmation Modal */}
+      <Modal
+        isOpen={pauseModal.isOpen}
+        onClose={() => {
+          setPauseModal({ isOpen: false, invoiceId: null, invoice: null });
+          setPauseReason('');
+        }}
+        title={pauseModal.invoice ? `Pause Invoice: ${formatDate(getDisplayedDate(pauseModal.invoice) || pauseModal.invoice.created)} - ${formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}` : 'Pause Invoice'}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+            <div className="flex items-start gap-3">
+              <Pause className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-800">
+                  Are you sure you want to pause this invoice?
+                </p>
+                <p className="text-sm text-amber-600 mt-1">
+                  The invoice will not be automatically finalized or charged until resumed.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {pauseModal.invoice && (
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-gray-500">Payment Date</span>
+                <span className="text-sm text-gray-700">{formatDate(getDisplayedDate(pauseModal.invoice) || pauseModal.invoice.created)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Amount</span>
+                <span className="font-semibold text-gray-900">
+                  {formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Reason (optional) */}
+          <Textarea
+            label="Reason (optional)"
+            placeholder="Why are you pausing this invoice..."
+            value={pauseReason}
+            onChange={(e) => setPauseReason(e.target.value)}
+            rows={3}
+          />
+
+          <ModalFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPauseModal({ isOpen: false, invoiceId: null, invoice: null });
+                setPauseReason('');
+              }}
+              disabled={pausingId !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => pauseModal.invoiceId && handlePauseResume(pauseModal.invoiceId, true)}
+              disabled={pausingId !== null}
+            >
+              {pausingId === pauseModal.invoiceId ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Pausing...
+                </>
+              ) : (
+                <>
+                  <Pause className="w-4 h-4" />
+                  Pause Invoice
+                </>
+              )}
             </Button>
           </ModalFooter>
         </div>

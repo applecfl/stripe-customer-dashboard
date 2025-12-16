@@ -26,7 +26,7 @@ import {
   RetryPaymentModal,
   SendReminderModal,
 } from '@/components/dashboard';
-import { AlertCircle, RefreshCw, CreditCard, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { AlertCircle, RefreshCw, CreditCard, AlertTriangle, CheckCircle, Clock, Loader2 } from 'lucide-react';
 
 // Token refresh interval (25 minutes in ms - refresh before 30 min expiry)
 const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000;
@@ -78,6 +78,7 @@ function DashboardContent() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'failed' | 'success' | 'future' | 'payment-methods'>('failed');
+  const [isChildUpdating, setIsChildUpdating] = useState(false);
 
   // Modal state
   const [paymentModal, setPaymentModal] = useState<{ isOpen: boolean; invoice?: InvoiceData | null }>({ isOpen: false });
@@ -130,7 +131,7 @@ function DashboardContent() {
 
       // Check if any response indicates session expired
       if (checkSessionExpired(customerRes) || checkSessionExpired(invoicesRes) ||
-          checkSessionExpired(paymentsRes) || checkSessionExpired(paymentMethodsRes)) {
+        checkSessionExpired(paymentsRes) || checkSessionExpired(paymentMethodsRes)) {
         return;
       }
 
@@ -577,8 +578,22 @@ function DashboardContent() {
   }
 
 
+  // Global loading state - combines parent refreshing with child updating
+  const isGlobalUpdating = refreshing || isChildUpdating;
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Global Fixed Loading Indicator - Bottom Right */}
+      {isGlobalUpdating && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 bg-white border border-gray-200 rounded-full shadow-xl">
+          <div className="relative">
+            <div className="w-5 h-5 border-2 border-indigo-200 rounded-full"></div>
+            <div className="absolute inset-0 w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <span className="text-base font-medium text-gray-700">Syncing...</span>
+        </div>
+      )}
+
       {/* Header Bar */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
@@ -592,12 +607,7 @@ function DashboardContent() {
               <span className="font-semibold text-gray-900 text-sm sm:text-base truncate">Payment Manager</span>
             </div>
             <div className="flex items-center gap-2 sm:gap-4 text-sm flex-shrink-0">
-              {refreshing && (
-                <div className="flex items-center gap-1 sm:gap-2 text-indigo-600">
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span className="text-xs hidden sm:inline">Updating...</span>
-                </div>
-              )}
+
               <div className="hidden sm:flex items-center gap-2">
                 <span className="text-gray-500">Payment UID:</span>
                 <code className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-mono text-xs max-w-[120px] truncate">
@@ -643,69 +653,61 @@ function DashboardContent() {
           <nav className="flex gap-2 sm:gap-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab('failed')}
-              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === 'failed'
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === 'failed'
                   ? 'border-red-600 text-red-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               <AlertTriangle className="w-4 h-4" />
               <span className="hidden sm:inline">Failed</span>
               <span className="sm:hidden">Failed</span>
-              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
-                activeTab === 'failed' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
-              }`}>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${activeTab === 'failed' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
+                }`}>
                 {invoices.filter(inv => inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0).length}
               </span>
             </button>
             <button
               onClick={() => setActiveTab('success')}
-              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === 'success'
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === 'success'
                   ? 'border-green-600 text-green-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               <CheckCircle className="w-4 h-4" />
               <span className="hidden sm:inline">Success</span>
               <span className="sm:hidden">Success</span>
-              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
-                activeTab === 'success' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
-              }`}>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${activeTab === 'success' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+                }`}>
                 {payments.filter(p => p.status === 'succeeded').length}
               </span>
             </button>
             <button
               onClick={() => setActiveTab('future')}
-              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === 'future'
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === 'future'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               <Clock className="w-4 h-4" />
               <span className="hidden sm:inline">Future</span>
               <span className="sm:hidden">Future</span>
-              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
-                activeTab === 'future' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
-              }`}>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${activeTab === 'future' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
+                }`}>
                 {invoices.filter(inv => inv.status === 'draft').length}
               </span>
             </button>
             <button
               onClick={() => setActiveTab('payment-methods')}
-              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === 'payment-methods'
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === 'payment-methods'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               <CreditCard className="w-4 h-4" />
               <span className="hidden sm:inline">Payment Methods</span>
               <span className="sm:hidden">Cards</span>
-              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
-                activeTab === 'payment-methods' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
-              }`}>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${activeTab === 'payment-methods' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
+                }`}>
                 {paymentMethods.length}
               </span>
             </button>
@@ -724,6 +726,7 @@ function DashboardContent() {
             onPauseInvoice={handlePauseInvoice}
             onRetryInvoice={setRetryModal}
             onSendReminder={setSendReminderModal}
+            onUpdatingChange={setIsChildUpdating}
           />
         )}
 
@@ -743,6 +746,7 @@ function DashboardContent() {
             token={token}
             accountId={accountId}
             onRefresh={refreshData}
+            onUpdatingChange={setIsChildUpdating}
           />
         )}
 

@@ -13,6 +13,10 @@ import {
   TableRow,
   TableHead,
   TableCell,
+  Modal,
+  ModalFooter,
+  Button,
+  Textarea,
 } from '@/components/ui';
 import {
   AlertTriangle,
@@ -70,6 +74,7 @@ interface FailedPaymentsTableProps {
   onPauseInvoice: (invoice: InvoiceData, pause: boolean) => void;
   onRetryInvoice: (invoice: InvoiceData) => void;
   onSendReminder: (invoice: InvoiceData) => void;
+  onUpdatingChange?: (isUpdating: boolean) => void;
 }
 
 export function FailedPaymentsTable({
@@ -82,12 +87,22 @@ export function FailedPaymentsTable({
   onPauseInvoice,
   onRetryInvoice,
   onSendReminder,
+  onUpdatingChange,
 }: FailedPaymentsTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [paymentAttempts, setPaymentAttempts] = useState<Record<string, PaymentAttempt[]>>({});
   const [loadingAttempts, setLoadingAttempts] = useState<Set<string>>(new Set());
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+
+  // Pause confirmation modal state
+  const [pauseModal, setPauseModal] = useState<{
+    isOpen: boolean;
+    invoice: InvoiceData | null;
+    isPause: boolean; // true = pause, false = resume
+  }>({ isOpen: false, invoice: null, isPause: true });
+  const [pauseReason, setPauseReason] = useState('');
+  const [pauseLoading, setPauseLoading] = useState(false);
 
   // Fetch payment attempts for an invoice
   const fetchPaymentAttempts = async (invoiceId: string) => {
@@ -166,6 +181,33 @@ export function FailedPaymentsTable({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Open pause/resume confirmation modal
+  const openPauseModal = (invoice: InvoiceData, isPause: boolean) => {
+    setPauseModal({ isOpen: true, invoice, isPause });
+    setPauseReason('');
+  };
+
+  // Handle pause/resume confirmation
+  const handlePauseConfirm = async () => {
+    if (!pauseModal.invoice) return;
+
+    setPauseLoading(true);
+    try {
+      // Call the parent handler - it will handle the API call
+      onPauseInvoice(pauseModal.invoice, pauseModal.isPause);
+      setPauseModal({ isOpen: false, invoice: null, isPause: true });
+      setPauseReason('');
+    } finally {
+      setPauseLoading(false);
+    }
+  };
+
+  // Close pause modal
+  const closePauseModal = () => {
+    setPauseModal({ isOpen: false, invoice: null, isPause: true });
+    setPauseReason('');
+  };
+
   if (failedInvoices.length === 0) {
     return (
       <Card>
@@ -183,6 +225,15 @@ export function FailedPaymentsTable({
       </Card>
     );
   }
+
+  // Check if any invoices are still loading their attempts
+  const isLoadingAny = loadingAttempts.size > 0;
+  const isRefreshingAny = refreshingId !== null;
+
+  // Notify parent of loading state changes
+  useEffect(() => {
+    onUpdatingChange?.(isLoadingAny || isRefreshingAny);
+  }, [isLoadingAny, isRefreshingAny, onUpdatingChange]);
 
   return (
     <Card>
@@ -247,7 +298,7 @@ export function FailedPaymentsTable({
 
               return (
                 <>
-                <TableRow key={invoice.id} className="bg-red-50/50">
+                <TableRow key={invoice.id} className={invoice.isPaused ? "bg-red-100/70" : "bg-red-50/50"}>
                   <TableCell>
                     <div className="flex items-center gap-0.5 sm:gap-1">
                       <button
@@ -313,69 +364,37 @@ export function FailedPaymentsTable({
                   {/* Error Message Cell - desktop only */}
                   <TableCell className="hidden sm:table-cell">
                     {(() => {
-                      const isLoading = loadingAttempts.has(invoice.id);
                       const errorInfo = getLatestError(invoice.id);
                       const errorMessage = errorInfo?.message || invoice.last_payment_error?.message;
                       const errorDate = errorInfo?.date;
                       const nextRetry = invoice.next_payment_attempt;
 
-                      if (isLoading) {
-                        return (
-                          <div className="flex items-center gap-1.5">
-                            <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
-                            <span className="text-xs text-gray-400">Loading...</span>
-                          </div>
-                        );
-                      }
-
-                      if (errorMessage) {
-                        return (
-                          <div className="flex items-start gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
-                            <div className="flex flex-col">
-                              <span className="text-xs text-red-600 line-clamp-2">
-                                {errorMessage}
-                              </span>
-                              <div className="flex flex-wrap gap-x-2 mt-0.5">
-                                {errorDate && (
-                                  <span className="text-[10px] text-gray-400">
-                                    Failed: {new Date(errorDate * 1000).toLocaleDateString()}
-                                  </span>
-                                )}
-                                {nextRetry && !invoice.isPaused && (
-                                  <span className="text-[10px] text-amber-600">
-                                    Next retry: {new Date(nextRetry * 1000).toLocaleDateString()}
-                                  </span>
-                                )}
-                                {invoice.isPaused && (
-                                  <span className="text-[10px] text-gray-500 italic">
-                                    Auto-retry paused
-                                  </span>
-                                )}
-                              </div>
+                      return (
+                        <div className="flex items-start gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="text-xs text-red-600 line-clamp-2">
+                              {errorMessage || 'Payment failed'}
+                            </span>
+                            <div className="flex flex-wrap gap-x-2 mt-0.5">
+                              {errorDate && (
+                                <span className="text-[10px] text-gray-400">
+                                  Failed: {new Date(errorDate * 1000).toLocaleDateString()}
+                                </span>
+                              )}
+                              {invoice.isPaused ? (
+                                <span className="text-[10px] text-red-500 font-medium">
+                                  Auto-retry stopped
+                                </span>
+                              ) : nextRetry ? (
+                                <span className="text-[10px] text-amber-600">
+                                  Next retry: {new Date(nextRetry * 1000).toLocaleDateString()}
+                                </span>
+                              ) : null}
                             </div>
                           </div>
-                        );
-                      }
-
-                      // Show next retry even without error message
-                      if (nextRetry && !invoice.isPaused) {
-                        return (
-                          <span className="text-[10px] text-amber-600">
-                            Next retry: {new Date(nextRetry * 1000).toLocaleDateString()}
-                          </span>
-                        );
-                      }
-
-                      if (invoice.isPaused) {
-                        return (
-                          <span className="text-[10px] text-gray-500 italic">
-                            Auto-retry paused
-                          </span>
-                        );
-                      }
-
-                      return <span className="text-xs text-gray-400">—</span>;
+                        </div>
+                      );
                     })()}
                   </TableCell>
 
@@ -408,7 +427,7 @@ export function FailedPaymentsTable({
                             Pay
                           </button>
                           <button
-                            onClick={() => onPauseInvoice(invoice, !invoice.isPaused)}
+                            onClick={() => openPauseModal(invoice, !invoice.isPaused)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
                             title={invoice.isPaused ? 'Resume Auto-retry' : 'Pause Auto-retry'}
                           >
@@ -452,7 +471,7 @@ export function FailedPaymentsTable({
                             <DollarSign className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => onPauseInvoice(invoice, !invoice.isPaused)}
+                            onClick={() => openPauseModal(invoice, !invoice.isPaused)}
                             className="p-1.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
                             title={invoice.isPaused ? 'Resume' : 'Pause'}
                           >
@@ -492,23 +511,6 @@ export function FailedPaymentsTable({
                                 : ''}
                           </span>
                         </div>
-                        {/* Next auto-retry info */}
-                        {invoice.next_payment_attempt && !invoice.isPaused && (
-                          <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-md flex items-center gap-2">
-                            <RefreshCw className="w-4 h-4 text-amber-600" />
-                            <span className="text-xs text-amber-700">
-                              Next automatic retry: <strong>{new Date(invoice.next_payment_attempt * 1000).toLocaleString()}</strong>
-                            </span>
-                          </div>
-                        )}
-                        {invoice.isPaused && (
-                          <div className="mb-3 p-2 bg-gray-100 border border-gray-200 rounded-md flex items-center gap-2">
-                            <Pause className="w-4 h-4 text-gray-500" />
-                            <span className="text-xs text-gray-600">
-                              Automatic retry is <strong>paused</strong>
-                            </span>
-                          </div>
-                        )}
                         {isLoadingAttempts ? (
                           <div className="flex items-center justify-center py-4">
                             <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
@@ -601,6 +603,94 @@ export function FailedPaymentsTable({
           </TableBody>
         </Table>
       </CardContent>
+
+      {/* Pause/Resume Confirmation Modal */}
+      <Modal
+        isOpen={pauseModal.isOpen}
+        onClose={closePauseModal}
+        title={pauseModal.invoice
+          ? `${pauseModal.isPause ? 'Pause' : 'Resume'} Auto-retry: ${formatDate(pauseModal.invoice.due_date || pauseModal.invoice.created)} - ${formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}`
+          : ''
+        }
+        size="md"
+      >
+        <div>
+          {/* Warning/Info */}
+          <div className={`${pauseModal.isPause ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'} rounded-xl p-4 mb-6 border`}>
+            <div className="flex items-start gap-3">
+              {pauseModal.isPause ? (
+                <Pause className="w-5 h-5 text-amber-600 mt-0.5" />
+              ) : (
+                <Play className="w-5 h-5 text-green-600 mt-0.5" />
+              )}
+              <div>
+                <p className={`font-medium ${pauseModal.isPause ? 'text-amber-800' : 'text-green-800'}`}>
+                  {pauseModal.isPause
+                    ? 'Are you sure you want to pause auto-retry?'
+                    : 'Are you sure you want to resume auto-retry?'
+                  }
+                </p>
+                <p className={`text-sm mt-1 ${pauseModal.isPause ? 'text-amber-600' : 'text-green-600'}`}>
+                  {pauseModal.isPause
+                    ? 'Stripe will stop automatically retrying this payment until you resume it.'
+                    : 'Stripe will resume automatically retrying this payment.'
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Invoice Summary */}
+          {pauseModal.invoice && (
+            <div className="bg-gray-50 rounded-xl p-4 mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-gray-500">Due Date</span>
+                <span className="text-sm text-gray-700">
+                  {formatDate(pauseModal.invoice.due_date || pauseModal.invoice.created)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Amount</span>
+                <span className="font-semibold text-gray-900">
+                  {formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Reason (optional) */}
+          <Textarea
+            label="Reason (optional)"
+            placeholder={`Why are you ${pauseModal.isPause ? 'pausing' : 'resuming'} this payment...`}
+            value={pauseReason}
+            onChange={(e) => setPauseReason(e.target.value)}
+            rows={3}
+          />
+
+          <ModalFooter>
+            <Button variant="secondary" onClick={closePauseModal} disabled={pauseLoading}>
+              Cancel
+            </Button>
+            <Button
+              variant={pauseModal.isPause ? 'secondary' : 'primary'}
+              onClick={handlePauseConfirm}
+              loading={pauseLoading}
+            >
+              {pauseModal.isPause ? (
+                <>
+                  <Pause className="w-4 h-4" />
+                  Pause Auto-retry
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4" />
+                  Resume Auto-retry
+                </>
+              )}
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
     </Card>
   );
 }
