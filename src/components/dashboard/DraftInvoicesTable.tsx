@@ -505,8 +505,8 @@ export function FutureInvoicesTable({
     const sortedInvoiceIds = Array.from(selectedIds).sort((a, b) => {
       const invA = draftInvoices.find(inv => inv.id === a);
       const invB = draftInvoices.find(inv => inv.id === b);
-      const dateA = getDisplayedDate(invA) || invA?.created || 0;
-      const dateB = getDisplayedDate(invB) || invB?.created || 0;
+      const dateA = invA ? (getDisplayedDate(invA) || invA.created || 0) : 0;
+      const dateB = invB ? (getDisplayedDate(invB) || invB.created || 0) : 0;
       return dateA - dateB;
     });
 
