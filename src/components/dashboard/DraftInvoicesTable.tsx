@@ -493,20 +493,36 @@ export function FutureInvoicesTable({
     }
   };
 
-  // Bulk change date
+  // Bulk change date - first invoice gets selected date, subsequent invoices get +1 month each
   const handleBulkChangeDate = async () => {
     const newDate = new Date(bulkEditValue + 'T00:00:00');
     if (isNaN(newDate.getTime())) {
       setError('Please enter a valid date');
       return;
     }
-    const timestamp = Math.floor(newDate.getTime() / 1000);
+
+    // Sort selected invoices by their current date to maintain order
+    const sortedInvoiceIds = Array.from(selectedIds).sort((a, b) => {
+      const invA = draftInvoices.find(inv => inv.id === a);
+      const invB = draftInvoices.find(inv => inv.id === b);
+      const dateA = getDisplayedDate(invA) || invA?.created || 0;
+      const dateB = getDisplayedDate(invB) || invB?.created || 0;
+      return dateA - dateB;
+    });
 
     setBulkSaving(true);
     setError(null);
 
     try {
-      for (const invoiceId of Array.from(selectedIds)) {
+      for (let i = 0; i < sortedInvoiceIds.length; i++) {
+        const invoiceId = sortedInvoiceIds[i];
+
+        // Calculate date: first invoice gets selected date, others get +1 month each
+        const invoiceDate = new Date(newDate);
+        invoiceDate.setMonth(invoiceDate.getMonth() + i);
+
+        const timestamp = Math.floor(invoiceDate.getTime() / 1000);
+
         const res = await fetch(withToken('/api/stripe/invoices/schedule'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -531,6 +547,16 @@ export function FutureInvoicesTable({
     } finally {
       setBulkSaving(false);
     }
+  };
+
+  // Helper to calculate the last date in bulk date change sequence
+  const getLastBulkDate = (): string => {
+    if (!bulkEditValue || selectedIds.size === 0) return '';
+    const startDate = new Date(bulkEditValue + 'T00:00:00');
+    if (isNaN(startDate.getTime())) return '';
+    const lastDate = new Date(startDate);
+    lastDate.setMonth(lastDate.getMonth() + selectedIds.size - 1);
+    return formatDate(Math.floor(lastDate.getTime() / 1000));
   };
 
   // Bulk change payment method
@@ -1175,15 +1201,15 @@ export function FutureInvoicesTable({
       <Modal
         isOpen={bulkDateModal}
         onClose={() => setBulkDateModal(false)}
-        title="Change Payment date"
+        title="Change Payment Dates"
         size="sm"
       >
         <div className="space-y-4">
           <p className="text-gray-600">
-            Set a new Payment date for {selectedIds.size} selected invoice{selectedIds.size !== 1 ? 's' : ''}.
+            Set the start date for {selectedIds.size} invoice{selectedIds.size !== 1 ? 's' : ''}. Each subsequent invoice will be scheduled for the same day in the following month.
           </p>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">New Date</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
             <input
               type="date"
               value={bulkEditValue}
@@ -1191,6 +1217,13 @@ export function FutureInvoicesTable({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+          {bulkEditValue && selectedIds.size > 1 && (
+            <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+              <p className="text-sm text-indigo-700">
+                <span className="font-medium">Last payment date:</span> {getLastBulkDate()}
+              </p>
+            </div>
+          )}
           <ModalFooter>
             <Button variant="outline" onClick={() => setBulkDateModal(false)} disabled={bulkSaving}>
               Cancel
