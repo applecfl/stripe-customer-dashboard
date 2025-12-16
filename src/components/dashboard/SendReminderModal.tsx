@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { InvoiceData, CustomerData, PaymentMethodData } from '@/types';
 import { formatCurrency } from '@/lib/utils';
-import { Modal, ModalFooter, Button } from '@/components/ui';
-import { Mail, Send, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { generatePaymentReminderHtml } from '@/lib/emailTemplate';
+import { Modal, ModalFooter, Button, Input } from '@/components/ui';
+import { Send, AlertCircle, CheckCircle, X, RotateCcw, Bold, Italic, Link, List } from 'lucide-react';
 
 interface SendReminderModalProps {
   isOpen: boolean;
@@ -25,24 +26,136 @@ export function SendReminderModal({
   accountId,
   paymentLink,
 }: SendReminderModalProps) {
-  const [additionalMessage, setAdditionalMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-
-  if (!invoice || !customer) return null;
+  const [subject, setSubject] = useState('');
+  const [hasChanges, setHasChanges] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Find the payment method used (from invoice's default or customer's default)
-  const paymentMethod = invoice.default_payment_method
+  const paymentMethod = invoice?.default_payment_method
     ? paymentMethods.find(pm => pm.id === invoice.default_payment_method)
     : paymentMethods.find(pm => pm.isDefault) || paymentMethods[0];
 
   // Format the failed charge date
-  const failedDate = new Date(invoice.created * 1000).toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  const failedDate = invoice
+    ? new Date(invoice.created * 1000).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : '';
+
+  // Format amount for display
+  const formattedAmount = invoice
+    ? new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: invoice.currency.toUpperCase(),
+      }).format(invoice.amount_due / 100)
+    : '';
+
+  // Default subject
+  const defaultSubject = `Payment Reminder - ${formattedAmount} Due`;
+
+  // Generate the base HTML template
+  const baseHtml = useMemo(() => {
+    if (!invoice || !customer) return '';
+    return generatePaymentReminderHtml({
+      customerName: customer.name || '',
+      organizationName: 'LEC',
+      logoUrl: 'https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png',
+      failedDate,
+      cardLast4: paymentMethod?.card?.last4 || null,
+      cardBrand: paymentMethod?.card?.brand || null,
+      formattedAmount,
+      paymentLink,
+    });
+  }, [invoice, customer, failedDate, paymentMethod, formattedAmount, paymentLink]);
+
+  // Initialize when modal opens
+  useEffect(() => {
+    if (isOpen && baseHtml) {
+      setSubject(defaultSubject);
+      setHasChanges(false);
+    }
+  }, [isOpen, baseHtml, defaultSubject]);
+
+  // Setup editable iframe when baseHtml changes
+  useEffect(() => {
+    if (isOpen && iframeRef.current && baseHtml) {
+      const iframe = iframeRef.current;
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(baseHtml);
+        doc.close();
+        // Make the body editable
+        doc.body.contentEditable = 'true';
+        doc.body.style.outline = 'none';
+        // Listen for changes
+        doc.body.addEventListener('input', () => {
+          setHasChanges(true);
+        });
+      }
+    }
+  }, [isOpen, baseHtml]);
+
+  const handleSubjectChange = (value: string) => {
+    setSubject(value);
+    setHasChanges(value !== defaultSubject);
+  };
+
+  const handleReset = () => {
+    setSubject(defaultSubject);
+    if (iframeRef.current) {
+      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(baseHtml);
+        doc.close();
+        doc.body.contentEditable = 'true';
+        doc.body.style.outline = 'none';
+        doc.body.addEventListener('input', () => {
+          setHasChanges(true);
+        });
+      }
+    }
+    setHasChanges(false);
+  };
+
+  // WYSIWYG commands
+  const execCommand = (command: string, value?: string) => {
+    const iframe = iframeRef.current;
+    if (iframe) {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) {
+        doc.execCommand(command, false, value);
+        iframe.contentWindow?.focus();
+        setHasChanges(true);
+      }
+    }
+  };
+
+  const handleBold = () => execCommand('bold');
+  const handleItalic = () => execCommand('italic');
+  const handleLink = () => {
+    const url = prompt('Enter URL:');
+    if (url) execCommand('createLink', url);
+  };
+  const handleList = () => execCommand('insertUnorderedList');
+
+  if (!invoice || !customer) return null;
+
+  const getEmailHtml = (): string => {
+    if (iframeRef.current) {
+      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
+      if (doc) {
+        return '<!DOCTYPE html><html>' + doc.documentElement.innerHTML + '</html>';
+      }
+    }
+    return baseHtml;
+  };
 
   const handleSend = async () => {
     if (!customer.email) {
@@ -54,6 +167,7 @@ export function SendReminderModal({
     setError('');
 
     try {
+      const customHtml = getEmailHtml();
       const response = await fetch('/api/send-reminder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -66,8 +180,9 @@ export function SendReminderModal({
           cardLast4: paymentMethod?.card?.last4 || null,
           cardBrand: paymentMethod?.card?.brand || null,
           paymentLink,
-          additionalMessage: additionalMessage.trim() || undefined,
           accountId,
+          customHtml: hasChanges ? customHtml : undefined,
+          customSubject: subject !== defaultSubject ? subject : undefined,
         }),
       });
 
@@ -86,9 +201,10 @@ export function SendReminderModal({
   };
 
   const handleClose = () => {
-    setAdditionalMessage('');
     setError('');
     setSuccess(false);
+    setSubject('');
+    setHasChanges(false);
     onClose();
   };
 
@@ -116,79 +232,116 @@ export function SendReminderModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Send Payment Reminder" size="md">
-      {/* Invoice Summary */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
-            <Mail className="w-5 h-5 text-amber-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-medium text-amber-900 mb-1">Payment Reminder Email</h3>
-            <p className="text-sm text-amber-700">
-              This will send a professionally designed email to the customer with a link to retry their payment.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Details */}
-      <div className="space-y-4 mb-6">
-        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500">Recipient</span>
-            <div className="text-right">
-              <p className="font-medium text-gray-900">{customer.name || 'Customer'}</p>
-              <p className="text-sm text-gray-600">{customer.email || 'No email'}</p>
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Send Payment Reminder"
+      size="full"
+    >
+      <div className="flex flex-col h-[calc(100vh-200px)] min-h-[500px]">
+        {/* Email Header - To, Subject */}
+        <div className="border-b border-gray-200 pb-4 mb-4 space-y-3">
+          {/* To Field */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-500 w-16">To:</label>
+            <div className="flex-1 flex items-center gap-2">
+              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
+                {customer.name || 'Customer'}
+              </span>
+              <span className="text-sm text-gray-500">&lt;{customer.email || 'No email'}&gt;</span>
             </div>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500">Amount Due</span>
-            <span className="font-semibold text-red-600">
+
+          {/* Subject Field */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-500 w-16">Subject:</label>
+            <input
+              type="text"
+              value={subject}
+              onChange={(e) => handleSubjectChange(e.target.value)}
+              className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+              placeholder="Email subject..."
+            />
+          </div>
+
+          {/* Amount Info */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-500 w-16">Amount:</label>
+            <span className="text-sm font-semibold text-red-600">
               {formatCurrency(invoice.amount_due, invoice.currency)}
             </span>
+            <span className="text-sm text-gray-400">•</span>
+            <span className="text-sm text-gray-500">Failed on {failedDate}</span>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500">Failed Date</span>
-            <span className="text-sm text-gray-700">{failedDate}</span>
-          </div>
-          {paymentMethod?.card && (
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500">Card Used</span>
-              <span className="text-sm text-gray-700">
-                <span className="capitalize">{paymentMethod.card.brand}</span> •••• {paymentMethod.card.last4}
-              </span>
-            </div>
+        </div>
+
+        {/* WYSIWYG Toolbar */}
+        <div className="flex items-center gap-1 pb-2 border-b border-gray-200 mb-2">
+          <button
+            type="button"
+            onClick={handleBold}
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
+            title="Bold"
+          >
+            <Bold className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            type="button"
+            onClick={handleItalic}
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
+            title="Italic"
+          >
+            <Italic className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            type="button"
+            onClick={handleLink}
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
+            title="Insert Link"
+          >
+            <Link className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            type="button"
+            onClick={handleList}
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
+            title="Bullet List"
+          >
+            <List className="w-4 h-4 text-gray-600" />
+          </button>
+          <div className="flex-1" />
+          {hasChanges && (
+            <button
+              type="button"
+              onClick={handleReset}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-700 hover:text-amber-800 hover:bg-amber-50 rounded transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset to Default
+            </button>
           )}
         </div>
 
-        {/* Additional Message */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Additional Message (optional)
-          </label>
-          <textarea
-            value={additionalMessage}
-            onChange={(e) => setAdditionalMessage(e.target.value)}
-            placeholder="Add a personal note to the customer..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-            rows={3}
+        {/* Email Body - Editable iframe */}
+        <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden bg-gray-100">
+          <iframe
+            ref={iframeRef}
+            title="Email Editor"
+            className="w-full h-full border-0"
+            sandbox="allow-same-origin allow-scripts"
           />
-          <p className="text-xs text-gray-500 mt-1">
-            This message will appear in a highlighted box in the email.
-          </p>
         </div>
-      </div>
 
-      {/* No Email Warning */}
-      {!customer.email && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2">
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">
-            This customer does not have an email address on file. Please add one before sending a reminder.
-          </p>
-        </div>
-      )}
+        {/* No Email Warning */}
+        {!customer.email && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4 flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">
+              This customer does not have an email address on file. Please add one before sending a reminder.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Error Display */}
       {error && (

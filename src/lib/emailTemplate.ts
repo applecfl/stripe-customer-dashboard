@@ -1,75 +1,29 @@
-import { NextRequest, NextResponse } from 'next/server';
-import sgMail from '@sendgrid/mail';
-import { ApiResponse } from '@/types';
-import { getStripeAccountInfo } from '@/lib/stripe';
-
-interface SendReminderRequest {
+interface EmailTemplateParams {
   customerName: string;
-  customerEmail: string;
-  amount: number;
-  currency: string;
+  organizationName: string;
+  logoUrl: string;
   failedDate: string;
   cardLast4: string | null;
   cardBrand: string | null;
+  formattedAmount: string;
   paymentLink: string;
   additionalMessage?: string;
-  accountId: string;
-  customHtml?: string;
-  customSubject?: string;
 }
 
-export async function POST(
-  request: NextRequest
-): Promise<NextResponse<ApiResponse<{ sent: boolean }>>> {
-  try {
-    const body: SendReminderRequest = await request.json();
-    const {
-      customerName,
-      customerEmail,
-      amount,
-      currency,
-      failedDate,
-      cardLast4,
-      cardBrand,
-      paymentLink,
-      additionalMessage,
-      accountId,
-      customHtml,
-      customSubject,
-    } = body;
+export function generatePaymentReminderHtml(params: EmailTemplateParams): string {
+  const {
+    customerName,
+    organizationName,
+    logoUrl,
+    failedDate,
+    cardLast4,
+    cardBrand,
+    formattedAmount,
+    paymentLink,
+    additionalMessage,
+  } = params;
 
-    // Get organization name from account config
-    const accountInfo = getStripeAccountInfo(accountId);
-    const organizationName = accountInfo?.name || 'LEC';
-    const logoUrl = 'https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png';
-
-    if (!customerEmail) {
-      return NextResponse.json(
-        { success: false, error: 'Customer email is required' },
-        { status: 400 }
-      );
-    }
-
-    const sendgridApiKey = process.env.SENDGRID_API_KEY;
-    if (!sendgridApiKey) {
-      return NextResponse.json(
-        { success: false, error: 'SendGrid API key not configured' },
-        { status: 500 }
-      );
-    }
-
-    // Initialize SendGrid client
-    sgMail.setApiKey(sendgridApiKey);
-
-    // Format amount for display
-    const formattedAmount = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-    }).format(amount / 100);
-
-    // Build the HTML email - use customHtml if provided, otherwise use default template
-    const htmlContent = customHtml || `
-<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -168,12 +122,22 @@ export async function POST(
     </tr>
   </table>
 </body>
-</html>
-    `.trim();
+</html>`;
+}
 
-    // Plain text version
-    const textContent = `
-Payment Reminder
+export function generatePaymentReminderText(params: EmailTemplateParams): string {
+  const {
+    customerName,
+    organizationName,
+    failedDate,
+    cardLast4,
+    cardBrand,
+    formattedAmount,
+    paymentLink,
+    additionalMessage,
+  } = params;
+
+  return `Payment Reminder
 
 Hi ${customerName || 'there'},
 
@@ -191,51 +155,5 @@ ${paymentLink}
 If you have any questions, please contact us.
 
 Thank you,
-${organizationName}
-    `.trim();
-
-    // Send via SendGrid client
-    const msg = {
-      to: {
-        email: customerEmail,
-        name: customerName || undefined,
-      },
-      from: {
-        email: 'leconnect@lecfl.com',
-        name: organizationName,
-      },
-      subject: customSubject || `Payment Reminder - ${formattedAmount} Due`,
-      text: textContent,
-      html: htmlContent,
-      customArgs: {
-        accountId,
-        failedDate,
-        type: 'payment_reminder',
-      },
-    };
-
-    await sgMail.send(msg);
-
-    return NextResponse.json({
-      success: true,
-      data: { sent: true },
-    });
-  } catch (error) {
-    console.error('Error sending reminder:', error);
-
-    // Handle SendGrid specific errors
-    if (error && typeof error === 'object' && 'response' in error) {
-      const sgError = error as { response?: { body?: { errors?: Array<{ message: string }> } } };
-      const errorMessage = sgError.response?.body?.errors?.[0]?.message || 'Failed to send email';
-      return NextResponse.json(
-        { success: false, error: errorMessage },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to send reminder' },
-      { status: 500 }
-    );
-  }
+${organizationName}`;
 }
