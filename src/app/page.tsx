@@ -8,6 +8,8 @@ import {
   PaymentData,
   PaymentMethodData,
   CreditBalanceTransaction,
+  ExtendedCustomerInfo,
+  OtherPayment,
 } from '@/types';
 import { LoadingState } from '@/components/ui';
 import {
@@ -32,7 +34,15 @@ import { AlertCircle, RefreshCw, CreditCard, AlertTriangle, CheckCircle, Clock, 
 const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000;
 
 // Helper to decode token payload (client-side)
-function decodeTokenPayload(token: string): { customerId: string; invoiceUID: string; accountId: string } | null {
+interface DecodedTokenPayload {
+  customerId: string;
+  invoiceUID: string;
+  accountId: string;
+  extendedInfo?: ExtendedCustomerInfo;
+  otherPayments?: OtherPayment[];
+}
+
+function decodeTokenPayload(token: string): DecodedTokenPayload | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 2) return null;
@@ -43,6 +53,8 @@ function decodeTokenPayload(token: string): { customerId: string; invoiceUID: st
         customerId: payload.customerId,
         invoiceUID: payload.invoiceUID,
         accountId: payload.accountId,
+        extendedInfo: payload.extendedInfo,
+        otherPayments: payload.otherPayments,
       };
     }
     return null;
@@ -61,6 +73,8 @@ function DashboardContent() {
   const customerId = tokenPayload?.customerId || searchParams.get('customerId') || '';
   const invoiceUID = tokenPayload?.invoiceUID || searchParams.get('invoiceUID') || '';
   const accountId = tokenPayload?.accountId || searchParams.get('accountId') || '';
+  const extendedInfo = tokenPayload?.extendedInfo;
+  const otherPayments = tokenPayload?.otherPayments;
 
   // Track the current valid token (may be refreshed)
   const [token, setToken] = useState(initialToken);
@@ -644,6 +658,7 @@ function DashboardContent() {
         {/* Customer Header */}
         <CustomerHeader
           customer={customer}
+          extendedInfo={extendedInfo}
           onAddPaymentMethod={() => setShowAddPaymentMethodModal(true)}
           onPayNow={() => setPaymentModal({ isOpen: true })}
         />
@@ -678,7 +693,7 @@ function DashboardContent() {
               <span className="sm:hidden">Success</span>
               <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${activeTab === 'success' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
                 }`}>
-                {payments.filter(p => p.status === 'succeeded').length}
+                {payments.filter(p => p.status === 'succeeded').length + (otherPayments?.length || 0)}
               </span>
             </button>
             <button
@@ -735,6 +750,7 @@ function DashboardContent() {
             invoices={invoices}
             payments={payments}
             paymentMethods={paymentMethods}
+            otherPayments={otherPayments}
             onRefund={setRefundModal}
           />
         )}

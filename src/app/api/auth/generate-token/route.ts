@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateToken, isAllowedIP, getClientIP } from '@/lib/auth';
+import { generateToken, isAllowedIP, getClientIP, ExtendedCustomerInfo, OtherPayment } from '@/lib/auth';
 
 interface GenerateTokenRequest {
   CustomerID: string;
   InvoiceUID: string;
   AccountID: string;
+  // Extended customer info
+  FatherName?: string;
+  FatherEmail?: string;
+  FatherCell?: string | number;
+  MotherName?: string;
+  MotherEmail?: string;
+  MotherCell?: string | number;
+  // Other payments (Zelle, Cash, etc.)
+  OtherPayments?: Array<{
+    PaymentDate: string;
+    Amount: number;
+    PaymentType: string;
+    Description: string;
+  }>;
 }
 
 interface GenerateTokenResponse {
@@ -32,7 +46,18 @@ export async function POST(
 
     // Parse request body
     const body: GenerateTokenRequest = await request.json();
-    const { CustomerID: customerId, InvoiceUID: invoiceUID, AccountID: accountId } = body;
+    const {
+      CustomerID: customerId,
+      InvoiceUID: invoiceUID,
+      AccountID: accountId,
+      FatherName,
+      FatherEmail,
+      FatherCell,
+      MotherName,
+      MotherEmail,
+      MotherCell,
+      OtherPayments,
+    } = body;
 
     // Validate required fields
     if (!customerId || typeof customerId !== 'string') {
@@ -64,8 +89,29 @@ export async function POST(
       );
     }
 
+    // Build extended info if any parent data is provided
+    const extendedInfo: ExtendedCustomerInfo | undefined =
+      (FatherName || FatherEmail || FatherCell || MotherName || MotherEmail || MotherCell)
+        ? {
+            fatherName: FatherName,
+            fatherEmail: FatherEmail,
+            fatherCell: FatherCell ? String(FatherCell) : undefined,
+            motherName: MotherName,
+            motherEmail: MotherEmail,
+            motherCell: MotherCell ? String(MotherCell) : undefined,
+          }
+        : undefined;
+
+    // Transform OtherPayments to lowercase keys
+    const otherPayments: OtherPayment[] | undefined = OtherPayments?.map(p => ({
+      paymentDate: p.PaymentDate,
+      amount: p.Amount,
+      paymentType: p.PaymentType,
+      description: p.Description,
+    }));
+
     // Generate token
-    const { token, expiresAt } = generateToken(customerId, invoiceUID, accountId);
+    const { token, expiresAt } = generateToken(customerId, invoiceUID, accountId, extendedInfo, otherPayments);
 
     console.log(`Token generated for customer ${customerId} from IP ${clientIP}`);
 

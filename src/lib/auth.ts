@@ -21,12 +21,33 @@ export const ALLOWED_IPS = [
 // Token expiry time in seconds (30 minutes)
 const TOKEN_EXPIRY_SECONDS = 30 * 60;
 
+// Extended customer info from external system
+export interface ExtendedCustomerInfo {
+  fatherName?: string;
+  fatherEmail?: string;
+  fatherCell?: string;
+  motherName?: string;
+  motherEmail?: string;
+  motherCell?: string;
+}
+
+// Other payments (Zelle, Cash, etc.) from external system
+export interface OtherPayment {
+  paymentDate: string;
+  amount: number;
+  paymentType: string;
+  description: string;
+}
+
 export interface TokenPayload {
   customerId: string;
   invoiceUID: string;
   accountId: string;
   exp: number; // Expiration timestamp (seconds)
   iat: number; // Issued at timestamp (seconds)
+  // Extended info from external system
+  extendedInfo?: ExtendedCustomerInfo;
+  otherPayments?: OtherPayment[];
 }
 
 /**
@@ -72,7 +93,13 @@ export function isAllowedIP(ip: string | null): boolean {
 /**
  * Generate a signed token for the given customer, invoice, and account
  */
-export function generateToken(customerId: string, invoiceUID: string, accountId: string): { token: string; expiresAt: number } {
+export function generateToken(
+  customerId: string,
+  invoiceUID: string,
+  accountId: string,
+  extendedInfo?: ExtendedCustomerInfo,
+  otherPayments?: OtherPayment[]
+): { token: string; expiresAt: number } {
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + TOKEN_EXPIRY_SECONDS;
 
@@ -82,6 +109,8 @@ export function generateToken(customerId: string, invoiceUID: string, accountId:
     accountId,
     exp: expiresAt,
     iat: now,
+    extendedInfo,
+    otherPayments,
   };
 
   // Encode payload as base64url

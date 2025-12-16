@@ -1,6 +1,6 @@
 'use client';
 
-import { CustomerData } from '@/types';
+import { CustomerData, ExtendedCustomerInfo } from '@/types';
 import { formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui';
 import {
@@ -9,19 +9,26 @@ import {
   Calendar,
   CreditCard,
   DollarSign,
+  User,
 } from 'lucide-react';
 
 interface CustomerHeaderProps {
   customer: CustomerData;
+  extendedInfo?: ExtendedCustomerInfo;
   onAddPaymentMethod: () => void;
   onPayNow: () => void;
 }
 
 export function CustomerHeader({
   customer,
+  extendedInfo,
   onAddPaymentMethod,
   onPayNow,
 }: CustomerHeaderProps) {
+  // Check if we have parent info to display
+  const hasParentInfo = extendedInfo && (
+    extendedInfo.fatherName || extendedInfo.motherName
+  );
   return (
     <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Main Customer Info */}
@@ -75,6 +82,67 @@ export function CustomerHeader({
           </div>
         </div>
       </div>
+
+      {/* Parent/Guardian Info */}
+      {hasParentInfo && (
+        <div className="px-3 sm:px-8 py-3 sm:py-4 bg-gray-50 border-t border-gray-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
+            {/* Father Info */}
+            {extendedInfo?.fatherName && (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-gray-500 font-medium">Father</p>
+                  <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.fatherName}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
+                    {extendedInfo.fatherEmail && (
+                      <a href={`mailto:${extendedInfo.fatherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
+                        <Mail className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{extendedInfo.fatherEmail}</span>
+                      </a>
+                    )}
+                    {extendedInfo.fatherCell && (
+                      <a href={`tel:${extendedInfo.fatherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
+                        <Phone className="w-3 h-3 flex-shrink-0" />
+                        {extendedInfo.fatherCell}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mother Info */}
+            {extendedInfo?.motherName && (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-pink-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-gray-500 font-medium">Mother</p>
+                  <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.motherName}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
+                    {extendedInfo.motherEmail && (
+                      <a href={`mailto:${extendedInfo.motherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
+                        <Mail className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{extendedInfo.motherEmail}</span>
+                      </a>
+                    )}
+                    {extendedInfo.motherCell && (
+                      <a href={`tel:${extendedInfo.motherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
+                        <Phone className="w-3 h-3 flex-shrink-0" />
+                        {extendedInfo.motherCell}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

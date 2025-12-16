@@ -161,3 +161,21 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
+
+// Extended customer info from external system
+export interface ExtendedCustomerInfo {
+  fatherName?: string;
+  fatherEmail?: string;
+  fatherCell?: string;
+  motherName?: string;
+  motherEmail?: string;
+  motherCell?: string;
+}
+
+// Other payments (Zelle, Cash, etc.) from external system
+export interface OtherPayment {
+  paymentDate: string;
+  amount: number;
+  paymentType: string;
+  description: string;
+}

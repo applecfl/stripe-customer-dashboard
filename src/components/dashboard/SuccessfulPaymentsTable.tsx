@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { InvoiceData, PaymentData, PaymentMethodData } from '@/types';
+import { InvoiceData, PaymentData, PaymentMethodData, OtherPayment } from '@/types';
 import { formatCurrency, formatDateTime, formatDate } from '@/lib/utils';
 import {
   Card,
@@ -28,18 +28,21 @@ import {
   RotateCcw,
   Clock,
   Undo2,
+  Banknote,
 } from 'lucide-react';
 
 interface SuccessfulPaymentsTableProps {
   invoices: InvoiceData[];
   payments: PaymentData[];
   paymentMethods?: PaymentMethodData[];
+  otherPayments?: OtherPayment[];
   onRefund: (payment: PaymentData) => void;
 }
 
 export function SuccessfulPaymentsTable({
   invoices,
   payments,
+  otherPayments,
   onRefund,
 }: SuccessfulPaymentsTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -47,6 +50,14 @@ export function SuccessfulPaymentsTable({
   const succeededPayments = payments
     .filter(p => p.status === 'succeeded')
     .sort((a, b) => b.created - a.created);
+
+  // Sort other payments by date (newest first)
+  const sortedOtherPayments = (otherPayments || [])
+    .map(p => ({
+      ...p,
+      timestamp: new Date(p.paymentDate).getTime() / 1000,
+    }))
+    .sort((a, b) => b.timestamp - a.timestamp);
 
   const toggleExpanded = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
@@ -64,7 +75,9 @@ export function SuccessfulPaymentsTable({
     return { invoiceIds, invoiceNumbers, invoiceAmounts, totalApplied, creditAdded, reason, invoiceUID };
   };
 
-  if (succeededPayments.length === 0) {
+  const totalPaymentsCount = succeededPayments.length + sortedOtherPayments.length;
+
+  if (totalPaymentsCount === 0) {
     return (
       <Card>
         <CardHeader>
@@ -87,7 +100,7 @@ export function SuccessfulPaymentsTable({
       <CardHeader
         action={
           <span className="text-sm text-gray-500">
-            {succeededPayments.length} payment{succeededPayments.length !== 1 ? 's' : ''}
+            {totalPaymentsCount} payment{totalPaymentsCount !== 1 ? 's' : ''}
           </span>
         }
       >
@@ -352,6 +365,106 @@ export function SuccessfulPaymentsTable({
                               {payment.refund_reason && (
                                 <p className="text-xs text-gray-500">Reason: {payment.refund_reason}</p>
                               )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
+
+            {/* Other Payments (Zelle, Cash, etc.) - No action buttons */}
+            {sortedOtherPayments.map((payment, index) => {
+              const paymentDate = new Date(payment.paymentDate);
+              const isExpanded = expandedId === `other-${index}`;
+
+              return (
+                <>
+                  <TableRow key={`other-${index}`} className="bg-amber-50/30">
+                    <TableCell>
+                      <div className="flex items-center gap-0.5 sm:gap-1">
+                        <button
+                          onClick={() => toggleExpanded(`other-${index}`)}
+                          className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                          )}
+                        </button>
+                        <div className="p-0.5 sm:p-1" title={payment.paymentType}>
+                          <Banknote className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600" />
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-semibold text-green-600 text-xs sm:text-sm">
+                        {formatCurrency(payment.amount * 100, 'usd')}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <span className="text-gray-600 text-xs sm:text-sm">
+                          {paymentDate.toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </span>
+                        <p className="text-[10px] sm:text-xs text-amber-700 font-medium mt-0.5">
+                          {payment.paymentType}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell align="right">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs text-amber-700 bg-amber-100 rounded-md font-medium">
+                        <Check className="w-3 h-3" />
+                        {payment.paymentType}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+
+                  {/* Expanded Details for Other Payments */}
+                  {isExpanded && (
+                    <tr key={`other-${index}-details`}>
+                      <td colSpan={4} className="bg-amber-50 px-4 py-3 border-b">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                          {/* Payment Type */}
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
+                              <Wallet className="w-3 h-3" />
+                              Payment Method
+                            </div>
+                            <p className="text-gray-700 font-medium">{payment.paymentType}</p>
+                          </div>
+
+                          {/* Payment Date */}
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
+                              <Calendar className="w-3 h-3" />
+                              Payment Date
+                            </div>
+                            <p className="text-gray-700">
+                              {paymentDate.toLocaleDateString('en-US', {
+                                weekday: 'long',
+                                month: 'long',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </p>
+                          </div>
+
+                          {/* Description */}
+                          {payment.description && (
+                            <div className="space-y-1 col-span-full">
+                              <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
+                                <MessageSquare className="w-3 h-3" />
+                                Description
+                              </div>
+                              <p className="text-gray-700">{payment.description}</p>
                             </div>
                           )}
                         </div>
