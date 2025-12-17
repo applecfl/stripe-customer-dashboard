@@ -9,9 +9,9 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { Modal, ModalFooter, Button } from '@/components/ui';
-import { CreditCard, Check, Plus, XCircle } from 'lucide-react';
+import { CreditCard, Check, Plus, XCircle, Calendar } from 'lucide-react';
 import { InvoiceData, PaymentMethodData } from '@/types';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -69,7 +69,7 @@ function ChangePaymentMethodForm({
     e.preventDefault();
 
     if (targetInvoices.length === 0) {
-      setError('No invoices to update');
+      setError('No payments to update');
       return;
     }
 
@@ -164,41 +164,65 @@ function ChangePaymentMethodForm({
             <CreditCard className="w-5 h-5 text-indigo-600 mt-0.5" />
             <div>
               <p className="font-medium text-indigo-800">
-                {mode === 'bulk' ? 'Update All Invoices' : 'Update Invoice Payment Method'}
+                {mode === 'bulk' ? 'Update All Payments' : 'Update Payment Method'}
               </p>
               <p className="text-sm text-indigo-600 mt-1">
                 {mode === 'bulk'
-                  ? `This will change the default payment method for ${targetInvoices.length} open/draft invoice${targetInvoices.length !== 1 ? 's' : ''}.`
-                  : 'Select a new payment method for this invoice.'}
+                  ? `This will change the default payment method for ${targetInvoices.length} payment${targetInvoices.length !== 1 ? 's' : ''}.`
+                  : 'Select a new payment method for this payment.'}
               </p>
             </div>
           </div>
         </div>
 
         {/* Invoice Summary for single mode */}
-        {mode === 'single' && invoice && (
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Invoice</span>
-              <span className="font-medium">{invoice.number || invoice.id.slice(0, 12)}</span>
+        {mode === 'single' && invoice && (() => {
+          const paymentDate = invoice.metadata?.scheduledFinalizeAt
+            ? parseInt(invoice.metadata.scheduledFinalizeAt, 10)
+            : invoice.automatically_finalizes_at || invoice.due_date;
+          return (
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Amount</span>
+                <span className="font-semibold text-gray-900">{formatCurrency(invoice.amount_due, invoice.currency)}</span>
+              </div>
+              {paymentDate && (
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-sm text-gray-600 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    Date
+                  </span>
+                  <span className="font-medium text-gray-700">
+                    {formatDate(paymentDate)}
+                  </span>
+                </div>
+              )}
             </div>
-            <div className="flex justify-between items-center mt-1">
-              <span className="text-sm text-gray-600">Amount</span>
-              <span className="font-medium">{formatCurrency(invoice.amount_due, invoice.currency)}</span>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Invoice Summary for bulk mode */}
         {mode === 'bulk' && targetInvoices.length > 0 && (
           <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 max-h-32 overflow-y-auto">
-            <p className="text-sm font-medium text-gray-700 mb-2">Invoices to update:</p>
-            {targetInvoices.map(inv => (
-              <div key={inv.id} className="flex justify-between items-center text-sm py-1">
-                <span className="text-gray-600">{inv.number || inv.id.slice(0, 12)}</span>
-                <span className="text-gray-900">{formatCurrency(inv.amount_due, inv.currency)}</span>
-              </div>
-            ))}
+            <p className="text-sm font-medium text-gray-700 mb-2">Payments to update:</p>
+            {targetInvoices.map(inv => {
+              const paymentDate = inv.metadata?.scheduledFinalizeAt
+                ? parseInt(inv.metadata.scheduledFinalizeAt, 10)
+                : inv.automatically_finalizes_at || inv.due_date;
+              return (
+                <div key={inv.id} className="flex justify-between items-center text-sm py-1">
+                  <span className="text-gray-600 flex items-center gap-1">
+                    {paymentDate && (
+                      <>
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(paymentDate)}
+                      </>
+                    )}
+                  </span>
+                  <span className="font-medium text-gray-900">{formatCurrency(inv.amount_due, inv.currency)}</span>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -210,9 +234,8 @@ function ChangePaymentMethodForm({
           <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-64 overflow-y-auto">
             {/* Add New Card Option */}
             <label
-              className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
-                showAddCard ? 'bg-indigo-50' : 'hover:bg-gray-50'
-              }`}
+              className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${showAddCard ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                }`}
             >
               <input
                 type="radio"
@@ -237,9 +260,8 @@ function ChangePaymentMethodForm({
 
             {/* Remove Card Option */}
             <label
-              className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
-                removeCard ? 'bg-red-50' : 'hover:bg-gray-50'
-              }`}
+              className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${removeCard ? 'bg-red-50' : 'hover:bg-gray-50'
+                }`}
             >
               <input
                 type="radio"
@@ -266,11 +288,10 @@ function ChangePaymentMethodForm({
             {paymentMethods.map((pm) => (
               <label
                 key={pm.id}
-                className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
-                  !showAddCard && !removeCard && selectedPaymentMethodId === pm.id
+                className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${!showAddCard && !removeCard && selectedPaymentMethodId === pm.id
                     ? 'bg-indigo-50'
                     : 'hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <input
                   type="radio"
@@ -284,9 +305,8 @@ function ChangePaymentMethodForm({
                   }}
                   className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
                 />
-                <div className={`w-10 h-6 rounded flex items-center justify-center ${
-                  pm.isDefault ? 'bg-indigo-100' : 'bg-gray-100'
-                }`}>
+                <div className={`w-10 h-6 rounded flex items-center justify-center ${pm.isDefault ? 'bg-indigo-100' : 'bg-gray-100'
+                  }`}>
                   <CreditCard className="w-4 h-4 text-gray-500" />
                 </div>
                 <div className="flex-1">

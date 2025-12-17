@@ -119,6 +119,7 @@ function DashboardContent() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'failed' | 'success' | 'future' | 'payment-methods'>('failed');
+  const [initialTabSet, setInitialTabSet] = useState(false);
   const [isChildUpdating, setIsChildUpdating] = useState(false);
 
   // Modal state
@@ -206,6 +207,17 @@ function DashboardContent() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Set initial tab based on whether there are failed payments (only once on load)
+  useEffect(() => {
+    if (!loading && !initialTabSet && invoices.length > 0) {
+      const hasFailedPayments = invoices.some(inv => inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0);
+      if (!hasFailedPayments) {
+        setActiveTab('success');
+      }
+      setInitialTabSet(true);
+    }
+  }, [loading, initialTabSet, invoices]);
 
   // Token refresh mechanism - refresh before expiry while page is open
   useEffect(() => {
@@ -315,7 +327,7 @@ function DashboardContent() {
       await refreshData();
     } catch (err) {
       if (err instanceof Error && err.message === 'Session expired') return;
-      setError(err instanceof Error ? err.message : 'Failed to update invoice');
+      setError(err instanceof Error ? err.message : 'Failed to update payment');
     }
   };
 
@@ -377,7 +389,7 @@ function DashboardContent() {
       await refreshData();
     } catch (err) {
       if (err instanceof Error && err.message === 'Session expired') return;
-      setError(err instanceof Error ? err.message : 'Failed to delete invoice');
+      setError(err instanceof Error ? err.message : 'Failed to delete payment');
     }
   };
 
@@ -505,7 +517,7 @@ function DashboardContent() {
 
     const failed = results.filter(r => !r.success);
     if (failed.length > 0) {
-      throw new Error(`Failed to update ${failed.length} invoice(s)`);
+      throw new Error(`Failed to update ${failed.length} payment(s)`);
     }
 
     await refreshData();
@@ -530,7 +542,7 @@ function DashboardContent() {
 
     const failed = results.filter(r => !r.success);
     if (failed.length > 0) {
-      throw new Error(`Failed to update ${failed.length} invoice(s)`);
+      throw new Error(`Failed to update ${failed.length} payment(s)`);
     }
 
     await refreshData();
@@ -544,7 +556,7 @@ function DashboardContent() {
       );
     } catch (err) {
       if (err instanceof Error && err.message === 'Session expired') return;
-      setError(err instanceof Error ? err.message : 'Failed to pause/resume invoices');
+      setError(err instanceof Error ? err.message : 'Failed to pause/resume payments');
     }
   };
 
@@ -564,7 +576,7 @@ function DashboardContent() {
       await refreshData();
     } catch (err) {
       if (err instanceof Error && err.message === 'Session expired') return;
-      setError(err instanceof Error ? err.message : 'Failed to delete invoices');
+      setError(err instanceof Error ? err.message : 'Failed to delete payments');
     }
   };
 
@@ -681,6 +693,7 @@ function DashboardContent() {
           otherPayments={otherPayments}
           onAddPaymentMethod={() => setShowAddPaymentMethodModal(true)}
           onPayNow={() => setPaymentModal({ isOpen: true })}
+          onTabChange={setActiveTab}
         />
 
         {/* Tabs */}

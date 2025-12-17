@@ -260,7 +260,7 @@ export function SuccessfulPaymentsTable({
                           <button
                             onClick={() => copyToClipboard(payment.id.startsWith('inv_paid_') && payment.invoice ? payment.invoice! : payment.id)}
                             className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
-                            title={`Copy ${payment.id.startsWith('inv_paid_') ? 'Invoice' : 'Payment'} ID`}
+                            title={`Copy ${payment.id.startsWith('inv_paid_') ? 'Payment' : 'Payment'} ID`}
                           >
                             {copiedId === (payment.id.startsWith('inv_paid_') && payment.invoice ? payment.invoice : payment.id) ? (
                               <Check className="w-3.5 h-3.5 text-green-600" />
@@ -287,7 +287,7 @@ export function SuccessfulPaymentsTable({
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
                               <Hash className="w-3 h-3" />
-                              {payment.id.startsWith('inv_paid_') ? 'Invoice (Paid Out-of-Band)' : 'Payment Intent'}
+                              {payment.id.startsWith('inv_paid_') ? 'Payment (Paid Out-of-Band)' : 'Payment Intent'}
                             </div>
                             <span className="font-mono text-xs text-gray-700">
                               {payment.id.startsWith('inv_paid_') ? payment.invoice : payment.id}
@@ -372,7 +372,7 @@ export function SuccessfulPaymentsTable({
                               </div>
                               {invoiceInfo.totalApplied > 0 && (
                                 <p className="text-xs text-gray-500">
-                                  Total applied to payments: {formatCurrency(invoiceInfo.totalApplied, payment.currency)}
+                                  Total applied: {formatCurrency(invoiceInfo.totalApplied, payment.currency)}
                                 </p>
                               )}
                             </div>

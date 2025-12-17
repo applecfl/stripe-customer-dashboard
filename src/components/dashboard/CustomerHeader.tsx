@@ -27,6 +27,7 @@ interface CustomerHeaderProps {
   otherPayments?: OtherPayment[];
   onAddPaymentMethod: () => void;
   onPayNow: () => void;
+  onTabChange?: (tab: 'failed' | 'success' | 'future') => void;
 }
 
 export function CustomerHeader({
@@ -38,6 +39,7 @@ export function CustomerHeader({
   otherPayments,
   onAddPaymentMethod,
   onPayNow,
+  onTabChange,
 }: CustomerHeaderProps) {
   const [copied, setCopied] = useState(false);
 
@@ -71,10 +73,12 @@ export function CustomerHeader({
     const totalFromToken = extendedInfo?.totalAmount ? extendedInfo.totalAmount * 100 : 0;
     const total = totalFromToken > 0 ? totalFromToken : (paid + scheduled + failed);
 
-    // Outstanding = total - paid - scheduled - failed
-    const outstanding = Math.max(0, total - paid - scheduled - failed);
+    // Outstanding = total - paid - scheduled - failed (can be negative for overpay)
+    const outstandingRaw = total - paid - scheduled - failed;
+    const outstanding = Math.max(0, outstandingRaw);
+    const overpay = outstandingRaw < 0 ? Math.abs(outstandingRaw) : 0;
 
-    return { paid, scheduled, failed, outstanding, total };
+    return { paid, scheduled, failed, outstanding, overpay, total };
   };
 
   const summary = calculateSummary();
@@ -92,178 +96,209 @@ export function CustomerHeader({
 
   return (
     <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      {/* Top Section - Customer Name, UID, Parent Info, and Actions */}
+      {/* Top Section - Customer Name, UID, and Actions */}
       <div className="px-3 sm:px-6 py-3 sm:py-5">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        {/* First Row - Customer Name/Avatar/UID + Action Buttons */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           {/* Left Side - Customer Info */}
-          <div className="flex-1 min-w-0">
-            {/* Customer Name Row */}
-            <div className="flex items-start gap-3 sm:gap-4">
-              {/* Avatar */}
-              <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-lg sm:rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-lg sm:text-2xl font-bold shadow-lg flex-shrink-0">
-                {customer.name?.charAt(0).toUpperCase() || 'C'}
-              </div>
-
-              {/* Name & UID */}
-              <div className="min-w-0 flex-1">
-                <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
-                  {customer.name || 'Unnamed Customer'}
-                </h1>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-xs text-gray-500">Customer since {formatDate(customer.created)}</span>
-                </div>
-                {/* Payment UID with copy */}
-                <button
-                  onClick={handleCopyUID}
-                  className="flex items-center gap-1.5 mt-1.5 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors group"
-                  title="Click to copy"
-                >
-                  <span className="text-[10px] sm:text-xs text-gray-500 font-mono truncate max-w-[200px]">
-                    {invoiceUID}
-                  </span>
-                  {copied ? (
-                    <Check className="w-3 h-3 text-green-500 flex-shrink-0" />
-                  ) : (
-                    <Copy className="w-3 h-3 text-gray-400 group-hover:text-gray-600 flex-shrink-0" />
-                  )}
-                </button>
-              </div>
+          <div className="flex items-start gap-3 sm:gap-4">
+            {/* Avatar */}
+            <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-lg sm:rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-lg sm:text-2xl font-bold shadow-lg flex-shrink-0">
+              {customer.name?.charAt(0).toUpperCase() || 'C'}
             </div>
 
-            {/* Parent/Guardian Info - Below Name */}
-            {hasParentInfo && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                {/* Father Info */}
-                {extendedInfo?.fatherName && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs text-gray-500 font-medium">Father</p>
-                      <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.fatherName}</p>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
-                        {extendedInfo.fatherEmail && (
-                          <a href={`mailto:${extendedInfo.fatherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
-                            <Mail className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{extendedInfo.fatherEmail}</span>
-                          </a>
-                        )}
-                        {extendedInfo.fatherCell && (
-                          <a href={`tel:${extendedInfo.fatherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
-                            <Phone className="w-3 h-3 flex-shrink-0" />
-                            {extendedInfo.fatherCell}
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Mother Info */}
-                {extendedInfo?.motherName && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4 text-pink-600" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs text-gray-500 font-medium">Mother</p>
-                      <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.motherName}</p>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
-                        {extendedInfo.motherEmail && (
-                          <a href={`mailto:${extendedInfo.motherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
-                            <Mail className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{extendedInfo.motherEmail}</span>
-                          </a>
-                        )}
-                        {extendedInfo.motherCell && (
-                          <a href={`tel:${extendedInfo.motherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
-                            <Phone className="w-3 h-3 flex-shrink-0" />
-                            {extendedInfo.motherCell}
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+            {/* Name & UID */}
+            <div className="min-w-0 flex-1">
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
+                {customer.name || 'Unnamed Customer'}
+              </h1>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-xs text-gray-500">Customer since {formatDate(customer.created)}</span>
               </div>
-            )}
+              {/* Payment UID with copy */}
+              <button
+                onClick={handleCopyUID}
+                className="flex items-center gap-1.5 mt-1.5 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors group"
+                title="Click to copy"
+              >
+                <span className="text-[10px] sm:text-xs text-gray-500 font-mono truncate max-w-[200px]">
+                  {invoiceUID}
+                </span>
+                {copied ? (
+                  <Check className="w-3 h-3 text-green-500 flex-shrink-0" />
+                ) : (
+                  <Copy className="w-3 h-3 text-gray-400 group-hover:text-gray-600 flex-shrink-0" />
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Right Side - Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-3 lg:flex-shrink-0 lg:ml-4">
-            <Button variant="primary" size="sm" onClick={onPayNow} className="flex-1 lg:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            <Button variant="primary" size="sm" onClick={onPayNow} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Charge</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={onAddPaymentMethod} className="flex-1 lg:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
+            <Button variant="outline" size="sm" onClick={onAddPaymentMethod} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
               <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Add Card</span>
               <span className="sm:hidden">Add</span>
             </Button>
           </div>
         </div>
+
+        {/* Second Row - Parent/Guardian Info + Total Amount - Full Width */}
+        {hasParentInfo && (
+          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-4 sm:gap-8">
+            {/* Father Info */}
+            {extendedInfo?.fatherName && (
+              <div className="flex items-start gap-3 flex-shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-500 font-medium">Father</p>
+                  <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.fatherName}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
+                    {extendedInfo.fatherEmail && (
+                      <a href={`mailto:${extendedInfo.fatherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
+                        <Mail className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{extendedInfo.fatherEmail}</span>
+                      </a>
+                    )}
+                    {extendedInfo.fatherCell && (
+                      <a href={`tel:${extendedInfo.fatherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
+                        <Phone className="w-3 h-3 flex-shrink-0" />
+                        {extendedInfo.fatherCell}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mother Info */}
+            {extendedInfo?.motherName && (
+              <div className="flex items-start gap-3 flex-shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-pink-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-500 font-medium">Mother</p>
+                  <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.motherName}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
+                    {extendedInfo.motherEmail && (
+                      <a href={`mailto:${extendedInfo.motherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
+                        <Mail className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{extendedInfo.motherEmail}</span>
+                      </a>
+                    )}
+                    {extendedInfo.motherCell && (
+                      <a href={`tel:${extendedInfo.motherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
+                        <Phone className="w-3 h-3 flex-shrink-0" />
+                        {extendedInfo.motherCell}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Total Amount - Fills remaining space */}
+            <div className="flex items-start gap-3 flex-1">
+              <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                <DollarSign className="w-5 h-5 text-purple-600" />
+              </div>
+              <div className="flex-1">
+                {paymentName && paymentName !== 'Total' && (
+                  <p className="text-sm sm:text-base text-gray-900">
+                    <span className="text-gray-500 font-medium">Description: </span>
+                    <span className="text-purple-700 font-semibold">{paymentName}</span>
+                  </p>
+                )}
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                  <span className="text-sm sm:text-base text-gray-500 font-medium">Total: </span>
+                  {formatCurrency(summary.total, currency)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Payment Summary Section - Bottom */}
       <div className="px-3 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-t border-indigo-100">
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
-          {/* Paid */}
-          <div className="bg-white rounded-lg p-2 sm:p-3 border border-green-200 shadow-sm flex flex-col items-center justify-center text-center h-full">
-            <div className="flex items-center gap-1.5 mb-1">
-              <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-              <span className="text-[10px] sm:text-xs text-gray-500 font-medium">Paid</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          {/* Successful Payments */}
+          <button
+            type="button"
+            onClick={() => onTabChange?.('success')}
+            className="bg-white rounded-lg p-3 sm:p-4 border border-green-200 shadow-sm flex flex-col items-center justify-center text-center h-full cursor-pointer hover:bg-green-50 hover:border-green-300 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <CheckCircle className="w-4 h-4 text-green-500" />
+              <span className="text-xs sm:text-sm text-gray-600 font-medium">Successful Payments</span>
             </div>
-            <p className="text-base sm:text-lg font-semibold text-green-600">
+            <p className="text-lg sm:text-2xl font-bold text-green-600">
               {formatCurrency(summary.paid, currency)}
             </p>
-          </div>
+          </button>
 
-          {/* Scheduled */}
-          <div className="bg-white rounded-lg p-2 sm:p-3 border border-indigo-200 shadow-sm flex flex-col items-center justify-center text-center h-full">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Clock className="w-3.5 h-3.5 text-indigo-500" />
-              <span className="text-[10px] sm:text-xs text-gray-500 font-medium">Scheduled</span>
+          {/* Scheduled Payments */}
+          <button
+            type="button"
+            onClick={() => onTabChange?.('future')}
+            className="bg-white rounded-lg p-3 sm:p-4 border border-indigo-200 shadow-sm flex flex-col items-center justify-center text-center h-full cursor-pointer hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Clock className="w-4 h-4 text-indigo-500" />
+              <span className="text-xs sm:text-sm text-gray-600 font-medium">Scheduled Payments</span>
             </div>
-            <p className="text-base sm:text-lg font-semibold text-indigo-600">
+            <p className="text-lg sm:text-2xl font-bold text-indigo-600">
               {formatCurrency(summary.scheduled, currency)}
             </p>
-          </div>
+          </button>
 
-          {/* Failed */}
-          <div className="bg-white rounded-lg p-2 sm:p-3 border border-red-200 shadow-sm flex flex-col items-center justify-center text-center h-full">
-            <div className="flex items-center gap-1.5 mb-1">
-              <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
-              <span className="text-[10px] sm:text-xs text-gray-500 font-medium">Failed</span>
+          {/* Failed Payments */}
+          <button
+            type="button"
+            onClick={() => onTabChange?.('failed')}
+            className="bg-white rounded-lg p-3 sm:p-4 border border-red-200 shadow-sm flex flex-col items-center justify-center text-center h-full cursor-pointer hover:bg-red-50 hover:border-red-300 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <span className="text-xs sm:text-sm text-gray-600 font-medium">Failed Payments</span>
             </div>
-            <p className="text-base sm:text-lg font-semibold text-red-600">
+            <p className="text-lg sm:text-2xl font-bold text-red-600">
               {formatCurrency(summary.failed, currency)}
             </p>
-          </div>
+          </button>
 
-          {/* Outstanding */}
-          <div className="bg-white rounded-lg p-2 sm:p-3 border border-amber-200 shadow-sm flex flex-col items-center justify-center text-center h-full">
-            <div className="flex items-center gap-1.5 mb-1">
-              <XCircle className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-[10px] sm:text-xs text-gray-500 font-medium">Outstanding</span>
+          {/* Outstanding or Overpay */}
+          <div className={`bg-white rounded-lg p-3 sm:p-4 border shadow-sm flex flex-col items-center justify-center text-center h-full ${
+            summary.overpay > 0 ? 'border-green-200' : 'border-amber-200'
+          }`}>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              {summary.overpay > 0 ? (
+                <>
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  <span className="text-xs sm:text-sm text-gray-600 font-medium">Overpay</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-4 h-4 text-amber-500" />
+                  <span className="text-xs sm:text-sm text-gray-600 font-medium">Outstanding</span>
+                </>
+              )}
             </div>
-            <p className="text-base sm:text-lg font-semibold text-amber-600">
-              {formatCurrency(summary.outstanding, currency)}
+            <p className={`text-lg sm:text-2xl font-bold ${
+              summary.overpay > 0 ? 'text-green-600' : 'text-amber-600'
+            }`}>
+              {summary.overpay > 0
+                ? formatCurrency(summary.overpay, currency)
+                : formatCurrency(summary.outstanding, currency)
+              }
             </p>
-          </div>
-
-          {/* Total Amount */}
-          <div className="col-span-2 sm:col-span-1 bg-white rounded-lg p-2 sm:p-3 border border-purple-200 shadow-sm flex flex-col items-center justify-center text-center h-full">
-            <div className="flex items-center gap-1.5 mb-1">
-              <DollarSign className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
-              <span className="text-[10px] sm:text-xs text-gray-500 font-medium">Total</span>
-            </div>
-            <p className="text-base sm:text-lg font-bold text-gray-900">
-              {formatCurrency(summary.total, currency)}
-            </p>
-            {paymentName && paymentName !== 'Total' && (
-              <p className="text-[10px] sm:text-xs text-purple-600 font-medium mt-0.5 break-words">{paymentName}</p>
-            )}
           </div>
         </div>
       </div>

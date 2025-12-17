@@ -91,7 +91,7 @@ export function AddCreditModal({
 
     // Require at least one invoice to be selected
     if (payableInvoices.length > 0 && !applyToAll && selectedInvoiceIds.length === 0) {
-      setError('Please select at least one invoice to apply the credit to');
+      setError('Please select at least one payment to apply the credit to');
       return;
     }
 
@@ -146,7 +146,7 @@ export function AddCreditModal({
             <div>
               <p className="font-medium text-green-800">Add Credit to Customer</p>
               <p className="text-sm text-green-600 mt-1">
-                Credit will be applied to selected invoices. Please select at least one invoice.
+                Credit will be applied to selected payments. Please select at least one payment.
               </p>
             </div>
           </div>
@@ -178,7 +178,7 @@ export function AddCreditModal({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-gray-700">
-                  Apply to Invoices
+                  Apply to Payments
                 </label>
                 <button
                   type="button"
@@ -229,16 +229,16 @@ export function AddCreditModal({
               </div>
               {(selectedInvoiceIds.length > 0 || applyToAll) && (
                 <p className="text-xs text-gray-500 mt-2">
-                  Total to apply to invoices: {formatCurrency(applyToAll ? payableInvoices.reduce((sum, inv) => {
+                  Total to apply to payments: {formatCurrency(applyToAll ? payableInvoices.reduce((sum, inv) => {
                     const metaPaid = inv.metadata?.totalPaid ? parseInt(inv.metadata.totalPaid) : 0;
                     return sum + (inv.status === 'draft' ? Math.max(0, inv.amount_due - metaPaid) : inv.amount_remaining);
                   }, 0) : selectedTotal, currency)}
                 </p>
               )}
               <p className="text-xs text-gray-500 mt-1">
-                Credit is applied sequentially (first invoice, then second, etc.).
+                Credit is applied sequentially (first payment, then second, etc.).
                 {selectedInvoiceIds.length > 0 && ' Remaining credit stays on account.'}
-                {' Draft invoices will be finalized.'}
+                {' Draft payments will be finalized.'}
               </p>
             </div>
           )}
@@ -246,7 +246,7 @@ export function AddCreditModal({
           {payableInvoices.length === 0 && (
             <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
               <p className="text-sm text-amber-700">
-                No open or draft invoices available. Credit can only be added when there are invoices to apply it to.
+                No open or draft payments available. Credit can only be added when there are payments to apply it to.
               </p>
             </div>
           )}

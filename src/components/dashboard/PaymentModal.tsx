@@ -11,7 +11,7 @@ import {
 import { InvoiceData, PaymentMethodData } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Modal, ModalFooter, Button, Input, Textarea } from '@/components/ui';
-import { CreditCard, Plus, Check, FileText, AlertTriangle, CircleDollarSign } from 'lucide-react';
+import { CreditCard, Plus, Check, FileText, AlertTriangle, CircleDollarSign, Calendar, Clock } from 'lucide-react';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -120,6 +120,8 @@ function PaymentForm({
   const [loading, setLoading] = useState(false);
   const [showAddCard, setShowAddCard] = useState(false);
   const [saveCard, setSaveCard] = useState(false);
+  const [scheduleMode, setScheduleMode] = useState(false); // Toggle between pay now and schedule
+  const [scheduledDate, setScheduledDate] = useState(''); // Date string for scheduling
 
   // For invoice selection - now includes the primary invoice if provided
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>(() =>
@@ -374,17 +376,59 @@ function PaymentForm({
       return;
     }
 
-    // If no primary invoice and no invoices selected, payment will auto-apply to failed then draft invoices
-
-    // Need payment method (either selected or adding new)
-    if (!showAddCard && !paymentMethodId) {
-      onFormError('Please select a payment method or add a new card');
-      return;
-    }
-
     // Verify token is available for API authentication
     if (!token) {
       onFormError('Session expired. Please refresh the page.');
+      return;
+    }
+
+    // SCHEDULE MODE: Create a draft invoice instead of paying
+    if (scheduleMode) {
+      if (!scheduledDate) {
+        onFormError('Please select a date for the scheduled payment');
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        // Convert date string to Unix timestamp (start of day in local timezone)
+        const dateObj = new Date(scheduledDate + 'T00:00:00');
+        const scheduledTimestamp = Math.floor(dateObj.getTime() / 1000);
+
+        const response = await fetch(withToken('/api/stripe/invoices/create-draft'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerId,
+            amount: payAmount,
+            currency,
+            description: note || 'Scheduled Payment',
+            invoiceUID,
+            scheduledDate: scheduledTimestamp,
+            accountId,
+          }),
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error);
+        }
+
+        onSuccess();
+        onFormSuccess();
+      } catch (err) {
+        onFormError(err instanceof Error ? err.message : 'Failed to create scheduled payment');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // PAY NOW MODE: Process payment immediately
+    // Need payment method (either selected or adding new)
+    if (!showAddCard && !paymentMethodId) {
+      onFormError('Please select a payment method or add a new card');
       return;
     }
 
@@ -484,6 +528,8 @@ function PaymentForm({
     setNote('');
     setShowAddCard(false);
     setSaveCard(false);
+    setScheduleMode(false);
+    setScheduledDate('');
     setSelectedInvoices([]);
     onClose();
   };
@@ -697,7 +743,9 @@ function PaymentForm({
           )}
         </div>
 
-        {/* Payment Method Selection */}
+        {/* Payment Method Selection - hidden in schedule mode */}
+        {!scheduleMode && (
+        <>
         <div className="space-y-2">
           <label className="block text-sm font-medium text-gray-700">
             Payment Method
@@ -810,6 +858,8 @@ function PaymentForm({
             </label>
           </div>
         )}
+        </>
+        )}
 
         {/* Note */}
         <Textarea
@@ -820,23 +870,71 @@ function PaymentForm({
           rows={2}
         />
 
+        {/* Schedule Mode Toggle */}
+        <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={scheduleMode}
+              onChange={(e) => {
+                setScheduleMode(e.target.checked);
+                if (!e.target.checked) {
+                  setScheduledDate('');
+                }
+              }}
+              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+            />
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800">Schedule as future payment instead of paying now</span>
+            </div>
+          </label>
 
-
-
+          {/* Date Picker - shown when schedule mode is enabled */}
+          {scheduleMode && (
+            <div className="mt-3 pl-7">
+              <label className="block text-sm font-medium text-amber-700 mb-1">
+                Schedule Date
+              </label>
+              <input
+                type="date"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm bg-white"
+              />
+              <p className="text-xs text-amber-600 mt-1">
+                A scheduled payment will be created and charged on this date
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       <ModalFooter>
         <Button variant="secondary" onClick={handleClose} disabled={loading}>
           Cancel
         </Button>
-        <Button
-          type="submit"
-          loading={loading}
-          disabled={!stripe && showAddCard}
-        >
-          <CreditCard className="w-4 h-4" />
-          Pay {payAmount > 0 ? formatCurrency(payAmount, currency) : ''}
-        </Button>
+        {scheduleMode ? (
+          <Button
+            type="submit"
+            loading={loading}
+            disabled={!scheduledDate || payAmount <= 0}
+            className="bg-amber-600 hover:bg-amber-700"
+          >
+            <Clock className="w-4 h-4" />
+            Schedule {payAmount > 0 ? formatCurrency(payAmount, currency) : ''}
+          </Button>
+        ) : (
+          <Button
+            type="submit"
+            loading={loading}
+            disabled={!stripe && showAddCard}
+          >
+            <CreditCard className="w-4 h-4" />
+            Pay {payAmount > 0 ? formatCurrency(payAmount, currency) : ''}
+          </Button>
+        )}
       </ModalFooter>
     </form>
   );

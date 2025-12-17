@@ -74,6 +74,22 @@ export function SendReminderModal({
     ? `Payment Reminder - ${formattedAmount} Due ${invoiceDate}`
     : `Payment Reminder - ${formattedAmount} Due`;
 
+  // Get recipient name from extendedInfo (father and mother names) or fallback to customer name
+  const getRecipientName = (): string => {
+    const names: string[] = [];
+    if (extendedInfo?.fatherName) {
+      names.push(extendedInfo.fatherName);
+    }
+    if (extendedInfo?.motherName) {
+      names.push(extendedInfo.motherName);
+    }
+    // If we have parent names, use them; otherwise fallback to customer name
+    if (names.length > 0) {
+      return names.join(' and ');
+    }
+    return customer?.name || '';
+  };
+
   // Collect initial emails from extendedInfo and customer
   const getInitialEmails = (): string[] => {
     const emailSet = new Set<string>();
@@ -92,10 +108,11 @@ export function SendReminderModal({
   };
 
   // Generate the base HTML template
+  const recipientName = getRecipientName();
   const baseHtml = useMemo(() => {
     if (!invoice || !customer) return '';
     return generatePaymentReminderHtml({
-      customerName: customer.name || '',
+      customerName: recipientName,
       organizationName: 'LEC',
       logoUrl: 'https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png',
       dueDate: invoiceDate,
@@ -104,7 +121,7 @@ export function SendReminderModal({
       formattedAmount,
       paymentLink,
     });
-  }, [invoice, customer, invoiceDate, paymentMethod, formattedAmount, paymentLink]);
+  }, [invoice, customer, recipientName, invoiceDate, paymentMethod, formattedAmount, paymentLink]);
 
   // Initialize when modal opens
   useEffect(() => {
@@ -227,7 +244,7 @@ export function SendReminderModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerName: customer.name,
+          customerName: recipientName,
           customerEmails: emails,
           amount: invoice.amount_due,
           currency: invoice.currency,

@@ -422,7 +422,7 @@ export function FutureInvoicesTable({
         });
         const data = await res.json();
         if (!data.success) {
-          throw new Error(data.error || `Failed to delete invoice ${invoiceId}`);
+          throw new Error(data.error || `Failed to delete payment ${invoiceId}`);
         }
       }
 
@@ -437,7 +437,7 @@ export function FutureInvoicesTable({
       onRefresh();
     } catch (err) {
       console.error('Failed to delete invoice(s):', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete invoice(s)');
+      setError(err instanceof Error ? err.message : 'Failed to delete payment(s)');
     } finally {
       setDeleting(false);
     }
@@ -481,7 +481,7 @@ export function FutureInvoicesTable({
         });
         const data = await res.json();
         if (!data.success) {
-          throw new Error(data.error || `Failed to update amount for invoice ${invoiceId}`);
+          throw new Error(data.error || `Failed to update amount for payment ${invoiceId}`);
         }
       }
 
@@ -537,7 +537,7 @@ export function FutureInvoicesTable({
         });
         const data = await res.json();
         if (!data.success) {
-          throw new Error(data.error || `Failed to update date for invoice ${invoiceId}`);
+          throw new Error(data.error || `Failed to update date for payment ${invoiceId}`);
         }
       }
 
@@ -580,7 +580,7 @@ export function FutureInvoicesTable({
         });
         const data = await res.json();
         if (!data.success) {
-          throw new Error(data.error || `Failed to update payment method for invoice ${invoiceId}`);
+          throw new Error(data.error || `Failed to update payment method for payment ${invoiceId}`);
         }
       }
 
@@ -617,7 +617,7 @@ export function FutureInvoicesTable({
       });
       const data = await res.json();
       if (!data.success) {
-        throw new Error(data.error || `Failed to ${pause ? 'pause' : 'resume'} invoice`);
+        throw new Error(data.error || `Failed to ${pause ? 'pause' : 'resume'} payment`);
       }
       // Close modal if open
       setPauseModal({ isOpen: false, invoiceId: null, invoice: null });
@@ -625,7 +625,7 @@ export function FutureInvoicesTable({
       onRefresh();
     } catch (err) {
       console.error(`Failed to ${pause ? 'pause' : 'resume'} invoice:`, err);
-      setError(err instanceof Error ? err.message : `Failed to ${pause ? 'pause' : 'resume'} invoice`);
+      setError(err instanceof Error ? err.message : `Failed to ${pause ? 'pause' : 'resume'} payment`);
     } finally {
       setPausingId(null);
     }
@@ -649,7 +649,7 @@ export function FutureInvoicesTable({
         });
         const data = await res.json();
         if (!data.success) {
-          throw new Error(data.error || `Failed to ${pause ? 'pause' : 'resume'} invoice ${invoiceId}`);
+          throw new Error(data.error || `Failed to ${pause ? 'pause' : 'resume'} payment ${invoiceId}`);
         }
       }
 
@@ -657,7 +657,7 @@ export function FutureInvoicesTable({
       onRefresh();
     } catch (err) {
       console.error(`Failed to bulk ${pause ? 'pause' : 'resume'}:`, err);
-      setError(err instanceof Error ? err.message : `Failed to ${pause ? 'pause' : 'resume'} invoices`);
+      setError(err instanceof Error ? err.message : `Failed to ${pause ? 'pause' : 'resume'} payments`);
     } finally {
       setBulkSaving(false);
     }
@@ -680,7 +680,7 @@ export function FutureInvoicesTable({
       <CardHeader
         action={
           <span className="text-sm text-gray-500">
-            {draftInvoices.length} invoice{draftInvoices.length !== 1 ? 's' : ''}
+            {draftInvoices.length} payment{draftInvoices.length !== 1 ? 's' : ''}
           </span>
         }
       >
@@ -781,8 +781,18 @@ export function FutureInvoicesTable({
         <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow hoverable={false}>
-              {/* Checkbox column */}
-              <TableHead className="w-[40px]"></TableHead>
+              {/* Checkbox column - hide select all when items are selected (toolbar shows it) */}
+              <TableHead className="w-[40px]">
+                {draftInvoices.length > 0 && selectedIds.size === 0 && (
+                  <button
+                    onClick={toggleSelectAll}
+                    className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                    title="Select all"
+                  >
+                    <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                  </button>
+                )}
+              </TableHead>
               <TableHead className="w-[40px]"></TableHead>
               <TableHead className="w-[100px]">Amount</TableHead>
               <TableHead className="w-[100px]">Date</TableHead>
@@ -1105,7 +1115,7 @@ export function FutureInvoicesTable({
                           <button
                             onClick={() => copyToClipboard(invoice.id)}
                             className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
-                            title={`Copy Invoice ID: ${invoice.id}`}
+                            title={`Copy Payment ID: ${invoice.id}`}
                           >
                             {copiedId === invoice.id ? (
                               <Check className="w-3.5 h-3.5 text-green-600" />
@@ -1201,7 +1211,7 @@ export function FutureInvoicesTable({
       >
         <div className="space-y-4">
           <p className="text-gray-600">
-            Set a new amount for {selectedIds.size} selected invoice{selectedIds.size !== 1 ? 's' : ''}.
+            Set a new amount for {selectedIds.size} selected payment{selectedIds.size !== 1 ? 's' : ''}.
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">New Amount</label>
@@ -1224,7 +1234,7 @@ export function FutureInvoicesTable({
             </Button>
             <Button variant="primary" onClick={handleBulkChangeAmount} disabled={bulkSaving || !bulkEditValue}>
               {bulkSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Apply to {selectedIds.size} invoice{selectedIds.size !== 1 ? 's' : ''}
+              Apply to {selectedIds.size} payment{selectedIds.size !== 1 ? 's' : ''}
             </Button>
           </ModalFooter>
         </div>
@@ -1239,7 +1249,7 @@ export function FutureInvoicesTable({
       >
         <div className="space-y-4">
           <p className="text-gray-600">
-            Set the start date for {selectedIds.size} invoice{selectedIds.size !== 1 ? 's' : ''}. Each subsequent invoice will be scheduled for the same day in the following month.
+            Set the start date for {selectedIds.size} payment{selectedIds.size !== 1 ? 's' : ''}. Each subsequent payment will be scheduled for the same day in the following month.
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
@@ -1263,7 +1273,7 @@ export function FutureInvoicesTable({
             </Button>
             <Button variant="primary" onClick={handleBulkChangeDate} disabled={bulkSaving || !bulkEditValue}>
               {bulkSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Apply to {selectedIds.size} invoice{selectedIds.size !== 1 ? 's' : ''}
+              Apply to {selectedIds.size} payment{selectedIds.size !== 1 ? 's' : ''}
             </Button>
           </ModalFooter>
         </div>
@@ -1278,7 +1288,7 @@ export function FutureInvoicesTable({
       >
         <div className="space-y-4">
           <p className="text-gray-600">
-            Select a payment method for {selectedIds.size} selected invoice{selectedIds.size !== 1 ? 's' : ''}.
+            Select a payment method for {selectedIds.size} selected payment{selectedIds.size !== 1 ? 's' : ''}.
           </p>
           <div className="space-y-2">
             {paymentMethods.map((method) => (
@@ -1386,7 +1396,7 @@ export function FutureInvoicesTable({
               ) : (
                 <>
                   <Pause className="w-4 h-4" />
-                  Pause Invoice
+                  Pause Payment
                 </>
               )}
             </Button>

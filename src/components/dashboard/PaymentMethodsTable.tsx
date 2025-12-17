@@ -15,6 +15,8 @@ import {
   TableHead,
   TableCell,
   TableEmptyState,
+  Modal,
+  ModalFooter,
 } from '@/components/ui';
 import { CreditCard, Star, Trash2, Plus, FileText, AlertTriangle } from 'lucide-react';
 
@@ -49,6 +51,12 @@ export function PaymentMethodsTable({
 }: PaymentMethodsTableProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: 'delete' | 'default' | 'batchDelete';
+    pm: PaymentMethodData | null;
+  }>({ isOpen: false, type: 'delete', pm: null });
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Get set of payment method IDs that are connected to open/draft invoices
   const linkedPaymentMethodIds = useMemo(() => {
@@ -112,6 +120,37 @@ export function PaymentMethodsTable({
     }
   };
 
+  // Confirm action handlers
+  const handleConfirmAction = async () => {
+    if (!confirmModal.pm && confirmModal.type !== 'batchDelete') return;
+
+    setActionLoading(true);
+    try {
+      if (confirmModal.type === 'delete' && confirmModal.pm) {
+        await onDelete(confirmModal.pm);
+      } else if (confirmModal.type === 'default' && confirmModal.pm) {
+        await onSetDefault(confirmModal.pm);
+      } else if (confirmModal.type === 'batchDelete') {
+        await handleBatchDelete();
+      }
+      setConfirmModal({ isOpen: false, type: 'delete', pm: null });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openDeleteConfirm = (pm: PaymentMethodData) => {
+    setConfirmModal({ isOpen: true, type: 'delete', pm });
+  };
+
+  const openDefaultConfirm = (pm: PaymentMethodData) => {
+    setConfirmModal({ isOpen: true, type: 'default', pm });
+  };
+
+  const openBatchDeleteConfirm = () => {
+    setConfirmModal({ isOpen: true, type: 'batchDelete', pm: null });
+  };
+
   return (
     <Card>
       <CardHeader
@@ -121,7 +160,7 @@ export function PaymentMethodsTable({
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={handleBatchDelete}
+                onClick={openBatchDeleteConfirm}
                 loading={deleting}
                 className="text-red-600 hover:text-red-700"
               >
@@ -273,7 +312,7 @@ export function PaymentMethodsTable({
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => onSetDefault(pm)}
+                            onClick={() => openDefaultConfirm(pm)}
                             title="Set as Default"
                           >
                             <Star className="w-4 h-4" />
@@ -283,7 +322,7 @@ export function PaymentMethodsTable({
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => onDelete(pm)}
+                            onClick={() => openDeleteConfirm(pm)}
                             title="Remove Card"
                           >
                             <Trash2 className="w-4 h-4 text-red-500" />
@@ -307,6 +346,119 @@ export function PaymentMethodsTable({
           </TableBody>
         </Table>
       </CardContent>
+
+      {/* Confirmation Modal */}
+      <Modal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, type: 'delete', pm: null })}
+        title={
+          confirmModal.type === 'delete'
+            ? 'Delete Payment Method'
+            : confirmModal.type === 'default'
+              ? 'Set as Default'
+              : 'Delete Payment Methods'
+        }
+        size="sm"
+      >
+        <div className="space-y-4">
+          {confirmModal.type === 'delete' && confirmModal.pm && (
+            <>
+              <p className="text-gray-600">
+                Are you sure you want to delete this payment method?
+              </p>
+              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-6 rounded bg-gray-100 flex items-center justify-center">
+                    <CreditCard className="w-4 h-4 text-gray-500" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      <span className="capitalize">{confirmModal.pm.card?.brand}</span>
+                      {' •••• '}
+                      {confirmModal.pm.card?.last4}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Expires {confirmModal.pm.card?.exp_month.toString().padStart(2, '0')}/{confirmModal.pm.card?.exp_year}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {confirmModal.type === 'default' && confirmModal.pm && (
+            <>
+              <p className="text-gray-600">
+                Set this card as the default payment method for all future payments?
+              </p>
+              <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-6 rounded bg-indigo-100 flex items-center justify-center">
+                    <CreditCard className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      <span className="capitalize">{confirmModal.pm.card?.brand}</span>
+                      {' •••• '}
+                      {confirmModal.pm.card?.last4}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Expires {confirmModal.pm.card?.exp_month.toString().padStart(2, '0')}/{confirmModal.pm.card?.exp_year}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {confirmModal.type === 'batchDelete' && (
+            <>
+              <p className="text-gray-600">
+                Are you sure you want to delete {selectedIds.length} payment method{selectedIds.length !== 1 ? 's' : ''}?
+              </p>
+              <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                <p className="text-sm text-red-700">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </>
+          )}
+
+          <ModalFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmModal({ isOpen: false, type: 'delete', pm: null })}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={confirmModal.type === 'default' ? 'primary' : 'danger'}
+              onClick={handleConfirmAction}
+              loading={actionLoading}
+            >
+              {confirmModal.type === 'delete' && (
+                <>
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </>
+              )}
+              {confirmModal.type === 'default' && (
+                <>
+                  <Star className="w-4 h-4" />
+                  Set as Default
+                </>
+              )}
+              {confirmModal.type === 'batchDelete' && (
+                <>
+                  <Trash2 className="w-4 h-4" />
+                  Delete {selectedIds.length} Card{selectedIds.length !== 1 ? 's' : ''}
+                </>
+              )}
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
     </Card>
   );
 }

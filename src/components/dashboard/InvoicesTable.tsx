@@ -121,7 +121,7 @@ export function InvoicesTable({
     <Card>
       <CardHeader action={
         <span className="text-sm text-gray-500">
-          {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
+          {invoices.length} payment{invoices.length !== 1 ? 's' : ''}
         </span>
       }>
         <div className="flex items-center gap-2">
@@ -134,7 +134,7 @@ export function InvoicesTable({
           <TableHeader>
             <TableRow hoverable={false}>
               <TableHead>{' '}</TableHead>
-              <TableHead>Invoice</TableHead>
+              <TableHead>Payment</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Payment Method</TableHead>
               <TableHead align="right">Amount</TableHead>
@@ -147,7 +147,7 @@ export function InvoicesTable({
           <TableBody>
             {filteredInvoices.length === 0 ? (
               <TableEmptyState
-                message="No invoices found"
+                message="No payments found"
                 icon={<FileText className="w-12 h-12" />}
               />
             ) : (
