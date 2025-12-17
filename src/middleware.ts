@@ -123,6 +123,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow update-uids endpoint - it uses IP-based auth
+  if (pathname === '/api/stripe/payments/update-uids') {
+    return NextResponse.next();
+  }
+
   // Allow static files, _next, etc.
   if (
     pathname.startsWith('/_next') ||

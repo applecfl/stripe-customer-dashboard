@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
+import { isAllowedIP, getClientIP } from '@/lib/auth';
 
 interface UpdateUIDItem {
   PaymentID: string;
@@ -18,6 +19,16 @@ export async function POST(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse<UpdateResult[]>>> {
   try {
+    // Validate IP is in whitelist
+    const clientIP = getClientIP(request);
+    if (!isAllowedIP(clientIP)) {
+      console.warn(`Update UIDs rejected - IP not allowed: ${clientIP}`);
+      return NextResponse.json(
+        { success: false, error: 'Access denied' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { Payments, AccountID } = body as { Payments: UpdateUIDItem[]; AccountID: string };
 
