@@ -759,6 +759,16 @@ export function FutureInvoicesTable({
                 <span className="hidden sm:inline">Pause</span>
               </Button>
               <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBulkPauseResume(false)}
+                disabled={bulkSaving}
+                className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 text-green-600 hover:text-green-700"
+              >
+                {bulkSaving ? <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : <Play className="w-3 h-3 sm:w-4 sm:h-4" />}
+                <span className="hidden sm:inline">Resume</span>
+              </Button>
+              <Button
                 variant="danger"
                 size="sm"
                 onClick={confirmDeleteBulk}

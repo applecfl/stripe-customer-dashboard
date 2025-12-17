@@ -700,21 +700,6 @@ function DashboardContent() {
         <div className="border-b border-gray-200 -mx-4 sm:mx-0 px-4 sm:px-0">
           <nav className="flex gap-2 sm:gap-6 overflow-x-auto">
             <button
-              onClick={() => setActiveTab('failed')}
-              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === 'failed'
-                  ? 'border-red-600 text-red-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <AlertTriangle className="w-4 h-4" />
-              <span className="hidden sm:inline">Failed</span>
-              <span className="sm:hidden">Failed</span>
-              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${activeTab === 'failed' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
-                }`}>
-                {invoices.filter(inv => inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0).length}
-              </span>
-            </button>
-            <button
               onClick={() => setActiveTab('success')}
               className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === 'success'
                   ? 'border-green-600 text-green-600'
@@ -742,6 +727,21 @@ function DashboardContent() {
               <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${activeTab === 'future' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
                 }`}>
                 {invoices.filter(inv => inv.status === 'draft').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('failed')}
+              className={`flex items-center gap-1.5 sm:gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === 'failed'
+                  ? 'border-red-600 text-red-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+            >
+              <AlertTriangle className="w-4 h-4" />
+              <span className="hidden sm:inline">Failed</span>
+              <span className="sm:hidden">Failed</span>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${activeTab === 'failed' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
+                }`}>
+                {invoices.filter(inv => inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0).length}
               </span>
             </button>
             <button
