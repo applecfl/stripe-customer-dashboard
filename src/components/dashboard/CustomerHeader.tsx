@@ -69,9 +69,11 @@ export function CustomerHeader({
       .filter(inv => inv.status === 'open' && inv.attempt_count > 0)
       .reduce((sum, inv) => sum + inv.amount_remaining, 0);
 
-    // Total from token, or calculate from all data
-    const totalFromToken = extendedInfo?.totalAmount ? extendedInfo.totalAmount * 100 : 0;
-    const total = totalFromToken > 0 ? totalFromToken : (paid + scheduled + failed);
+    // Total from token if provided, otherwise calculate from all data
+    // Use token total if explicitly set (even if 0), otherwise use calculated total
+    const totalFromToken = extendedInfo?.totalAmount !== undefined ? extendedInfo.totalAmount * 100 : null;
+    const calculatedTotal = paid + scheduled + failed;
+    const total = totalFromToken !== null ? totalFromToken : calculatedTotal;
 
     // Outstanding = total - paid - scheduled - failed (can be negative for overpay)
     const outstandingRaw = total - paid - scheduled - failed;
@@ -149,78 +151,93 @@ export function CustomerHeader({
 
         {/* Second Row - Parent/Guardian Info + Total Amount - Full Width */}
         {hasParentInfo && (
-          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-4 sm:gap-8">
-            {/* Father Info */}
-            {extendedInfo?.fatherName && (
-              <div className="flex items-start gap-3 flex-shrink-0">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                  <User className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-gray-500 font-medium">Father</p>
-                  <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.fatherName}</p>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
-                    {extendedInfo.fatherEmail && (
-                      <a href={`mailto:${extendedInfo.fatherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
-                        <Mail className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">{extendedInfo.fatherEmail}</span>
-                      </a>
-                    )}
-                    {extendedInfo.fatherCell && (
-                      <a href={`tel:${extendedInfo.fatherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
-                        <Phone className="w-3 h-3 flex-shrink-0" />
-                        {extendedInfo.fatherCell}
-                      </a>
-                    )}
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            {/* Parents row - always horizontal */}
+            <div className="flex flex-row gap-4 sm:gap-8 flex-wrap">
+              {/* Father Info */}
+              {extendedInfo?.fatherName && (
+                <div className="flex items-start gap-2 sm:gap-3 flex-shrink-0">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-500 font-medium">Father</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.fatherName}</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
+                      {extendedInfo.fatherEmail && (
+                        <a href={`mailto:${extendedInfo.fatherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
+                          <Mail className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{extendedInfo.fatherEmail}</span>
+                        </a>
+                      )}
+                      {extendedInfo.fatherCell && (
+                        <a href={`tel:${extendedInfo.fatherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
+                          <Phone className="w-3 h-3 flex-shrink-0" />
+                          {extendedInfo.fatherCell}
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Mother Info */}
-            {extendedInfo?.motherName && (
-              <div className="flex items-start gap-3 flex-shrink-0">
-                <div className="w-8 h-8 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
-                  <User className="w-4 h-4 text-pink-600" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-gray-500 font-medium">Mother</p>
-                  <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.motherName}</p>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
-                    {extendedInfo.motherEmail && (
-                      <a href={`mailto:${extendedInfo.motherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
-                        <Mail className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">{extendedInfo.motherEmail}</span>
-                      </a>
-                    )}
-                    {extendedInfo.motherCell && (
-                      <a href={`tel:${extendedInfo.motherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
-                        <Phone className="w-3 h-3 flex-shrink-0" />
-                        {extendedInfo.motherCell}
-                      </a>
-                    )}
+              {/* Mother Info */}
+              {extendedInfo?.motherName && (
+                <div className="flex items-start gap-2 sm:gap-3 flex-shrink-0">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
+                    <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-pink-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-500 font-medium">Mother</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.motherName}</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
+                      {extendedInfo.motherEmail && (
+                        <a href={`mailto:${extendedInfo.motherEmail}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 truncate">
+                          <Mail className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{extendedInfo.motherEmail}</span>
+                        </a>
+                      )}
+                      {extendedInfo.motherCell && (
+                        <a href={`tel:${extendedInfo.motherCell}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600">
+                          <Phone className="w-3 h-3 flex-shrink-0" />
+                          {extendedInfo.motherCell}
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Total Amount - Fills remaining space */}
-            <div className="flex items-start gap-3 flex-1">
-              <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
-                <DollarSign className="w-5 h-5 text-purple-600" />
-              </div>
-              <div className="flex-1">
-                {paymentName && paymentName !== 'Total' && (
-                  <p className="text-sm sm:text-base text-gray-900">
-                    <span className="text-gray-500 font-medium">Description: </span>
-                    <span className="text-purple-700 font-semibold">{paymentName}</span>
+              {/* Total Amount - Desktop only, inline with parents */}
+              <div className="hidden sm:flex items-start gap-3 flex-1">
+                <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="w-5 h-5 text-purple-600" />
+                </div>
+                <div className="flex-1">
+                  {paymentName && paymentName !== 'Total' && (
+                    <p className="text-sm text-purple-700 font-semibold mb-0.5">
+                      {paymentName}
+                    </p>
+                  )}
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                    <span className="text-sm sm:text-base text-gray-500 font-medium">Total: </span>
+                    {formatCurrency(summary.total, currency)}
                   </p>
-                )}
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                  <span className="text-sm sm:text-base text-gray-500 font-medium">Total: </span>
-                  {formatCurrency(summary.total, currency)}
-                </p>
+                </div>
               </div>
+            </div>
+
+            {/* Mobile: Description and Total centered below parents */}
+            <div className="sm:hidden mt-4 text-center">
+              {paymentName && paymentName !== 'Total' && (
+                <p className="text-base text-purple-700 font-semibold mb-1">
+                  {paymentName}
+                </p>
+              )}
+              <p className="text-xl font-bold text-gray-900">
+                <span className="text-sm text-gray-500 font-medium">Total: </span>
+                {formatCurrency(summary.total, currency)}
+              </p>
             </div>
           </div>
         )}
