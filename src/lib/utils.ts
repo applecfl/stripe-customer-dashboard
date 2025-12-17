@@ -21,6 +21,16 @@ export function formatDate(timestamp: number | null): string {
   }).format(new Date(timestamp * 1000));
 }
 
+// Compact date format: "12/17/24" style
+export function formatDateCompact(timestamp: number | null): string {
+  if (!timestamp) return '-';
+  return new Intl.DateTimeFormat('en-US', {
+    year: '2-digit',
+    month: 'numeric',
+    day: 'numeric',
+  }).format(new Date(timestamp * 1000));
+}
+
 export function formatDateTime(timestamp: number | null): string {
   if (!timestamp) return '-';
   return new Intl.DateTimeFormat('en-US', {

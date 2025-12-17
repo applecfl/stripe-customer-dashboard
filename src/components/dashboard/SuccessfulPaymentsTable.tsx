@@ -13,6 +13,10 @@ import {
   TableRow,
   TableHead,
   TableCell,
+  Modal,
+  ModalFooter,
+  Button,
+  Textarea,
 } from '@/components/ui';
 import {
   FileText,
@@ -31,6 +35,8 @@ import {
   Banknote,
   Copy,
   CreditCard,
+  StickyNote,
+  Loader2,
 } from 'lucide-react';
 
 // Zelle SVG icon component
@@ -60,6 +66,9 @@ interface SuccessfulPaymentsTableProps {
   paymentMethods?: PaymentMethodData[];
   otherPayments?: OtherPayment[];
   onRefund: (payment: PaymentData) => void;
+  onRefresh?: () => void;
+  token?: string;
+  accountId?: string;
 }
 
 export function SuccessfulPaymentsTable({
@@ -67,9 +76,20 @@ export function SuccessfulPaymentsTable({
   payments,
   otherPayments,
   onRefund,
+  onRefresh,
+  token,
+  accountId,
 }: SuccessfulPaymentsTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Note modal state
+  const [noteModal, setNoteModal] = useState<{
+    isOpen: boolean;
+    payment: PaymentData | null;
+  }>({ isOpen: false, payment: null });
+  const [noteValue, setNoteValue] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   const copyToClipboard = (id: string) => {
     navigator.clipboard.writeText(id);
@@ -103,6 +123,64 @@ export function SuccessfulPaymentsTable({
     const reason = payment.metadata?.reason || payment.metadata?.lastPaymentReason;
     const invoiceUID = payment.metadata?.InvoiceUID;
     return { invoiceIds, invoiceNumbers, invoiceAmounts, totalApplied, creditAdded, reason, invoiceUID };
+  };
+
+  // Get payment note from metadata
+  const getPaymentNote = (payment: PaymentData): string => {
+    return payment.metadata?.note || '';
+  };
+
+  // Open note modal
+  const openNoteModal = (payment: PaymentData) => {
+    setNoteValue(getPaymentNote(payment));
+    setNoteModal({ isOpen: true, payment });
+  };
+
+  // Close note modal
+  const closeNoteModal = () => {
+    setNoteModal({ isOpen: false, payment: null });
+    setNoteValue('');
+  };
+
+  // Save note
+  const saveNote = async () => {
+    if (!noteModal.payment || !accountId) return;
+
+    // Skip saving for virtual IDs (out-of-band payments)
+    if (noteModal.payment.id.startsWith('inv_paid_')) {
+      closeNoteModal();
+      return;
+    }
+
+    setSavingNote(true);
+    try {
+      let url = '/api/stripe/payments';
+      if (token) {
+        url += `?token=${encodeURIComponent(token)}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentIntentId: noteModal.payment.id,
+          note: noteValue.trim(),
+          accountId,
+        }),
+      });
+
+      if (response.ok) {
+        closeNoteModal();
+        onRefresh?.();
+      } else {
+        const data = await response.json();
+        console.error('Failed to save note:', data.error);
+      }
+    } catch (error) {
+      console.error('Error saving note:', error);
+    } finally {
+      setSavingNote(false);
+    }
   };
 
   const totalPaymentsCount = succeededPayments.length + sortedOtherPayments.length;
@@ -143,7 +221,7 @@ export function SuccessfulPaymentsTable({
         <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow hoverable={false}>
-              <TableHead className="w-[50px]"></TableHead>
+              <TableHead compact className="w-[50px]"></TableHead>
               <TableHead className="w-[120px]">Amount</TableHead>
               <TableHead className="w-[120px]">Date</TableHead>
               <TableHead align="right">Actions</TableHead>
@@ -157,21 +235,21 @@ export function SuccessfulPaymentsTable({
               return (
                 <React.Fragment key={payment.id}>
                   <TableRow className={payment.amount_refunded > 0 ? 'bg-gray-50/50' : ''}>
-                    <TableCell>
-                      <div className="flex items-center gap-0.5 sm:gap-1">
+                    <TableCell compact>
+                      <div className="flex items-center gap-0.5">
                         <button
                           onClick={() => toggleExpanded(`pay-${payment.id}`)}
-                          className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                          className="p-0.5 hover:bg-gray-100 rounded transition-colors"
                           title={isExpanded ? 'Hide details' : 'Show details'}
                         >
                           {isExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                            <ChevronUp className="w-4 h-4 text-gray-500" />
                           ) : (
-                            <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                            <ChevronDown className="w-4 h-4 text-gray-500" />
                           )}
                         </button>
-                        <div className="p-0.5 sm:p-1" title="Stripe Payment">
-                          <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
+                        <div className="p-0.5" title="Stripe Payment">
+                          <CreditCard className="w-4 h-4 text-indigo-600" />
                         </div>
                       </div>
                     </TableCell>
@@ -223,7 +301,20 @@ export function SuccessfulPaymentsTable({
                       </div>
                     </TableCell>
                     <TableCell align="right">
-                      <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center justify-end gap-1">
+                        {/* Note button - styled like other action buttons */}
+                        <button
+                          onClick={() => openNoteModal(payment)}
+                          className={`inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            getPaymentNote(payment)
+                              ? 'text-amber-700 bg-amber-50 hover:bg-amber-100'
+                              : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                          }`}
+                          title={getPaymentNote(payment) || 'Add note'}
+                        >
+                          <StickyNote className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Note</span>
+                        </button>
                         {payment.status === 'succeeded' && payment.amount_refunded < payment.amount ? (
                           <>
                             <button
@@ -435,20 +526,20 @@ export function SuccessfulPaymentsTable({
               return (
                 <React.Fragment key={`other-${index}`}>
                   <TableRow className={isZelle ? "bg-purple-50/30" : isCash ? "bg-green-50/30" : "bg-amber-50/30"}>
-                    <TableCell>
-                      <div className="flex items-center gap-0.5 sm:gap-1">
+                    <TableCell compact>
+                      <div className="flex items-center gap-0.5">
                         <button
                           onClick={() => toggleExpanded(`other-${index}`)}
-                          className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                          className="p-0.5 hover:bg-gray-100 rounded transition-colors"
                         >
                           {isExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                            <ChevronUp className="w-4 h-4 text-gray-500" />
                           ) : (
-                            <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                            <ChevronDown className="w-4 h-4 text-gray-500" />
                           )}
                         </button>
-                        <div className="p-0.5 sm:p-1" title={payment.paymentType}>
-                          {getPaymentTypeIcon(payment.paymentType, "w-3.5 h-3.5 sm:w-4 sm:h-4")}
+                        <div className="p-0.5" title={payment.paymentType}>
+                          {getPaymentTypeIcon(payment.paymentType, "w-4 h-4")}
                         </div>
                       </div>
                     </TableCell>
@@ -543,6 +634,58 @@ export function SuccessfulPaymentsTable({
           </TableBody>
         </Table>
       </CardContent>
+
+      {/* Note Modal */}
+      <Modal
+        isOpen={noteModal.isOpen}
+        onClose={closeNoteModal}
+        title={noteModal.payment ? `Note for Payment` : 'Add Note'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          {noteModal.payment && (
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Amount</span>
+                <span className="font-semibold text-green-600">
+                  {formatCurrency(noteModal.payment.amount, noteModal.payment.currency)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-sm text-gray-500">Date</span>
+                <span className="text-sm text-gray-700">
+                  {formatDateTime(noteModal.payment.created)}
+                </span>
+              </div>
+            </div>
+          )}
+          <Textarea
+            label="Note"
+            placeholder="Add a note for this payment..."
+            value={noteValue}
+            onChange={(e) => setNoteValue(e.target.value)}
+            rows={3}
+          />
+          <ModalFooter>
+            <Button variant="outline" onClick={closeNoteModal} disabled={savingNote}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={saveNote} disabled={savingNote}>
+              {savingNote ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <StickyNote className="w-4 h-4" />
+                  Save Note
+                </>
+              )}
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
     </Card>
   );
 }

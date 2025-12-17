@@ -389,6 +389,12 @@ function PaymentForm({
         return;
       }
 
+      // Require payment method selection for scheduling
+      if (!paymentMethodId) {
+        onFormError('Please select a payment method for the scheduled payment');
+        return;
+      }
+
       setLoading(true);
 
       try {
@@ -407,6 +413,7 @@ function PaymentForm({
             invoiceUID,
             scheduledDate: scheduledTimestamp,
             accountId,
+            paymentMethodId,
           }),
         });
 
@@ -743,9 +750,7 @@ function PaymentForm({
           )}
         </div>
 
-        {/* Payment Method Selection - hidden in schedule mode */}
-        {!scheduleMode && (
-        <>
+        {/* Payment Method Selection */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-gray-700">
             Payment Method
@@ -857,8 +862,6 @@ function PaymentForm({
               <span className="text-sm text-gray-700">Save card for future payments</span>
             </label>
           </div>
-        )}
-        </>
         )}
 
         {/* Note */}

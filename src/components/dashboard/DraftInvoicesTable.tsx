@@ -37,7 +37,9 @@ import {
   Pause,
   Play,
   Hash,
+  Plus,
 } from 'lucide-react';
+import { NoteButton } from './NoteButton';
 
 interface FutureInvoicesTableProps {
   invoices: InvoiceData[];
@@ -46,6 +48,7 @@ interface FutureInvoicesTableProps {
   accountId?: string;
   onRefresh: () => void;
   onUpdatingChange?: (isUpdating: boolean) => void;
+  onAddCard?: () => void;
   // Keep old props for compatibility but we won't use them
   onChangeDueDate?: (invoice: InvoiceData) => void;
   onAdjustAmount?: (invoice: InvoiceData) => void;
@@ -72,6 +75,7 @@ export function FutureInvoicesTable({
   accountId,
   onRefresh,
   onUpdatingChange,
+  onAddCard,
 }: FutureInvoicesTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -792,18 +796,18 @@ export function FutureInvoicesTable({
           <TableHeader>
             <TableRow hoverable={false}>
               {/* Checkbox column - hide select all when items are selected (toolbar shows it) */}
-              <TableHead className="w-[40px]">
+              <TableHead compact className="w-[28px]">
                 {draftInvoices.length > 0 && selectedIds.size === 0 && (
                   <button
                     onClick={toggleSelectAll}
-                    className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                    className="p-0.5 hover:bg-gray-100 rounded transition-colors"
                     title="Select all"
                   >
-                    <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                    <Square className="w-4 h-4 text-gray-400" />
                   </button>
                 )}
               </TableHead>
-              <TableHead className="w-[40px]"></TableHead>
+              <TableHead compact className="w-[28px]"></TableHead>
               <TableHead className="w-[100px]">Amount</TableHead>
               <TableHead className="w-[100px]">Date</TableHead>
               <TableHead className="w-[140px]"><span className="hidden sm:inline">Payment </span>Card</TableHead>
@@ -839,28 +843,28 @@ export function FutureInvoicesTable({
                 <>
                 <TableRow key={invoice.id} className={rowClassName}>
                   {/* Checkbox Cell */}
-                  <TableCell>
+                  <TableCell compact>
                     <button
                       onClick={() => toggleSelect(invoice.id)}
-                      className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                      className="p-0.5 hover:bg-gray-100 rounded transition-colors"
                     >
                       {isSelected ? (
-                        <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
+                        <CheckSquare className="w-4 h-4 text-indigo-600" />
                       ) : (
-                        <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                        <Square className="w-4 h-4 text-gray-400" />
                       )}
                     </button>
                   </TableCell>
-                  <TableCell>
+                  <TableCell compact>
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : invoice.id)}
-                      className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                      className="p-0.5 hover:bg-gray-100 rounded transition-colors"
                       title={isExpanded ? 'Hide details' : 'Show details'}
                     >
                       {isExpanded ? (
-                        <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                        <ChevronUp className="w-4 h-4 text-gray-500" />
                       ) : (
-                        <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                        <ChevronDown className="w-4 h-4 text-gray-400" />
                       )}
                     </button>
                   </TableCell>
@@ -975,6 +979,23 @@ export function FutureInvoicesTable({
                                 </button>
                               );
                             })}
+                            {/* Add new card option */}
+                            {onAddCard && (
+                              <button
+                                onClick={() => {
+                                  setEditingCard(null);
+                                  onAddCard();
+                                }}
+                                className="w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-left hover:bg-indigo-50 transition-colors border-t border-gray-100"
+                              >
+                                <div className="w-6 h-4 sm:w-8 sm:h-5 rounded bg-indigo-100 flex items-center justify-center">
+                                  <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600" />
+                                </div>
+                                <span className="text-xs sm:text-sm text-indigo-600 font-medium">
+                                  Add new card
+                                </span>
+                              </button>
+                            )}
                           </div>
                         </div>
                         {/* Current value shown while dropdown is open */}
@@ -1043,6 +1064,13 @@ export function FutureInvoicesTable({
                   {/* Save/Cancel/Pause/Delete Actions */}
                   <TableCell>
                     <div className="flex items-center gap-0.5 sm:gap-1 justify-end">
+                      <NoteButton
+                        invoice={invoice}
+                        token={token}
+                        accountId={accountId}
+                        onNoteUpdated={onRefresh}
+                        size="sm"
+                      />
                       {invoiceHasChanges ? (
                         <>
                           <button
@@ -1324,6 +1352,23 @@ export function FutureInvoicesTable({
                 {bulkSaving && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
               </button>
             ))}
+            {/* Add new card option */}
+            {onAddCard && (
+              <button
+                onClick={() => {
+                  setBulkCardModal(false);
+                  onAddCard();
+                }}
+                className="w-full flex items-center gap-3 p-3 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+              >
+                <div className="w-10 h-6 rounded bg-indigo-100 flex items-center justify-center">
+                  <Plus className="w-4 h-4 text-indigo-600" />
+                </div>
+                <span className="flex-1 text-left text-indigo-600 font-medium">
+                  Add new card
+                </span>
+              </button>
+            )}
           </div>
           <ModalFooter>
             <Button variant="outline" onClick={() => setBulkCardModal(false)} disabled={bulkSaving}>

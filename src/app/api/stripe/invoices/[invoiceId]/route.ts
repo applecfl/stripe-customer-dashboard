@@ -167,7 +167,7 @@ export async function PATCH(
   try {
     const { invoiceId } = await params;
     const body = await request.json();
-    const { action, pause, newAmount, reason, addCredit, paymentMethodId, newDueDate, accountId } = body;
+    const { action, pause, newAmount, reason, addCredit, paymentMethodId, newDueDate, accountId, note } = body;
 
     if (!accountId) {
       return NextResponse.json(
@@ -452,6 +452,17 @@ export async function PATCH(
 
         // Send the invoice reminder using Stripe's built-in email
         await stripe.invoices.sendInvoice(invoiceId);
+        break;
+      }
+
+      case 'update-note': {
+        // Update or remove the note in invoice metadata
+        await stripe.invoices.update(invoiceId, {
+          metadata: {
+            ...invoice.metadata,
+            note: note || '', // Empty string to remove note
+          },
+        });
         break;
       }
 

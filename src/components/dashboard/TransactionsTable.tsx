@@ -135,9 +135,9 @@ export function TransactionsTable({
             <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow hoverable={false}>
-                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead compact className="w-[50px]"></TableHead>
                   <TableHead className="w-[100px]">Amount</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead compact className="w-[32px]"></TableHead>
                   <TableHead align="right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -148,27 +148,27 @@ export function TransactionsTable({
                   return (
                     <>
                       <TableRow key={invoice.id} className="bg-red-50/50">
-                        <TableCell>
-                          <div className="flex items-center gap-0.5 sm:gap-1">
+                        <TableCell compact>
+                          <div className="flex items-center gap-0.5">
                             <button
                               onClick={() => copyToClipboard(invoice.id)}
-                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                              className="p-0.5 hover:bg-gray-100 rounded transition-colors"
                               title={invoice.id}
                             >
                               {copiedId === invoice.id ? (
-                                <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
+                                <Check className="w-4 h-4 text-green-600" />
                               ) : (
-                                <Copy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                                <Copy className="w-4 h-4 text-gray-400" />
                               )}
                             </button>
                             <a
                               href={`https://dashboard.stripe.com/invoices/${invoice.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors hidden sm:block"
+                              className="p-0.5 hover:bg-gray-100 rounded transition-colors hidden sm:block"
                               title="Open in Stripe"
                             >
-                              <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 hover:text-indigo-600" />
+                              <ExternalLink className="w-4 h-4 text-gray-400 hover:text-indigo-600" />
                             </a>
                           </div>
                         </TableCell>
@@ -184,11 +184,11 @@ export function TransactionsTable({
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell compact>
                           {/* Red exclamation mark with tooltip */}
                           <div className="relative group">
-                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-100 flex items-center justify-center cursor-help">
-                              <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-red-600" />
+                            <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center cursor-help">
+                              <AlertCircle className="w-3 h-3 text-red-600" />
                             </div>
                             {/* Tooltip - positioned above with high z-index */}
                             <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-[100]">
@@ -388,7 +388,7 @@ export function TransactionsTable({
             <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow hoverable={false}>
-                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead compact className="w-[50px]"></TableHead>
                   <TableHead className="w-[120px]">Amount</TableHead>
                   <TableHead className="w-[120px]">Date</TableHead>
                   <TableHead align="right">Actions</TableHead>
@@ -402,26 +402,26 @@ export function TransactionsTable({
                   return (
                     <>
                       <TableRow key={payment.id} className={payment.amount_refunded > 0 ? 'bg-gray-50/50' : ''}>
-                        <TableCell>
-                          <div className="flex items-center gap-0.5 sm:gap-1">
+                        <TableCell compact>
+                          <div className="flex items-center gap-0.5">
                             <button
                               onClick={() => toggleExpanded(`pay-${payment.id}`)}
-                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
+                              className="p-0.5 hover:bg-gray-100 rounded transition-colors"
                             >
                               {isExpanded ? (
-                                <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                                <ChevronUp className="w-4 h-4 text-gray-500" />
                               ) : (
-                                <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
+                                <ChevronDown className="w-4 h-4 text-gray-500" />
                               )}
                             </button>
                             <a
                               href={`https://dashboard.stripe.com/payments/${payment.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors hidden sm:block"
+                              className="p-0.5 hover:bg-gray-100 rounded transition-colors hidden sm:block"
                               title="Open in Stripe"
                             >
-                              <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 hover:text-indigo-600" />
+                              <ExternalLink className="w-4 h-4 text-gray-400 hover:text-indigo-600" />
                             </a>
                           </div>
                         </TableCell>

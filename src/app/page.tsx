@@ -762,8 +762,8 @@ function DashboardContent() {
           </nav>
         </div>
 
-        {/* Tab Content */}
-        {activeTab === 'failed' && (
+        {/* Tab Content - FailedPaymentsTable always mounted to preserve cached data */}
+        <div className={activeTab === 'failed' ? '' : 'hidden'}>
           <FailedPaymentsTable
             invoices={invoices}
             token={token}
@@ -776,7 +776,7 @@ function DashboardContent() {
             onSendReminder={setSendReminderModal}
             onUpdatingChange={setIsChildUpdating}
           />
-        )}
+        </div>
 
         {activeTab === 'success' && (
           <SuccessfulPaymentsTable
@@ -785,6 +785,9 @@ function DashboardContent() {
             paymentMethods={paymentMethods}
             otherPayments={otherPayments}
             onRefund={setRefundModal}
+            onRefresh={refreshData}
+            token={token || undefined}
+            accountId={accountId || undefined}
           />
         )}
 
@@ -796,6 +799,7 @@ function DashboardContent() {
             accountId={accountId}
             onRefresh={refreshData}
             onUpdatingChange={setIsChildUpdating}
+            onAddCard={() => setShowAddPaymentMethodModal(true)}
           />
         )}
 

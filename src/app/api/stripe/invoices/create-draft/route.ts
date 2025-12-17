@@ -11,6 +11,7 @@ interface CreateDraftRequest {
   invoiceUID?: string;
   scheduledDate?: number; // Unix timestamp for when to finalize
   accountId: string;
+  paymentMethodId?: string; // Payment method to use for this invoice
 }
 
 export async function POST(
@@ -18,7 +19,7 @@ export async function POST(
 ): Promise<NextResponse<ApiResponse<InvoiceData>>> {
   try {
     const body: CreateDraftRequest = await request.json();
-    const { customerId, amount, currency, description, invoiceUID, scheduledDate, accountId } = body;
+    const { customerId, amount, currency, description, invoiceUID, scheduledDate, accountId, paymentMethodId } = body;
 
     if (!customerId || !amount || !currency) {
       return NextResponse.json(
@@ -41,6 +42,7 @@ export async function POST(
       customer: customerId,
       collection_method: 'charge_automatically',
       auto_advance: scheduledDate ? true : false,
+      ...(paymentMethodId && { default_payment_method: paymentMethodId }),
       metadata: {
         ...(invoiceUID && { invoiceUID }),
         ...(scheduledDate && { scheduledFinalizeAt: scheduledDate.toString() }),

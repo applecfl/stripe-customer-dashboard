@@ -299,7 +299,7 @@ export function CustomerHeader({
               {summary.overpay > 0 ? (
                 <>
                   <CheckCircle className="w-4 h-4 text-green-500" />
-                  <span className="text-xs sm:text-sm text-gray-600 font-medium">Overpay</span>
+                  <span className="text-xs sm:text-sm text-gray-600 font-medium">Overpaid</span>
                 </>
               ) : (
                 <>

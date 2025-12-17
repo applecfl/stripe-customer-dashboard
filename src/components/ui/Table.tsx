@@ -66,9 +66,10 @@ interface TableHeadProps {
   children?: ReactNode;
   className?: string;
   align?: 'left' | 'center' | 'right';
+  compact?: boolean;
 }
 
-export function TableHead({ children, className, align = 'left' }: TableHeadProps) {
+export function TableHead({ children, className, align = 'left', compact }: TableHeadProps) {
   const alignments = {
     left: 'text-left',
     center: 'text-center',
@@ -78,7 +79,8 @@ export function TableHead({ children, className, align = 'left' }: TableHeadProp
   return (
     <th
       className={cn(
-        'px-3 sm:px-6 py-2.5 sm:py-3.5 text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider',
+        'text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider',
+        compact ? 'px-1 sm:px-2 py-1.5 sm:py-2' : 'px-2 sm:px-3 py-2 sm:py-2.5',
         alignments[align],
         className
       )}
@@ -92,9 +94,10 @@ interface TableCellProps {
   children: ReactNode;
   className?: string;
   align?: 'left' | 'center' | 'right';
+  compact?: boolean;
 }
 
-export function TableCell({ children, className, align = 'left' }: TableCellProps) {
+export function TableCell({ children, className, align = 'left', compact }: TableCellProps) {
   const alignments = {
     left: 'text-left',
     center: 'text-center',
@@ -104,7 +107,8 @@ export function TableCell({ children, className, align = 'left' }: TableCellProp
   return (
     <td
       className={cn(
-        'px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-700 whitespace-nowrap',
+        'text-xs sm:text-sm text-gray-700 whitespace-nowrap',
+        compact ? 'px-1 sm:px-2 py-1.5 sm:py-2' : 'px-2 sm:px-3 py-2 sm:py-2.5',
         alignments[align],
         className
       )}

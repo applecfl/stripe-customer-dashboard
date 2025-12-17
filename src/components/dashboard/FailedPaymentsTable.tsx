@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { InvoiceData } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import {
@@ -38,7 +38,9 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
+  Save,
 } from 'lucide-react';
+import { NoteButton } from './NoteButton';
 
 // Payment attempt type from API
 interface PaymentAttempt {
@@ -108,6 +110,12 @@ export function FailedPaymentsTable({
   const [loadingAttempts, setLoadingAttempts] = useState<Set<string>>(new Set());
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
+  // Inline amount editing state
+  const [editingAmount, setEditingAmount] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [savingAmount, setSavingAmount] = useState<string | null>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+
   // Pause confirmation modal state
   const [pauseModal, setPauseModal] = useState<{
     isOpen: boolean;
@@ -117,11 +125,19 @@ export function FailedPaymentsTable({
   const [pauseReason, setPauseReason] = useState('');
   const [pauseLoading, setPauseLoading] = useState(false);
 
+  // Track which invoices we've already fetched attempts for (persists across re-renders)
+  const fetchedAttemptsRef = useRef<Set<string>>(new Set());
+
   // Fetch payment attempts for an invoice
   const fetchPaymentAttempts = async (invoiceId: string) => {
     if (!accountId) return;
 
+    // Skip if we've already fetched this invoice's attempts
+    if (fetchedAttemptsRef.current.has(invoiceId)) return;
+
     setLoadingAttempts(prev => new Set(prev).add(invoiceId));
+    fetchedAttemptsRef.current.add(invoiceId);
+
     try {
       let url = `/api/stripe/invoices/${invoiceId}/attempts?accountId=${encodeURIComponent(accountId)}`;
       if (token) {
@@ -137,6 +153,8 @@ export function FailedPaymentsTable({
       }
     } catch (error) {
       console.error('Failed to fetch payment attempts:', error);
+      // Remove from fetched set so it can be retried
+      fetchedAttemptsRef.current.delete(invoiceId);
     } finally {
       setLoadingAttempts(prev => {
         const next = new Set(prev);
@@ -151,10 +169,10 @@ export function FailedPaymentsTable({
     .filter(inv => inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0)
     .sort((a, b) => (getInvoiceDate(b) || 0) - (getInvoiceDate(a) || 0));
 
-  // Auto-fetch attempts for all failed invoices on mount/change
+  // Auto-fetch attempts for all failed invoices on mount (only once per invoice)
   useEffect(() => {
     failedInvoices.forEach(invoice => {
-      if (!paymentAttempts[invoice.id] && !loadingAttempts.has(invoice.id)) {
+      if (!fetchedAttemptsRef.current.has(invoice.id) && !loadingAttempts.has(invoice.id)) {
         fetchPaymentAttempts(invoice.id);
       }
     });
@@ -192,6 +210,84 @@ export function FailedPaymentsTable({
     await navigator.clipboard.writeText(id);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (editingAmount && amountInputRef.current) {
+      amountInputRef.current.focus();
+      amountInputRef.current.select();
+    }
+  }, [editingAmount]);
+
+  // Start editing amount
+  const startEditAmount = (invoice: InvoiceData) => {
+    setEditingAmount(invoice.id);
+    setEditValue((invoice.amount_due / 100).toFixed(2));
+  };
+
+  // Cancel editing
+  const cancelEditAmount = () => {
+    setEditingAmount(null);
+    setEditValue('');
+  };
+
+  // Save amount change - uses credit note for open invoices
+  const saveAmount = async (invoice: InvoiceData) => {
+    const newAmount = Math.round(parseFloat(editValue) * 100);
+    if (isNaN(newAmount) || newAmount <= 0 || newAmount === invoice.amount_due) {
+      cancelEditAmount();
+      return;
+    }
+
+    // For failed (open) invoices, can only reduce amount
+    if (newAmount > invoice.amount_due) {
+      console.error('Cannot increase amount on a failed invoice');
+      cancelEditAmount();
+      return;
+    }
+
+    setSavingAmount(invoice.id);
+    try {
+      let url = `/api/stripe/invoices/adjust`;
+      if (token) {
+        url += `?token=${encodeURIComponent(token)}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoiceId: invoice.id,
+          newAmount,
+          accountId,
+        }),
+      });
+
+      if (response.ok) {
+        // Refresh data after successful update
+        onRefresh();
+      } else {
+        const data = await response.json();
+        console.error('Failed to update amount:', data.error);
+      }
+    } catch (error) {
+      console.error('Error updating amount:', error);
+    } finally {
+      setSavingAmount(null);
+      setEditingAmount(null);
+      setEditValue('');
+    }
+  };
+
+  // Handle key press in amount input
+  const handleAmountKeyDown = (e: React.KeyboardEvent, invoice: InvoiceData) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveAmount(invoice);
+    } else if (e.key === 'Escape') {
+      cancelEditAmount();
+    }
   };
 
   // Open pause/resume confirmation modal
@@ -266,7 +362,7 @@ export function FailedPaymentsTable({
         <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow hoverable={false}>
-              <TableHead className="w-[50px]"></TableHead>
+              <TableHead compact className="w-[32px]"></TableHead>
               <TableHead className="w-[90px]">Amount</TableHead>
               <TableHead className="w-[90px]">Date</TableHead>
               <TableHead className="hidden sm:table-cell"><span className="hidden sm:inline">Description</span></TableHead>
@@ -281,11 +377,8 @@ export function FailedPaymentsTable({
               if (isRefreshing) {
                 return (
                   <TableRow key={invoice.id} className="bg-gray-50/50 animate-pulse">
-                    <TableCell>
-                      <div className="flex items-center gap-0.5 sm:gap-1">
-                        <div className="w-6 h-6 bg-gray-200 rounded" />
-                        <div className="w-6 h-6 bg-gray-200 rounded hidden sm:block" />
-                      </div>
+                    <TableCell compact>
+                      <div className="w-4 h-4 bg-gray-200 rounded" />
                     </TableCell>
                     <TableCell>
                       <div className="h-5 w-16 sm:w-20 bg-gray-200 rounded" />
@@ -312,32 +405,54 @@ export function FailedPaymentsTable({
               return (
                 <>
                   <TableRow key={invoice.id} className={invoice.isPaused ? "bg-red-100/70" : "bg-red-50/50"}>
-                    <TableCell>
-                      <div className="flex items-center gap-0.5 sm:gap-1">
-                        <button
-                          onClick={() => toggleExpanded(invoice.id)}
-                          className="p-0.5 sm:p-1 hover:bg-gray-100 rounded transition-colors"
-                          title={isExpanded ? 'Hide details' : 'Show details'}
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-                          )}
-                        </button>
-                      </div>
+                    <TableCell compact>
+                      <button
+                        onClick={() => toggleExpanded(invoice.id)}
+                        className="p-0.5 hover:bg-gray-100 rounded transition-colors"
+                        title={isExpanded ? 'Hide details' : 'Show details'}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <span className="font-semibold text-xs sm:text-sm text-red-700">
-                          {formatCurrency(invoice.amount_due, invoice.currency)}
-                        </span>
-                        {invoice.amount_remaining > 0 && invoice.amount_remaining !== invoice.amount_due && (
-                          <p className="text-[10px] sm:text-xs text-amber-600">
-                            {formatCurrency(invoice.amount_remaining, invoice.currency)} <span className="hidden sm:inline">remaining</span>
-                          </p>
-                        )}
-                      </div>
+                      {editingAmount === invoice.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            ref={amountInputRef}
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => handleAmountKeyDown(e, invoice)}
+                            onBlur={() => cancelEditAmount()}
+                            className="w-16 sm:w-20 px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs sm:text-sm border border-red-300 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
+                            disabled={savingAmount === invoice.id}
+                          />
+                          {savingAmount === invoice.id && (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => startEditAmount(invoice)}
+                          className="text-left hover:bg-red-100 rounded px-1.5 py-0.5 -mx-1.5 -my-0.5 transition-colors"
+                          title="Click to edit amount"
+                        >
+                          <span className="font-semibold text-xs sm:text-sm text-red-700">
+                            {formatCurrency(invoice.amount_due, invoice.currency)}
+                          </span>
+                          {invoice.amount_remaining > 0 && invoice.amount_remaining !== invoice.amount_due && (
+                            <p className="text-[10px] sm:text-xs text-amber-600">
+                              {formatCurrency(invoice.amount_remaining, invoice.currency)} <span className="hidden sm:inline">remaining</span>
+                            </p>
+                          )}
+                        </button>
+                      )}
                     </TableCell>
 
                     {/* Date Cell */}
@@ -391,6 +506,31 @@ export function FailedPaymentsTable({
                       <>
                         {/* Desktop: action buttons with icons */}
                         <div className="hidden sm:flex items-center justify-end gap-1.5">
+                          <NoteButton
+                            invoice={invoice}
+                            token={token}
+                            accountId={accountId}
+                            onNoteUpdated={onRefresh}
+                            size="sm"
+                          />
+                          {editingAmount === invoice.id && (
+                            <button
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                saveAmount(invoice);
+                              }}
+                              disabled={savingAmount === invoice.id}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors disabled:opacity-50"
+                              title="Save Amount"
+                            >
+                              {savingAmount === invoice.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Save className="w-3.5 h-3.5" />
+                              )}
+                              Save
+                            </button>
+                          )}
                           <button
                             onClick={() => onRetryInvoice(invoice)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors"
@@ -438,6 +578,30 @@ export function FailedPaymentsTable({
                         </div>
                         {/* Mobile: compact icon buttons */}
                         <div className="sm:hidden flex items-center justify-end gap-1">
+                          <NoteButton
+                            invoice={invoice}
+                            token={token}
+                            accountId={accountId}
+                            onNoteUpdated={onRefresh}
+                            size="sm"
+                          />
+                          {editingAmount === invoice.id && (
+                            <button
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                saveAmount(invoice);
+                              }}
+                              disabled={savingAmount === invoice.id}
+                              className="p-1.5 text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors disabled:opacity-50"
+                              title="Save Amount"
+                            >
+                              {savingAmount === invoice.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Save className="w-4 h-4" />
+                              )}
+                            </button>
+                          )}
                           <button
                             onClick={() => onRetryInvoice(invoice)}
                             className="p-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors"

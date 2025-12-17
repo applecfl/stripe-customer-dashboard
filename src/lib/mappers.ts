@@ -37,6 +37,7 @@ export function mapInvoice(invoice: Stripe.Invoice): InvoiceData {
     default_payment_method: typeof invoice.default_payment_method === 'string'
       ? invoice.default_payment_method
       : invoice.default_payment_method?.id ?? null,
+    note: invoice.metadata?.note,
     last_payment_error: lastPaymentError,
     next_payment_attempt: invoice.next_payment_attempt ?? null,
     attempt_count: invoice.attempt_count ?? 0,

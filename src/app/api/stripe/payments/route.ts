@@ -493,6 +493,69 @@ export async function GET(
   }
 }
 
+// Update payment metadata (e.g., add/edit note)
+export async function PATCH(
+  request: NextRequest
+): Promise<NextResponse<ApiResponse<PaymentData>>> {
+  try {
+    const body = await request.json();
+    const { paymentIntentId, note, accountId } = body;
+
+    if (!paymentIntentId) {
+      return NextResponse.json(
+        { success: false, error: 'paymentIntentId is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!accountId) {
+      return NextResponse.json(
+        { success: false, error: 'accountId is required' },
+        { status: 400 }
+      );
+    }
+
+    const stripe = getStripeForAccount(accountId);
+
+    // Get current payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    // Update payment intent metadata with note
+    const updatedPaymentIntent = await stripe.paymentIntents.update(paymentIntentId, {
+      metadata: {
+        ...paymentIntent.metadata,
+        note: note || '', // Empty string to remove note
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: updatedPaymentIntent.id,
+        amount: updatedPaymentIntent.amount,
+        amount_refunded: updatedPaymentIntent.amount - (updatedPaymentIntent.amount_received || 0),
+        currency: updatedPaymentIntent.currency,
+        status: updatedPaymentIntent.status,
+        created: updatedPaymentIntent.created,
+        invoice: null,
+        invoiceNumber: null,
+        payment_method_types: updatedPaymentIntent.payment_method_types,
+        refunded: updatedPaymentIntent.metadata?.refunded === 'true',
+        metadata: updatedPaymentIntent.metadata || {},
+        customer: typeof updatedPaymentIntent.customer === 'string' ? updatedPaymentIntent.customer : updatedPaymentIntent.customer?.id || null,
+        description: updatedPaymentIntent.description,
+        refund_reason: null,
+      },
+    });
+  } catch (error) {
+    console.error('Error updating payment:', error);
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : 'Failed to update payment' },
+      { status: 500 }
+    );
+  }
+}
+
 // Create one-time payment (without saving card)
 export async function POST(
   request: NextRequest

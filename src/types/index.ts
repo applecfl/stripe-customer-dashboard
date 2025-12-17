@@ -32,6 +32,8 @@ export interface InvoiceData {
   originalDueDate?: number;
   adjustmentNote?: string;
   default_payment_method: string | null;
+  // User note
+  note?: string;
   // Payment failure info
   last_payment_error?: {
     code: string | null;
