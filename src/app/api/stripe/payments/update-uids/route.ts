@@ -19,27 +19,27 @@ export async function POST(
 ): Promise<NextResponse<ApiResponse<UpdateResult[]>>> {
   try {
     const body = await request.json();
-    const { items, accountId } = body as { items: UpdateUIDItem[]; accountId: string };
+    const { Payments, AccountID } = body as { Payments: UpdateUIDItem[]; AccountID: string };
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
+    if (!Payments || !Array.isArray(Payments) || Payments.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'items array is required and must not be empty' },
+        { success: false, error: 'Payments array is required and must not be empty' },
         { status: 400 }
       );
     }
 
-    if (!accountId) {
+    if (!AccountID) {
       return NextResponse.json(
-        { success: false, error: 'accountId is required' },
+        { success: false, error: 'AccountID is required' },
         { status: 400 }
       );
     }
 
-    const stripe = getStripeForAccount(accountId);
+    const stripe = getStripeForAccount(AccountID);
 
     // Process each update
     const results: UpdateResult[] = await Promise.all(
-      items.map(async (item) => {
+      Payments.map(async (item) => {
         try {
           if (!item.PaymentID || !item.InvoiceUID) {
             return {
@@ -81,7 +81,7 @@ export async function POST(
     return NextResponse.json({
       success: failCount === 0,
       data: results,
-      error: failCount > 0 ? `${failCount} of ${items.length} updates failed` : undefined,
+      error: failCount > 0 ? `${failCount} of ${Payments.length} updates failed` : undefined,
     });
   } catch (error) {
     console.error('Error in bulk update UIDs:', error);
