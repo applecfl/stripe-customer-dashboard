@@ -17,6 +17,7 @@ import {
   ModalFooter,
   Button,
   Textarea,
+  Tooltip,
 } from '@/components/ui';
 import {
   AlertTriangle,
@@ -444,14 +445,15 @@ export function FailedPaymentsTable({
         </div>
       </CardHeader>
       <CardContent noPadding>
-        <Table className="table-fixed w-full">
+        <div className="overflow-x-auto">
+          <table className="w-full">
           <TableHeader>
             <TableRow hoverable={false}>
-              <TableHead compact className="w-[32px]"></TableHead>
-              <TableHead className="w-[90px]">Amount</TableHead>
-              <TableHead className="w-[90px]">Date</TableHead>
-              <TableHead className="hidden sm:table-cell"><span className="hidden sm:inline">Description</span></TableHead>
-              <TableHead align="right">Actions</TableHead>
+              <th className="p-0"></th>
+              <TableHead compact>Amount</TableHead>
+              <TableHead compact>Date</TableHead>
+              <TableHead compact className="hidden sm:table-cell">Description</TableHead>
+              <TableHead align="right" compact>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -462,9 +464,9 @@ export function FailedPaymentsTable({
               if (isRefreshing) {
                 return (
                   <TableRow key={invoice.id} className="bg-gray-50/50 animate-pulse">
-                    <TableCell compact>
+                    <td className="p-0">
                       <div className="w-4 h-4 bg-gray-200 rounded" />
-                    </TableCell>
+                    </td>
                     <TableCell>
                       <div className="h-5 w-16 sm:w-20 bg-gray-200 rounded" />
                     </TableCell>
@@ -490,19 +492,19 @@ export function FailedPaymentsTable({
               return (
                 <>
                   <TableRow key={invoice.id} className={invoice.isPaused ? "bg-red-100/70" : "bg-red-50/50"}>
-                    <TableCell compact>
+                    <td className="p-0">
                       <button
                         onClick={() => toggleExpanded(invoice.id)}
-                        className="p-0.5 hover:bg-gray-100 rounded transition-colors"
+                        className="w-4 h-4 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
                         title={isExpanded ? 'Hide details' : 'Show details'}
                       >
                         {isExpanded ? (
-                          <ChevronUp className="w-4 h-4 text-gray-500" />
+                          <ChevronUp className="w-3 h-3 text-gray-500" />
                         ) : (
-                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                          <ChevronDown className="w-3 h-3 text-gray-400" />
                         )}
                       </button>
-                    </TableCell>
+                    </td>
                     <TableCell>
                       {editingAmount === invoice.id ? (
                         <div className="flex items-center gap-1">
@@ -541,7 +543,7 @@ export function FailedPaymentsTable({
                     </TableCell>
 
                     {/* Date Cell */}
-                    <TableCell>
+                    <TableCell compact>
                       <div className="flex items-center gap-1 sm:gap-1.5 text-gray-600">
                         <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400" />
                         <span className="text-xs sm:text-sm">
@@ -587,7 +589,7 @@ export function FailedPaymentsTable({
                       })()}
                     </TableCell>
 
-                    <TableCell align="right">
+                    <TableCell align="right" compact>
                       <>
                         {/* Desktop: action buttons with icons */}
                         <div className="hidden sm:flex items-center justify-end gap-1.5">
@@ -612,125 +614,136 @@ export function FailedPaymentsTable({
                           <button
                             onClick={() => onRetryInvoice(invoice)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors"
-                            title="Retry Payment"
                           >
                             <RefreshCw className="w-3.5 h-3.5" />
                             Retry
                           </button>
-                          <button
-                            onClick={() => onSendReminder(invoice)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
-                            title="Send Reminder Email"
-                          >
-                            <Mail className="w-3.5 h-3.5" />
-                            Remind
-                          </button>
-                          <button
-                            onClick={() => onPayInvoice(invoice)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
-                            title="Make Payment"
-                          >
-                            <DollarSign className="w-3.5 h-3.5" />
-                            Make Payment
-                          </button>
-                          <button
-                            onClick={() => openPauseModal(invoice, !invoice.isPaused)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                            title={invoice.isPaused ? 'Resume Auto-retry' : 'Pause Auto-retry'}
-                          >
-                            {invoice.isPaused ? (
-                              <Play className="w-3.5 h-3.5" />
-                            ) : (
-                              <Pause className="w-3.5 h-3.5" />
-                            )}
-                            {invoice.isPaused ? 'Resume' : 'Pause'}
-                          </button>
-                          <button
-                            onClick={() => onVoidInvoice(invoice)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                            title="Void Payment"
-                          >
-                            <Ban className="w-3.5 h-3.5" />
-                            Void
-                          </button>
+                          <Tooltip content="Send Reminder Email">
+                            <button
+                              onClick={() => onSendReminder(invoice)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
+                            >
+                              <Mail className="w-3.5 h-3.5" />
+                              Email
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="Make Payment">
+                            <button
+                              onClick={() => onPayInvoice(invoice)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
+                            >
+                              <DollarSign className="w-3.5 h-3.5" />
+                              Make Payment
+                            </button>
+                          </Tooltip>
+                          <Tooltip content={invoice.isPaused ? 'Resume Auto-retry' : 'Pause Auto-retry'}>
+                            <button
+                              onClick={() => openPauseModal(invoice, !invoice.isPaused)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                            >
+                              {invoice.isPaused ? (
+                                <Play className="w-3.5 h-3.5" />
+                              ) : (
+                                <Pause className="w-3.5 h-3.5" />
+                              )}
+                              {invoice.isPaused ? 'Resume' : 'Pause'}
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="Void Payment">
+                            <button
+                              onClick={() => onVoidInvoice(invoice)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              Void
+                            </button>
+                          </Tooltip>
                           {/* Add Note button - always last, only show if no note exists */}
                           {!getDisplayedNote(invoice) && editingNote !== invoice.id && (
-                            <button
-                              onClick={() => startEditNote(invoice)}
-                              className="inline-flex items-center gap-1 p-1 sm:px-2 sm:py-1 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                              title="Add note"
-                            >
-                              <StickyNote className="w-3.5 h-3.5" />
-                            </button>
+                            <Tooltip content="Add note">
+                              <button
+                                onClick={() => startEditNote(invoice)}
+                                className="inline-flex items-center justify-center p-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                              >
+                                <StickyNote className="w-3.5 h-3.5" />
+                              </button>
+                            </Tooltip>
                           )}
                         </div>
                         {/* Mobile: compact icon buttons */}
-                        <div className="sm:hidden flex items-center justify-end gap-1">
+                        <div className="sm:hidden inline-flex flex-wrap justify-end [&>*]:m-px">
                           {editingAmount === invoice.id && (
+                            <Tooltip content="Save Amount">
+                              <button
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  saveAmount(invoice);
+                                }}
+                                disabled={savingAmount === invoice.id}
+                                className="flex items-center justify-center p-1 text-white bg-green-600 hover:bg-green-700 rounded transition-colors disabled:opacity-50"
+                              >
+                                {savingAmount === invoice.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Save className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </Tooltip>
+                          )}
+                          <Tooltip content="Retry">
                             <button
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                saveAmount(invoice);
-                              }}
-                              disabled={savingAmount === invoice.id}
-                              className="p-1.5 text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors disabled:opacity-50"
-                              title="Save Amount"
+                              onClick={() => onRetryInvoice(invoice)}
+                              className="flex items-center justify-center p-1 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded transition-colors"
                             >
-                              {savingAmount === invoice.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="Email">
+                            <button
+                              onClick={() => onSendReminder(invoice)}
+                              className="flex items-center justify-center p-1 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded transition-colors"
+                            >
+                              <Mail className="w-3.5 h-3.5" />
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="Pay">
+                            <button
+                              onClick={() => onPayInvoice(invoice)}
+                              className="flex items-center justify-center p-1 text-green-600 bg-green-50 hover:bg-green-100 rounded transition-colors"
+                            >
+                              <DollarSign className="w-3.5 h-3.5" />
+                            </button>
+                          </Tooltip>
+                          <Tooltip content={invoice.isPaused ? 'Resume' : 'Pause'}>
+                            <button
+                              onClick={() => openPauseModal(invoice, !invoice.isPaused)}
+                              className="flex items-center justify-center p-1 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                            >
+                              {invoice.isPaused ? (
+                                <Play className="w-3.5 h-3.5" />
                               ) : (
-                                <Save className="w-4 h-4" />
+                                <Pause className="w-3.5 h-3.5" />
                               )}
                             </button>
-                          )}
-                          <button
-                            onClick={() => onRetryInvoice(invoice)}
-                            className="p-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors"
-                            title="Retry Payment"
-                          >
-                            <RefreshCw className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => onSendReminder(invoice)}
-                            className="p-1.5 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
-                            title="Send Reminder"
-                          >
-                            <Mail className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => onPayInvoice(invoice)}
-                            className="p-1.5 text-green-600 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
-                            title="Make Payment"
-                          >
-                            <DollarSign className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => openPauseModal(invoice, !invoice.isPaused)}
-                            className="p-1.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                            title={invoice.isPaused ? 'Resume' : 'Pause'}
-                          >
-                            {invoice.isPaused ? (
-                              <Play className="w-4 h-4" />
-                            ) : (
-                              <Pause className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => onVoidInvoice(invoice)}
-                            className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                            title="Void Payment"
-                          >
-                            <Ban className="w-4 h-4" />
-                          </button>
+                          </Tooltip>
+                          <Tooltip content="Void">
+                            <button
+                              onClick={() => onVoidInvoice(invoice)}
+                              className="flex items-center justify-center p-1 text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                          </Tooltip>
                           {/* Add Note button - always last, only show if no note exists */}
                           {!getDisplayedNote(invoice) && editingNote !== invoice.id && (
-                            <button
-                              onClick={() => startEditNote(invoice)}
-                              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                              title="Add note"
-                            >
-                              <StickyNote className="w-4 h-4" />
-                            </button>
+                            <Tooltip content="Note">
+                              <button
+                                onClick={() => startEditNote(invoice)}
+                                className="flex items-center justify-center p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                              >
+                                <StickyNote className="w-3.5 h-3.5" />
+                              </button>
+                            </Tooltip>
                           )}
                         </div>
                       </>
@@ -748,7 +761,7 @@ export function FailedPaymentsTable({
 
                     return (
                       <tr key={`${invoice.id}-note`}>
-                        <td colSpan={5} className="px-2 sm:px-3 py-1 border-b border-gray-100">
+                        <td colSpan={100} className="px-2 sm:px-3 py-1 border-b border-gray-100">
                           <div className={`flex items-center gap-2 px-2 py-1 rounded ${
                             noteChanged ? 'bg-amber-50 border border-amber-200' : 'bg-gray-100 border border-gray-200'
                           }`}>
@@ -820,7 +833,7 @@ export function FailedPaymentsTable({
                   {/* Expanded payment attempts section */}
                   {isExpanded && (
                     <tr key={`${invoice.id}-expanded`}>
-                      <td colSpan={5} className="bg-gray-50 border-b border-gray-200">
+                      <td colSpan={100} className="bg-gray-50 border-b border-gray-200">
                         <div className="px-4 py-3">
                           <div className="flex items-center justify-between mb-2">
                             <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -939,7 +952,8 @@ export function FailedPaymentsTable({
               );
             })}
           </TableBody>
-        </Table>
+        </table>
+        </div>
       </CardContent>
 
       {/* Pause/Resume Confirmation Modal */}
@@ -947,7 +961,7 @@ export function FailedPaymentsTable({
         isOpen={pauseModal.isOpen}
         onClose={closePauseModal}
         title={pauseModal.invoice
-          ? `${pauseModal.isPause ? 'Pause' : 'Resume'} Auto-retry: ${formatDate(getInvoiceDate(pauseModal.invoice))} - ${formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}`
+          ? `${pauseModal.isPause ? 'Pause' : 'Resume'} Auto-retry: ${formatDate(getInvoiceDate(pauseModal.invoice) || pauseModal.invoice.created)} - ${formatCurrency(pauseModal.invoice.amount_due, pauseModal.invoice.currency)}`
           : ''
         }
         size="md"
@@ -984,7 +998,7 @@ export function FailedPaymentsTable({
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-gray-500">Date</span>
                 <span className="text-sm text-gray-700">
-                  {formatDate(getInvoiceDate(pauseModal.invoice))}
+                  {formatDate(getInvoiceDate(pauseModal.invoice) || pauseModal.invoice.created)}
                 </span>
               </div>
               <div className="flex items-center justify-between">

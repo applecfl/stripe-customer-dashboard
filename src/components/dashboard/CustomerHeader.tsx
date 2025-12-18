@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { CustomerData, ExtendedCustomerInfo, InvoiceData, PaymentData, OtherPayment } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
-import { Button } from '@/components/ui';
+import { Button, Tooltip } from '@/components/ui';
 import {
   Mail,
   Phone,
@@ -136,16 +136,20 @@ export function CustomerHeader({
           </div>
 
           {/* Right Side - Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <Button variant="primary" size="sm" onClick={onPayNow} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
-              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>Charge</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={onAddPaymentMethod} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
-              <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Add Card</span>
-              <span className="sm:hidden">Add</span>
-            </Button>
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 mr-1 sm:mr-0">
+            <Tooltip content="Charge customer">
+              <Button variant="primary" size="sm" onClick={onPayNow} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
+                <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Charge</span>
+              </Button>
+            </Tooltip>
+            <Tooltip content="Add payment method">
+              <Button variant="outline" size="sm" onClick={onAddPaymentMethod} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
+                <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Add Card</span>
+                <span className="sm:hidden">Add</span>
+              </Button>
+            </Tooltip>
           </div>
         </div>
 

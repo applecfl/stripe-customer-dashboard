@@ -12,7 +12,7 @@ interface TableProps {
 export function Table({ children, className, allowOverflow }: TableProps) {
   return (
     <div className={cn(allowOverflow ? 'overflow-visible' : 'overflow-x-auto', className)}>
-      <table className={cn('w-full', !allowOverflow && 'min-w-[650px] sm:min-w-0')}>{children}</table>
+      <table className="w-full">{children}</table>
     </div>
   );
 }

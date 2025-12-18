@@ -74,8 +74,13 @@ export function SendReminderModal({
     ? `Payment Reminder - ${formattedAmount} Due ${invoiceDate}`
     : `Payment Reminder - ${formattedAmount} Due`;
 
-  // Get recipient name from extendedInfo (father and mother names) or fallback to customer name
+  // Get recipient name from extendedInfo (pre-formatted parentsName, or father/mother names) or fallback to customer name
   const getRecipientName = (): string => {
+    // Use pre-formatted parentsName if available (e.g., "Mr. Boris and Mrs. Kristina Akbosh")
+    if (extendedInfo?.parentsName) {
+      return extendedInfo.parentsName;
+    }
+    // Fallback to combining individual parent names
     const names: string[] = [];
     if (extendedInfo?.fatherName) {
       names.push(extendedInfo.fatherName);
@@ -83,7 +88,6 @@ export function SendReminderModal({
     if (extendedInfo?.motherName) {
       names.push(extendedInfo.motherName);
     }
-    // If we have parent names, use them; otherwise fallback to customer name
     if (names.length > 0) {
       return names.join(' and ');
     }
@@ -255,6 +259,8 @@ export function SendReminderModal({
           accountId,
           customHtml: hasChanges ? customHtml : undefined,
           customSubject: subject !== defaultSubject ? subject : undefined,
+          senderName: extendedInfo?.senderName,
+          senderEmail: extendedInfo?.senderEmail,
         }),
       });
 
@@ -316,8 +322,25 @@ export function SendReminderModal({
       size="full"
     >
       <div className="flex flex-col h-[calc(100vh-200px)] min-h-[500px]">
-        {/* Email Header - To, Subject */}
+        {/* Email Header - From, To, Subject */}
         <div className="border-b border-gray-200 pb-4 mb-4 space-y-3">
+          {/* From Field - Read-only sender info */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-500 w-16">From:</label>
+            <div className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
+              {extendedInfo?.senderName && extendedInfo?.senderEmail ? (
+                <span>
+                  <span className="font-medium">{extendedInfo.senderName}</span>
+                  <span className="text-gray-500 ml-1">&lt;{extendedInfo.senderEmail}&gt;</span>
+                </span>
+              ) : extendedInfo?.senderEmail ? (
+                <span>{extendedInfo.senderEmail}</span>
+              ) : (
+                <span className="text-gray-400">Default sender (admin@lecfl.com)</span>
+              )}
+            </div>
+          </div>
+
           {/* To Field - Multiple emails */}
           <div className="flex items-start gap-3">
             <label className="text-sm font-medium text-gray-500 w-16 pt-2">To:</label>

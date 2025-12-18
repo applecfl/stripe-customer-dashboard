@@ -49,44 +49,8 @@ export function generatePaymentReminderHtml(params: EmailTemplateParams): string
               <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
                 Hi ${customerName || 'there'},
               </p>
-              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                We noticed that your recent payment to <strong>${organizationName}</strong> was unsuccessful. We understand that payment issues can happen for various reasons, and we're here to help you resolve this quickly.
-              </p>
-
-              <!-- Payment Details Box -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #fafafa; border-radius: 8px; margin: 24px 0;">
-                <tr>
-                  <td style="padding: 24px;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                      <tr>
-                        <td style="padding: 8px 0; font-size: 14px; color: #71717a;">Date</td>
-                        <td align="right" style="padding: 8px 0; font-size: 14px; font-weight: 500; color: #18181b;">${dueDate}</td>
-                      </tr>
-                      ${cardLast4 ? `
-                      <tr>
-                        <td style="padding: 8px 0; font-size: 14px; color: #71717a;">Card Used</td>
-                        <td align="right" style="padding: 8px 0; font-size: 14px; font-weight: 500; color: #18181b;">${cardBrand ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1) : 'Card'} •••• ${cardLast4}</td>
-                      </tr>
-                      ` : ''}
-                      <tr>
-                        <td style="padding: 8px 0; font-size: 14px; color: #71717a;">Amount Due</td>
-                        <td align="right" style="padding: 8px 0; font-size: 20px; font-weight: 600; color: #dc2626;">${formattedAmount}</td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-
-              ${additionalMessage ? `
-              <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px; margin: 24px 0; border-radius: 0 8px 8px 0;">
-                <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #1e40af;">
-                  ${additionalMessage}
-                </p>
-              </div>
-              ` : ''}
-
               <p style="margin: 0 0 30px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                Please click the button below to update your payment information or retry the payment with a different card.
+                We noticed that your recent tuition payment to LEC was unsuccessful. We understand that payment issues can happen for various reasons. Please use the link below to make a payment or reply to this email to contact the registration department for further assistance.
               </p>
 
               <!-- CTA Button -->
@@ -94,7 +58,7 @@ export function generatePaymentReminderHtml(params: EmailTemplateParams): string
                 <tr>
                   <td align="center">
                     <a href="${paymentLink}" style="display: inline-block; padding: 16px 32px; background-color: #4f46e5; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);">
-                      Retry Payment
+                      Make a Payment
                     </a>
                   </td>
                 </tr>
@@ -130,29 +94,16 @@ export function generatePaymentReminderText(params: EmailTemplateParams): string
     customerName,
     organizationName,
     dueDate,
-    cardLast4,
-    cardBrand,
-    formattedAmount,
     paymentLink,
-    additionalMessage,
   } = params;
 
   return `Payment Reminder - Due ${dueDate}
 
 Hi ${customerName || 'there'},
 
-We noticed that your recent payment to ${organizationName} was unsuccessful.
+We noticed that your recent tuition payment to LEC was unsuccessful. We understand that payment issues can happen for various reasons. Please use the link below to make a payment or reply to this email to contact the registration department for further assistance.
 
-Date: ${dueDate}
-${cardLast4 ? `Card Used: ${cardBrand ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1) : 'Card'} •••• ${cardLast4}` : ''}
-Amount Due: ${formattedAmount}
-
-${additionalMessage ? `Note: ${additionalMessage}` : ''}
-
-Please visit the following link to update your payment information or retry with a different card:
-${paymentLink}
-
-If you have any questions, please contact us.
+Make a Payment: ${paymentLink}
 
 Thank you,
 ${organizationName}`;

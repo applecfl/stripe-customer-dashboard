@@ -29,6 +29,11 @@ export interface ExtendedCustomerInfo {
   motherName?: string;
   motherEmail?: string;
   motherCell?: string;
+  // Pre-formatted parent names for emails (e.g., "Mr. Boris and Mrs. Kristina Akbosh")
+  parentsName?: string;
+  // Email sender info (e.g., "Rabbi Sholem Kleinman", "sholem@lecfl.com")
+  senderName?: string;
+  senderEmail?: string;
   // Payment summary info
   totalAmount?: number;
   paymentName?: string;

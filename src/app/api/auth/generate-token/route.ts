@@ -12,6 +12,13 @@ interface GenerateTokenRequest {
   MotherName?: string;
   MotherEmail?: string;
   MotherCell?: string | number;
+  // Pre-formatted parent names for emails
+  ParentsName?: string;
+  // Email sender info
+  Sender?: {
+    Name: string;
+    Email: string;
+  };
   // Payment summary info
   Total?: number;
   Description?: string;
@@ -59,6 +66,8 @@ export async function POST(
       MotherName,
       MotherEmail,
       MotherCell,
+      ParentsName,
+      Sender,
       Total,
       Description,
       OtherPayments,
@@ -96,7 +105,7 @@ export async function POST(
 
     // Build extended info if any data is provided
     const extendedInfo: ExtendedCustomerInfo | undefined =
-      (FatherName || FatherEmail || FatherCell || MotherName || MotherEmail || MotherCell || Total || Description)
+      (FatherName || FatherEmail || FatherCell || MotherName || MotherEmail || MotherCell || ParentsName || Sender || Total || Description)
         ? {
             fatherName: FatherName,
             fatherEmail: FatherEmail,
@@ -104,6 +113,9 @@ export async function POST(
             motherName: MotherName,
             motherEmail: MotherEmail,
             motherCell: MotherCell ? String(MotherCell) : undefined,
+            parentsName: ParentsName,
+            senderName: Sender?.Name,
+            senderEmail: Sender?.Email,
             totalAmount: Total,
             paymentName: Description,
           }

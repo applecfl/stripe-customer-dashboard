@@ -174,6 +174,11 @@ export interface ExtendedCustomerInfo {
   motherName?: string;
   motherEmail?: string;
   motherCell?: string;
+  // Pre-formatted parent names for emails
+  parentsName?: string;
+  // Email sender info
+  senderName?: string;
+  senderEmail?: string;
   // Payment summary info
   totalAmount?: number;
   paymentName?: string;

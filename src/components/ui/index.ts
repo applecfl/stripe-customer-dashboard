@@ -7,3 +7,4 @@ export { Select } from './Select';
 export { Textarea } from './Textarea';
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmptyState } from './Table';
 export { Spinner, LoadingState } from './Spinner';
+export { Tooltip } from './Tooltip';

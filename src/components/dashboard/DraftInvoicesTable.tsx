@@ -17,6 +17,7 @@ import {
   ModalFooter,
   Button,
   Textarea,
+  Tooltip,
 } from '@/components/ui';
 import {
   Clock,
@@ -139,8 +140,28 @@ export function FutureInvoicesTable({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Parse date from note's [Scheduled: ...] pattern
+  // Defined early so it can be used by getFinalizeDate and other functions
+  const parseDateFromNote = (note: string): number | null => {
+    const match = note.match(/\[Scheduled: ([^\]]+)\]/);
+    if (match) {
+      const dateStr = match[1];
+      const parsed = new Date(dateStr);
+      if (!isNaN(parsed.getTime())) {
+        return Math.floor(parsed.getTime() / 1000);
+      }
+    }
+    return null;
+  };
+
   // Helper to get Payment date for sorting (prioritize metadata.scheduledFinalizeAt)
+  // For paused invoices, check note and originalScheduledDate
   const getFinalizeDate = (inv: InvoiceData): number => {
+    if (inv.isPaused) {
+      const noteDate = parseDateFromNote(inv.note || '');
+      if (noteDate) return noteDate;
+      if (inv.metadata?.originalScheduledDate) return parseInt(inv.metadata.originalScheduledDate, 10);
+    }
     if (inv.metadata?.scheduledFinalizeAt) return parseInt(inv.metadata.scheduledFinalizeAt, 10);
     if (inv.automatically_finalizes_at) return inv.automatically_finalizes_at;
     return inv.due_date || inv.created;
@@ -195,10 +216,19 @@ export function FutureInvoicesTable({
 
   // Get the original scheduled date from invoice (before any pending changes)
   // Prioritize metadata.scheduledFinalizeAt since that's where we store user's custom date
+  // For paused invoices, use note's scheduled date or originalScheduledDate from metadata
   const getOriginalDate = (invoice: InvoiceData): number | null => {
+    // For paused invoices, first check note, then metadata
+    if (invoice.isPaused) {
+      const noteDate = parseDateFromNote(invoice.note || '');
+      if (noteDate) return noteDate;
+      if (invoice.metadata?.originalScheduledDate) {
+        return parseInt(invoice.metadata.originalScheduledDate, 10);
+      }
+    }
     if (invoice.metadata?.scheduledFinalizeAt) return parseInt(invoice.metadata.scheduledFinalizeAt, 10);
     if (invoice.automatically_finalizes_at) return invoice.automatically_finalizes_at;
-    return invoice.due_date || null;
+    return invoice.due_date || invoice.created || null;
   };
 
   // Check if invoice has pending changes
@@ -242,6 +272,7 @@ export function FutureInvoicesTable({
   };
 
   // Finish editing date (on blur)
+  // For paused invoices, store the new date in the note instead of the real date field
   const finishEditDate = (invoice: InvoiceData) => {
     const newDate = new Date(editValue + 'T00:00:00');
     if (!isNaN(newDate.getTime())) {
@@ -251,13 +282,33 @@ export function FutureInvoicesTable({
       const originalDateOnly = originalDate ? Math.floor(new Date(originalDate * 1000).setHours(0, 0, 0, 0) / 1000) : null;
       const newDateOnly = Math.floor(new Date(timestamp * 1000).setHours(0, 0, 0, 0) / 1000);
 
-      console.log('Date comparison:', { editValue, timestamp, originalDate, originalDateOnly, newDateOnly, changed: newDateOnly !== originalDateOnly });
+      console.log('Date comparison:', { editValue, timestamp, originalDate, originalDateOnly, newDateOnly, changed: newDateOnly !== originalDateOnly, isPaused: invoice.isPaused });
 
       if (newDateOnly !== originalDateOnly) {
-        setPendingChanges(prev => ({
-          ...prev,
-          [invoice.id]: { ...prev[invoice.id], date: timestamp },
-        }));
+        if (invoice.isPaused) {
+          // For paused invoices, update the note with the new date instead of the real date
+          // This way the date change is stored in metadata until resumed
+          const currentNote = getDisplayedNote(invoice);
+          const dateStr = formatDate(timestamp);
+          // Check if note already has a scheduled date pattern and replace it, otherwise prepend
+          const scheduledDatePattern = /\[Scheduled: [^\]]+\]/;
+          const newScheduledDate = `[Scheduled: ${dateStr}]`;
+          let newNote: string;
+          if (scheduledDatePattern.test(currentNote)) {
+            newNote = currentNote.replace(scheduledDatePattern, newScheduledDate);
+          } else {
+            newNote = currentNote ? `${newScheduledDate} ${currentNote}` : newScheduledDate;
+          }
+          setPendingChanges(prev => ({
+            ...prev,
+            [invoice.id]: { ...prev[invoice.id], note: newNote },
+          }));
+        } else {
+          setPendingChanges(prev => ({
+            ...prev,
+            [invoice.id]: { ...prev[invoice.id], date: timestamp },
+          }));
+        }
       }
     }
     setEditingDate(null);
@@ -442,13 +493,24 @@ export function FutureInvoicesTable({
 
   // Get displayed date (pending or original)
   // Prioritize metadata.scheduledFinalizeAt since that's where we store user's custom date
+  // For paused invoices, use originalScheduledDate from metadata or note
   const getDisplayedDate = (invoice: InvoiceData): number | null => {
     const changes = pendingChanges[invoice.id];
     if (changes?.date !== undefined) return changes.date;
+
+    // For paused invoices, first check if there's a scheduled date in the note
+    if (invoice.isPaused) {
+      const noteDate = parseDateFromNote(invoice.note || '');
+      if (noteDate) return noteDate;
+      // Fall back to originalScheduledDate from metadata
+      if (invoice.metadata?.originalScheduledDate) {
+        return parseInt(invoice.metadata.originalScheduledDate, 10);
+      }
+    }
     // Check multiple sources - prioritize our custom metadata field
     if (invoice.metadata?.scheduledFinalizeAt) return parseInt(invoice.metadata.scheduledFinalizeAt, 10);
     if (invoice.automatically_finalizes_at) return invoice.automatically_finalizes_at;
-    return invoice.due_date || null;
+    return invoice.due_date || invoice.created || null;
   };
 
   // Get displayed note (pending or original)
@@ -911,26 +973,27 @@ export function FutureInvoicesTable({
           </div>
         )}
 
-        <Table className="table-fixed w-full">
+        <div className="overflow-x-auto">
+          <table className="w-full">
           <TableHeader>
             <TableRow hoverable={false}>
               {/* Checkbox column - hide select all when items are selected (toolbar shows it) */}
-              <TableHead compact className="w-[28px]">
+              <th className="p-0">
                 {draftInvoices.length > 0 && selectedIds.size === 0 && (
                   <button
                     onClick={toggleSelectAll}
-                    className="p-0.5 hover:bg-gray-100 rounded transition-colors"
+                    className="w-4 h-4 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
                     title="Select all"
                   >
-                    <Square className="w-4 h-4 text-gray-400" />
+                    <Square className="w-3 h-3 text-gray-400" />
                   </button>
                 )}
-              </TableHead>
-              <TableHead compact className="w-[28px]"></TableHead>
-              <TableHead className="w-[100px]">Amount</TableHead>
-              <TableHead className="w-[100px]">Date</TableHead>
-              <TableHead className="w-[140px]"><span className="hidden sm:inline">Payment </span>Card</TableHead>
-              <TableHead align="right">Actions</TableHead>
+              </th>
+              <th className="p-0"></th>
+              <TableHead compact>Amount</TableHead>
+              <TableHead compact>Date</TableHead>
+              <TableHead compact><span className="hidden sm:inline">Payment </span>Card</TableHead>
+              <TableHead align="right" compact>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -965,31 +1028,31 @@ export function FutureInvoicesTable({
                 <>
                 <TableRow key={invoice.id} className={rowClassName}>
                   {/* Checkbox Cell */}
-                  <TableCell compact>
+                  <td className="p-0">
                     <button
                       onClick={() => toggleSelect(invoice.id)}
-                      className="p-0.5 hover:bg-gray-100 rounded transition-colors"
+                      className="w-4 h-4 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
                     >
                       {isSelected ? (
-                        <CheckSquare className="w-4 h-4 text-indigo-600" />
+                        <CheckSquare className="w-3 h-3 text-indigo-600" />
                       ) : (
-                        <Square className="w-4 h-4 text-gray-400" />
+                        <Square className="w-3 h-3 text-gray-400" />
                       )}
                     </button>
-                  </TableCell>
-                  <TableCell compact>
+                  </td>
+                  <td className="p-0">
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : invoice.id)}
-                      className="p-0.5 hover:bg-gray-100 rounded transition-colors"
+                      className="w-4 h-4 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
                       title={isExpanded ? 'Hide details' : 'Show details'}
                     >
                       {isExpanded ? (
-                        <ChevronUp className="w-4 h-4 text-gray-500" />
+                        <ChevronUp className="w-3 h-3 text-gray-500" />
                       ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                        <ChevronDown className="w-3 h-3 text-gray-400" />
                       )}
                     </button>
-                  </TableCell>
+                  </td>
 
                   {/* Amount Cell */}
                   <TableCell>
@@ -1191,7 +1254,7 @@ export function FutureInvoicesTable({
                           <button
                             onClick={() => saveChanges(invoice)}
                             disabled={isSaving}
-                            className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm rounded transition-colors disabled:opacity-50"
+                            className="flex items-center justify-center gap-0.5 sm:gap-1 p-1.5 sm:px-2 sm:py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm rounded transition-colors disabled:opacity-50"
                           >
                             {isSaving ? (
                               <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin" />
@@ -1203,7 +1266,7 @@ export function FutureInvoicesTable({
                           <button
                             onClick={() => cancelChanges(invoice.id)}
                             disabled={isSaving}
-                            className="p-0.5 sm:p-1 hover:bg-gray-100 text-gray-500 rounded transition-colors"
+                            className="flex items-center justify-center p-1.5 sm:p-1 hover:bg-gray-100 text-gray-500 rounded transition-colors"
                             title="Cancel"
                           >
                             <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -1212,51 +1275,55 @@ export function FutureInvoicesTable({
                       ) : (
                         <div className="flex items-center gap-1">
                           {invoice.isPaused ? (
-                            <button
-                              onClick={() => handlePauseResume(invoice.id, false)}
-                              disabled={pausingId === invoice.id}
-                              className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors disabled:opacity-50"
-                              title="Resume payment"
-                            >
-                              {pausingId === invoice.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Play className="w-3.5 h-3.5" />
-                              )}
-                              <span className="hidden sm:inline">Resume</span>
-                            </button>
+                            <Tooltip content="Resume payment">
+                              <button
+                                onClick={() => handlePauseResume(invoice.id, false)}
+                                disabled={pausingId === invoice.id}
+                                className="inline-flex items-center justify-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors disabled:opacity-50"
+                              >
+                                {pausingId === invoice.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Play className="w-3.5 h-3.5" />
+                                )}
+                                <span className="hidden sm:inline">Resume</span>
+                              </button>
+                            </Tooltip>
                           ) : (
-                            <button
-                              onClick={() => confirmPause(invoice)}
-                              disabled={pausingId === invoice.id}
-                              className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
-                              title="Pause payment"
-                            >
-                              {pausingId === invoice.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Pause className="w-3.5 h-3.5" />
-                              )}
-                              <span className="hidden sm:inline">Pause</span>
-                            </button>
+                            <Tooltip content="Pause payment">
+                              <button
+                                onClick={() => confirmPause(invoice)}
+                                disabled={pausingId === invoice.id}
+                                className="inline-flex items-center justify-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
+                              >
+                                {pausingId === invoice.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Pause className="w-3.5 h-3.5" />
+                                )}
+                                <span className="hidden sm:inline">Pause</span>
+                              </button>
+                            </Tooltip>
                           )}
-                          <button
-                            onClick={() => confirmDeleteSingle(invoice.id)}
-                            className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                            title="Delete payment"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Delete</span>
-                          </button>
+                          <Tooltip content="Delete payment">
+                            <button
+                              onClick={() => confirmDeleteSingle(invoice.id)}
+                              className="inline-flex items-center justify-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Delete</span>
+                            </button>
+                          </Tooltip>
                           {/* Add Note button - only show if no note exists */}
                           {!getDisplayedNote(invoice) && editingNote !== invoice.id && (
-                            <button
-                              onClick={() => startEditNote(invoice)}
-                              className="inline-flex items-center gap-1 p-1 sm:px-2 sm:py-1 text-xs font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                              title="Add note"
-                            >
-                              <StickyNote className="w-3.5 h-3.5" />
-                            </button>
+                            <Tooltip content="Add note">
+                              <button
+                                onClick={() => startEditNote(invoice)}
+                                className="inline-flex items-center justify-center p-1.5 text-xs font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                              >
+                                <StickyNote className="w-3.5 h-3.5" />
+                              </button>
+                            </Tooltip>
                           )}
                         </div>
                       )}
@@ -1275,7 +1342,7 @@ export function FutureInvoicesTable({
 
                   return (
                     <tr key={`${invoice.id}-note`}>
-                      <td colSpan={6} className="px-2 sm:px-3 py-1 border-b border-gray-100">
+                      <td colSpan={100} className="px-2 sm:px-3 py-1 border-b border-gray-100">
                         <div className={`flex items-center gap-2 px-2 py-1 rounded ${
                           noteChanged ? 'bg-amber-50 border border-amber-200' : 'bg-gray-100 border border-gray-200'
                         }`}>
@@ -1336,7 +1403,7 @@ export function FutureInvoicesTable({
                 {/* Expanded Details */}
                 {isExpanded && (
                   <tr key={`${invoice.id}-expanded`}>
-                    <td colSpan={6} className="bg-gray-50 px-4 py-3 border-b">
+                    <td colSpan={100} className="bg-gray-50 px-4 py-3 border-b">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-1.5 text-gray-500 text-xs">
@@ -1376,7 +1443,8 @@ export function FutureInvoicesTable({
               );
             })}
           </TableBody>
-        </Table>
+        </table>
+        </div>
       </CardContent>
 
       {/* Delete Confirmation Modal */}

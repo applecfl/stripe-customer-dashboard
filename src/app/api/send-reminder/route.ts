@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sgMail from '@sendgrid/mail';
+import nodemailer from 'nodemailer';
+import { google } from 'googleapis';
 import { ApiResponse } from '@/types';
 import { getStripeAccountInfo } from '@/lib/stripe';
 
@@ -16,6 +17,116 @@ interface SendReminderRequest {
   accountId: string;
   customHtml?: string;
   customSubject?: string;
+  // Custom sender info from JSON
+  senderName?: string;
+  senderEmail?: string;
+}
+
+// Send email using Gmail API with Service Account
+async function sendWithGmailAPI(
+  to: string[],
+  from: { name: string; address: string },
+  subject: string,
+  text: string,
+  html: string,
+  customDelegatedUser?: string // Optional: override the default delegated user
+): Promise<void> {
+  const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  // Use custom delegated user if provided (from Sender.Email in JSON), otherwise use env var
+  const delegatedUser = customDelegatedUser || process.env.GMAIL_DELEGATED_USER;
+
+  if (!serviceAccountKey || !delegatedUser) {
+    throw new Error('Gmail API credentials not configured');
+  }
+
+  // Parse the service account key (stored as JSON string in env)
+  const credentials = JSON.parse(serviceAccountKey);
+
+  // Create JWT auth client with domain-wide delegation
+  const auth = new google.auth.JWT({
+    email: credentials.client_email,
+    key: credentials.private_key,
+    scopes: ['https://www.googleapis.com/auth/gmail.send'],
+    subject: delegatedUser, // Impersonate this user
+  });
+
+  const gmail = google.gmail({ version: 'v1', auth });
+
+  // Build the email message in RFC 2822 format
+  const boundary = '====boundary====';
+  const messageParts = [
+    `From: "${from.name}" <${from.address}>`,
+    `To: ${to.join(', ')}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: 7bit',
+    '',
+    text,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    'Content-Transfer-Encoding: 7bit',
+    '',
+    html,
+    '',
+    `--${boundary}--`,
+  ];
+
+  const message = messageParts.join('\r\n');
+
+  // Encode to base64url
+  const encodedMessage = Buffer.from(message)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  // Send the email
+  await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw: encodedMessage,
+    },
+  });
+}
+
+// Send email using Nodemailer with Gmail SMTP (app password)
+async function sendWithNodemailer(
+  to: string[],
+  from: { name: string; address: string },
+  subject: string,
+  text: string,
+  html: string
+): Promise<void> {
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+
+  if (!gmailUser || !gmailAppPassword) {
+    throw new Error('Gmail SMTP credentials not configured');
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: gmailUser,
+      pass: gmailAppPassword,
+    },
+  });
+
+  await transporter.sendMail({
+    from: {
+      name: from.name,
+      address: gmailUser, // Must use authenticated user for SMTP
+    },
+    to,
+    subject,
+    text,
+    html,
+  });
 }
 
 export async function POST(
@@ -36,6 +147,8 @@ export async function POST(
       accountId,
       customHtml,
       customSubject,
+      senderName,
+      senderEmail,
     } = body;
 
     // Get organization name from account config
@@ -49,17 +162,6 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    const sendgridApiKey = process.env.SENDGRID_API_KEY;
-    if (!sendgridApiKey) {
-      return NextResponse.json(
-        { success: false, error: 'SendGrid API key not configured' },
-        { status: 500 }
-      );
-    }
-
-    // Initialize SendGrid client
-    sgMail.setApiKey(sendgridApiKey);
 
     // Format amount for display
     const formattedAmount = new Intl.NumberFormat('en-US', {
@@ -95,44 +197,8 @@ export async function POST(
               <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
                 Hi ${customerName || 'there'},
               </p>
-              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                We noticed that your recent payment to <strong>${organizationName}</strong> was unsuccessful. We understand that payment issues can happen for various reasons, and we're here to help you resolve this quickly.
-              </p>
-
-              <!-- Payment Details Box -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #fafafa; border-radius: 8px; margin: 24px 0;">
-                <tr>
-                  <td style="padding: 24px;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                      <tr>
-                        <td style="padding: 8px 0; font-size: 14px; color: #71717a;">Date</td>
-                        <td align="right" style="padding: 8px 0; font-size: 14px; font-weight: 500; color: #18181b;">${dueDate}</td>
-                      </tr>
-                      ${cardLast4 ? `
-                      <tr>
-                        <td style="padding: 8px 0; font-size: 14px; color: #71717a;">Card Used</td>
-                        <td align="right" style="padding: 8px 0; font-size: 14px; font-weight: 500; color: #18181b;">${cardBrand ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1) : 'Card'} •••• ${cardLast4}</td>
-                      </tr>
-                      ` : ''}
-                      <tr>
-                        <td style="padding: 8px 0; font-size: 14px; color: #71717a;">Amount Due</td>
-                        <td align="right" style="padding: 8px 0; font-size: 20px; font-weight: 600; color: #dc2626;">${formattedAmount}</td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-
-              ${additionalMessage ? `
-              <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px; margin: 24px 0; border-radius: 0 8px 8px 0;">
-                <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #1e40af;">
-                  ${additionalMessage}
-                </p>
-              </div>
-              ` : ''}
-
               <p style="margin: 0 0 30px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                Please click the button below to update your payment information or retry the payment with a different card.
+                We noticed that your recent tuition payment to LEC was unsuccessful. We understand that payment issues can happen for various reasons. Please use the link below to make a payment or reply to this email to contact the registration department for further assistance.
               </p>
 
               <!-- CTA Button -->
@@ -140,7 +206,7 @@ export async function POST(
                 <tr>
                   <td align="center">
                     <a href="${paymentLink}" style="display: inline-block; padding: 16px 32px; background-color: #4f46e5; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);">
-                      Retry Payment
+                      Make a Payment
                     </a>
                   </td>
                 </tr>
@@ -177,41 +243,34 @@ Payment Reminder - Due ${dueDate}
 
 Hi ${customerName || 'there'},
 
-We noticed that your recent payment to ${organizationName} was unsuccessful.
+We noticed that your recent tuition payment to LEC was unsuccessful. We understand that payment issues can happen for various reasons. Please use the link below to make a payment or reply to this email to contact the registration department for further assistance.
 
-Date: ${dueDate}
-${cardLast4 ? `Card Used: ${cardBrand ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1) : 'Card'} •••• ${cardLast4}` : ''}
-Amount Due: ${formattedAmount}
-
-${additionalMessage ? `Note: ${additionalMessage}` : ''}
-
-Please visit the following link to update your payment information or retry with a different card:
-${paymentLink}
-
-If you have any questions, please contact us.
+Make a Payment: ${paymentLink}
 
 Thank you,
 ${organizationName}
     `.trim();
 
-    // Send via SendGrid client to all recipients
-    const msg = {
-      to: customerEmails.map(email => ({ email })),
-      from: {
-        email: 'leconnect@lecfl.com',
-        name: organizationName,
-      },
-      subject: customSubject || `Payment Reminder - ${formattedAmount} Due`,
-      text: textContent,
-      html: htmlContent,
-      customArgs: {
-        accountId,
-        dueDate,
-        type: 'payment_reminder',
-      },
+    const subject = customSubject || `Payment Reminder - ${formattedAmount} Due`;
+
+    // Use custom sender from JSON if provided, otherwise fall back to env vars
+    const fromEmail = senderEmail || process.env.GMAIL_DELEGATED_USER || process.env.GMAIL_USER || 'noreply@lecfl.com';
+    const fromName = senderName || organizationName;
+
+    const from = {
+      name: fromName,
+      address: fromEmail,
     };
 
-    await sgMail.send(msg);
+    // Try Gmail API with Service Account first, fall back to Nodemailer
+    const useServiceAccount = process.env.GOOGLE_SERVICE_ACCOUNT_KEY && (senderEmail || process.env.GMAIL_DELEGATED_USER);
+
+    if (useServiceAccount) {
+      // For service account, use the senderEmail as the delegated user to impersonate
+      await sendWithGmailAPI(customerEmails, from, subject, textContent, htmlContent, senderEmail);
+    } else {
+      await sendWithNodemailer(customerEmails, from, subject, textContent, htmlContent);
+    }
 
     return NextResponse.json({
       success: true,
@@ -219,16 +278,6 @@ ${organizationName}
     });
   } catch (error) {
     console.error('Error sending reminder:', error);
-
-    // Handle SendGrid specific errors
-    if (error && typeof error === 'object' && 'response' in error) {
-      const sgError = error as { response?: { body?: { errors?: Array<{ message: string }> } } };
-      const errorMessage = sgError.response?.body?.errors?.[0]?.message || 'Failed to send email';
-      return NextResponse.json(
-        { success: false, error: errorMessage },
-        { status: 500 }
-      );
-    }
 
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Failed to send reminder' },

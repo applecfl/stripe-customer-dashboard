@@ -16,5 +16,8 @@ env:
   - variable: STRIPE_LIST
     secret: STRIPE_LIST
 
-  - variable: SENDGRID_API_KEY
-    secret: SENDGRID_API_KEY
+  - variable: GOOGLE_SERVICE_ACCOUNT_KEY
+    secret: GOOGLE_SERVICE_ACCOUNT_KEY
+
+  - variable: GMAIL_DELEGATED_USER
+    secret: GMAIL_DELEGATED_USER

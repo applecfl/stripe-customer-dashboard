@@ -7,12 +7,12 @@ import {
   Card,
   CardHeader,
   CardContent,
-  Table,
   TableHeader,
   TableBody,
   TableRow,
   TableHead,
   TableCell,
+  Tooltip,
 } from '@/components/ui';
 import {
   FileText,
@@ -244,13 +244,14 @@ export function SuccessfulPaymentsTable({
         </div>
       </CardHeader>
       <CardContent noPadding>
-        <Table className="table-fixed w-full">
+        <div className="overflow-x-auto">
+          <table className="w-full">
           <TableHeader>
             <TableRow hoverable={false}>
-              <TableHead compact className="w-[50px]"></TableHead>
-              <TableHead className="w-[120px]">Amount</TableHead>
-              <TableHead className="w-[120px]">Date</TableHead>
-              <TableHead align="right">Actions</TableHead>
+              <th className="p-0"></th>
+              <TableHead compact>Amount</TableHead>
+              <TableHead compact>Date</TableHead>
+              <TableHead align="right" compact>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -261,25 +262,20 @@ export function SuccessfulPaymentsTable({
               return (
                 <React.Fragment key={payment.id}>
                   <TableRow className={payment.amount_refunded > 0 ? 'bg-gray-50/50' : ''}>
+                    <td className="p-0">
+                      <button
+                        onClick={() => toggleExpanded(`pay-${payment.id}`)}
+                        className="w-4 h-4 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
+                        title={isExpanded ? 'Hide details' : 'Show details'}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="w-3 h-3 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3 text-gray-400" />
+                        )}
+                      </button>
+                    </td>
                     <TableCell compact>
-                      <div className="flex items-center gap-0.5">
-                        <button
-                          onClick={() => toggleExpanded(`pay-${payment.id}`)}
-                          className="p-0.5 hover:bg-gray-100 rounded transition-colors"
-                          title={isExpanded ? 'Hide details' : 'Show details'}
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-gray-500" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-gray-500" />
-                          )}
-                        </button>
-                        <div className="p-0.5" title="Stripe Payment">
-                          <CreditCard className="w-4 h-4 text-indigo-600" />
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
                       <div>
                         {payment.amount_refunded > 0 ? (
                           <div className="inline-flex flex-col items-start gap-0.5 font-mono text-xs sm:text-sm">
@@ -306,7 +302,7 @@ export function SuccessfulPaymentsTable({
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell compact>
                       <div>
                         <span className="text-gray-600 text-xs sm:text-sm">
                           {formatDateTime(payment.created)}
@@ -318,18 +314,19 @@ export function SuccessfulPaymentsTable({
                         )}
                       </div>
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell align="right" compact>
                       <div className="flex items-center justify-end gap-1">
                         {payment.status === 'succeeded' && payment.amount_refunded < payment.amount ? (
                           <>
-                            <button
-                              onClick={() => onRefund(payment)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
-                              title="Refund Payment"
-                            >
-                              <Undo2 className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Refund</span>
-                            </button>
+                            <Tooltip content="Refund Payment">
+                              <button
+                                onClick={() => onRefund(payment)}
+                                className="inline-flex items-center justify-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
+                              >
+                                <Undo2 className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Refund</span>
+                              </button>
+                            </Tooltip>
                             {payment.amount_refunded > 0 && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[12px] text-red-600 bg-red-50 rounded font-medium">
                                 <RotateCcw className="w-2.5 h-2.5" />
@@ -345,13 +342,14 @@ export function SuccessfulPaymentsTable({
                         ) : null}
                         {/* Add Note button - always last, only show if no note exists */}
                         {!getDisplayedNote(payment) && editingNote !== payment.id && (
-                          <button
-                            onClick={() => startEditNote(payment)}
-                            className="inline-flex items-center gap-1 p-1 sm:px-2 sm:py-1 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                            title="Add note"
-                          >
-                            <StickyNote className="w-3.5 h-3.5" />
-                          </button>
+                          <Tooltip content="Add note">
+                            <button
+                              onClick={() => startEditNote(payment)}
+                              className="flex items-center justify-center p-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                            >
+                              <StickyNote className="w-3.5 h-3.5" />
+                            </button>
+                          </Tooltip>
                         )}
                       </div>
                     </TableCell>
@@ -369,7 +367,7 @@ export function SuccessfulPaymentsTable({
 
                     return (
                       <tr key={`${payment.id}-note`}>
-                        <td colSpan={4} className="px-2 sm:px-3 py-1 border-b border-gray-100">
+                        <td colSpan={100} className="px-2 sm:px-3 py-1 border-b border-gray-100">
                           <div className={`flex items-center gap-2 px-2 py-1 rounded ${
                             noteChanged ? 'bg-amber-50 border border-amber-200' : 'bg-gray-100 border border-gray-200'
                           }`}>
@@ -431,7 +429,7 @@ export function SuccessfulPaymentsTable({
                   {/* Expanded Details */}
                   {isExpanded && (
                     <tr key={`${payment.id}-details`}>
-                      <td colSpan={4} className="bg-gray-50 px-4 py-3 border-b">
+                      <td colSpan={100} className="bg-gray-50 px-4 py-3 border-b">
                         {/* Header with copy and external link buttons */}
                         <div className="flex items-center justify-end gap-2 mb-3">
                           <button
@@ -612,37 +610,24 @@ export function SuccessfulPaymentsTable({
               return (
                 <React.Fragment key={`other-${index}`}>
                   <TableRow className={isZelle ? "bg-purple-50/30" : isCash ? "bg-green-50/30" : "bg-amber-50/30"}>
-                    <TableCell compact>
-                      <div className="flex items-center gap-0.5">
-                        <button
-                          onClick={() => toggleExpanded(`other-${index}`)}
-                          className="p-0.5 hover:bg-gray-100 rounded transition-colors"
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-gray-500" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-gray-500" />
-                          )}
-                        </button>
-                        <div className="p-0.5" title={payment.paymentType}>
-                          {getPaymentTypeIcon(payment.paymentType, "w-4 h-4")}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <span className="font-semibold text-green-600 text-xs sm:text-sm">
-                          {formatCurrency(payment.amount * 100, 'usd')}
-                        </span>
-                        {/* Description under amount */}
-                        {payment.description && (
-                          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 line-clamp-1">
-                            {payment.description}
-                          </p>
+                    <td className="p-0">
+                      <button
+                        onClick={() => toggleExpanded(`other-${index}`)}
+                        className="w-4 h-4 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="w-3 h-3 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3 text-gray-400" />
                         )}
-                      </div>
+                      </button>
+                    </td>
+                    <TableCell compact>
+                      <span className="font-semibold text-green-600 text-xs sm:text-sm">
+                        {formatCurrency(payment.amount * 100, 'usd')}
+                      </span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell compact>
                       <div>
                         <span className="text-gray-600 text-xs sm:text-sm">
                           {paymentDate.toLocaleDateString('en-US', {
@@ -653,7 +638,7 @@ export function SuccessfulPaymentsTable({
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell align="right" compact>
                       <span className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs rounded-md font-medium ${
                         isZelle
                           ? 'text-purple-700 bg-purple-100'
@@ -667,10 +652,21 @@ export function SuccessfulPaymentsTable({
                     </TableCell>
                   </TableRow>
 
+                  {/* Description row for other payments */}
+                  {payment.description && (
+                    <tr key={`other-${index}-desc`}>
+                      <td colSpan={100} className={`px-2 sm:px-3 py-1 border-b border-gray-100 ${isZelle ? 'bg-purple-50/30' : isCash ? 'bg-green-50/30' : 'bg-amber-50/30'}`}>
+                        <p className="text-[10px] sm:text-xs text-gray-500">
+                          {payment.description}
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+
                   {/* Expanded Details for Other Payments */}
                   {isExpanded && (
                     <tr key={`other-${index}-details`}>
-                      <td colSpan={4} className={`px-4 py-3 border-b ${isZelle ? 'bg-purple-50' : isCash ? 'bg-green-50' : 'bg-amber-50'}`}>
+                      <td colSpan={100} className={`px-4 py-3 border-b ${isZelle ? 'bg-purple-50' : isCash ? 'bg-green-50' : 'bg-amber-50'}`}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                           {/* Payment Type */}
                           <div className="space-y-1">
@@ -718,7 +714,8 @@ export function SuccessfulPaymentsTable({
               );
             })}
           </TableBody>
-        </Table>
+        </table>
+        </div>
       </CardContent>
     </Card>
   );
