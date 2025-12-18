@@ -125,6 +125,14 @@ html, body {
   max-width: 100vw;
 }
 
+/* Action buttons wrap at 890px */
+@media (max-width: 890px) {
+  .actions-wrap-890 {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
+
 /* Safe area padding for notched phones */
 @supports (padding: env(safe-area-inset-bottom)) {
   .safe-bottom {

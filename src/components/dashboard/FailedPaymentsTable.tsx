@@ -592,7 +592,7 @@ export function FailedPaymentsTable({
                     <TableCell align="right" compact>
                       <>
                         {/* Desktop: action buttons with icons */}
-                        <div className="hidden sm:flex items-center justify-end gap-1.5">
+                        <div className="hidden sm:flex items-center justify-end gap-1.5 actions-wrap-890">
                           {editingAmount === invoice.id && (
                             <button
                               onMouseDown={(e) => {
