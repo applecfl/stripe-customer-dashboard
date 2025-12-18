@@ -156,11 +156,11 @@ export function CustomerHeader({
             <div className="flex flex-row gap-4 sm:gap-8 flex-wrap">
               {/* Father Info */}
               {extendedInfo?.fatherName && (
-                <div className="flex items-start gap-2 sm:gap-3 flex-shrink-0">
+                <div className="flex items-start gap-2 sm:gap-3 flex-1 sm:flex-initial min-w-0">
                   <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
                     <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs text-gray-500 font-medium">Father</p>
                     <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.fatherName}</p>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
@@ -183,11 +183,11 @@ export function CustomerHeader({
 
               {/* Mother Info */}
               {extendedInfo?.motherName && (
-                <div className="flex items-start gap-2 sm:gap-3 flex-shrink-0">
+                <div className="flex items-start gap-2 sm:gap-3 flex-1 sm:flex-initial min-w-0">
                   <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
                     <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-pink-600" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs text-gray-500 font-medium">Mother</p>
                     <p className="text-sm font-semibold text-gray-900 truncate">{extendedInfo.motherName}</p>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">

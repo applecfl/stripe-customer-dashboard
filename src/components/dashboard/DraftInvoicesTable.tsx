@@ -38,8 +38,8 @@ import {
   Play,
   Hash,
   Plus,
+  StickyNote,
 } from 'lucide-react';
-import { NoteButton } from './NoteButton';
 
 interface FutureInvoicesTableProps {
   invoices: InvoiceData[];
@@ -66,6 +66,7 @@ interface PendingChanges {
   amount?: number; // in cents
   date?: number; // unix timestamp
   paymentMethodId?: string;
+  note?: string; // note text
 }
 
 export function FutureInvoicesTable({
@@ -87,7 +88,9 @@ export function FutureInvoicesTable({
   const [editingAmount, setEditingAmount] = useState<string | null>(null);
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [editingCard, setEditingCard] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [noteEditValue, setNoteEditValue] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -207,8 +210,9 @@ export function FutureInvoicesTable({
     const originalDate = getOriginalDate(invoice);
     const dateChanged = changes.date !== undefined && changes.date !== originalDate;
     const pmChanged = changes.paymentMethodId !== undefined && changes.paymentMethodId !== invoice.default_payment_method;
+    const noteChanged = changes.note !== undefined && changes.note !== (invoice.note || '');
 
-    return amountChanged || dateChanged || pmChanged;
+    return amountChanged || dateChanged || pmChanged || noteChanged;
   };
 
   // Start editing amount
@@ -342,6 +346,23 @@ export function FutureInvoicesTable({
         }
       }
 
+      // Save note if changed
+      if (changes.note !== undefined && changes.note !== (invoice.note || '')) {
+        const res = await fetch(withToken(`/api/stripe/invoices/${invoice.id}`), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update-note',
+            note: changes.note.trim(),
+            accountId,
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to update note');
+        }
+      }
+
       // Clear pending changes for this invoice
       cancelChanges(invoice.id);
       onRefresh();
@@ -351,6 +372,67 @@ export function FutureInvoicesTable({
     } finally {
       setSaving(null);
     }
+  };
+
+  // Save only the note for an invoice
+  const saveNoteOnly = async (invoice: InvoiceData) => {
+    const changes = pendingChanges[invoice.id];
+    if (!changes?.note || changes.note === (invoice.note || '')) return;
+
+    setSaving(invoice.id);
+    setError(null);
+
+    try {
+      const res = await fetch(withToken(`/api/stripe/invoices/${invoice.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update-note',
+          note: changes.note.trim(),
+          accountId,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to update note');
+      }
+
+      // Clear only the note from pending changes
+      setPendingChanges(prev => {
+        const updated = { ...prev };
+        if (updated[invoice.id]) {
+          const { note: _, ...rest } = updated[invoice.id];
+          if (Object.keys(rest).length === 0) {
+            delete updated[invoice.id];
+          } else {
+            updated[invoice.id] = rest;
+          }
+        }
+        return updated;
+      });
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to save note:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save note');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Cancel only the note change for an invoice
+  const cancelNoteOnly = (invoiceId: string) => {
+    setPendingChanges(prev => {
+      const updated = { ...prev };
+      if (updated[invoiceId]) {
+        const { note: _, ...rest } = updated[invoiceId];
+        if (Object.keys(rest).length === 0) {
+          delete updated[invoiceId];
+        } else {
+          updated[invoiceId] = rest;
+        }
+      }
+      return updated;
+    });
   };
 
   // Get displayed amount (pending or original)
@@ -367,6 +449,43 @@ export function FutureInvoicesTable({
     if (invoice.metadata?.scheduledFinalizeAt) return parseInt(invoice.metadata.scheduledFinalizeAt, 10);
     if (invoice.automatically_finalizes_at) return invoice.automatically_finalizes_at;
     return invoice.due_date || null;
+  };
+
+  // Get displayed note (pending or original)
+  const getDisplayedNote = (invoice: InvoiceData): string => {
+    const changes = pendingChanges[invoice.id];
+    if (changes?.note !== undefined) return changes.note;
+    return invoice.note || '';
+  };
+
+  // Handle note change
+  const handleNoteChange = (invoiceId: string, newNote: string) => {
+    setPendingChanges(prev => ({
+      ...prev,
+      [invoiceId]: {
+        ...prev[invoiceId],
+        note: newNote,
+      },
+    }));
+  };
+
+  // Start editing note
+  const startEditNote = (invoice: InvoiceData) => {
+    const currentNote = getDisplayedNote(invoice);
+    setNoteEditValue(currentNote);
+    setEditingNote(invoice.id);
+  };
+
+  // Handle note input change - apply to pending changes immediately
+  const handleNoteInputChange = (invoice: InvoiceData, newValue: string) => {
+    setNoteEditValue(newValue);
+    handleNoteChange(invoice.id, newValue);
+  };
+
+  // Close note editor (on blur or escape)
+  const closeNoteEditor = () => {
+    setEditingNote(null);
+    setNoteEditValue('');
   };
 
   // Format date for input
@@ -830,6 +949,9 @@ export function FutureInvoicesTable({
               const pmChanged = pendingChanges[invoice.id]?.paymentMethodId !== undefined &&
                 pendingChanges[invoice.id]?.paymentMethodId !== invoice.default_payment_method;
 
+              // Check if there are non-note changes (for showing row save button)
+              const hasNonNoteChanges = amountChanged || dateChanged || pmChanged;
+
               const isSelected = selectedIds.has(invoice.id);
 
               // Determine row background: paused = red, selected = indigo, changes = amber
@@ -1064,14 +1186,7 @@ export function FutureInvoicesTable({
                   {/* Save/Cancel/Pause/Delete Actions */}
                   <TableCell>
                     <div className="flex items-center gap-0.5 sm:gap-1 justify-end">
-                      <NoteButton
-                        invoice={invoice}
-                        token={token}
-                        accountId={accountId}
-                        onNoteUpdated={onRefresh}
-                        size="sm"
-                      />
-                      {invoiceHasChanges ? (
+                      {hasNonNoteChanges ? (
                         <>
                           <button
                             onClick={() => saveChanges(invoice)}
@@ -1133,11 +1248,91 @@ export function FutureInvoicesTable({
                             <Trash2 className="w-3.5 h-3.5" />
                             <span className="hidden sm:inline">Delete</span>
                           </button>
+                          {/* Add Note button - only show if no note exists */}
+                          {!getDisplayedNote(invoice) && editingNote !== invoice.id && (
+                            <button
+                              onClick={() => startEditNote(invoice)}
+                              className="inline-flex items-center gap-1 p-1 sm:px-2 sm:py-1 text-xs font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                              title="Add note"
+                            >
+                              <StickyNote className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
                   </TableCell>
                 </TableRow>
+                {/* Note Alert Row - only show if note exists or editing */}
+                {(() => {
+                  const displayedNote = getDisplayedNote(invoice);
+                  const originalNote = invoice.note || '';
+                  const noteChanged = pendingChanges[invoice.id]?.note !== undefined &&
+                    pendingChanges[invoice.id]?.note !== originalNote;
+                  const showNote = displayedNote || editingNote === invoice.id;
+
+                  if (!showNote) return null;
+
+                  return (
+                    <tr key={`${invoice.id}-note`}>
+                      <td colSpan={6} className="px-2 sm:px-3 py-1 border-b border-gray-100">
+                        <div className={`flex items-center gap-2 px-2 py-1 rounded ${
+                          noteChanged ? 'bg-amber-50 border border-amber-200' : 'bg-gray-100 border border-gray-200'
+                        }`}>
+                          <StickyNote className={`w-3 h-3 flex-shrink-0 ${noteChanged ? 'text-amber-500' : 'text-gray-400'}`} />
+                          {editingNote === invoice.id ? (
+                            <input
+                              type="text"
+                              value={noteEditValue}
+                              onChange={(e) => handleNoteInputChange(invoice, e.target.value)}
+                              onBlur={() => closeNoteEditor()}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === 'Escape') {
+                                  closeNoteEditor();
+                                }
+                              }}
+                              autoFocus
+                              placeholder="Add a note..."
+                              className="flex-1 text-xs text-gray-700 bg-white border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          ) : (
+                            <button
+                              onClick={() => startEditNote(invoice)}
+                              className={`flex-1 text-left text-xs hover:underline ${
+                                noteChanged ? 'text-amber-700' : 'text-gray-600'
+                              }`}
+                            >
+                              {displayedNote}
+                            </button>
+                          )}
+                          {noteChanged && (
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => saveNoteOnly(invoice)}
+                                disabled={saving === invoice.id}
+                                className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] rounded transition-colors disabled:opacity-50"
+                              >
+                                {saving === invoice.id ? (
+                                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                ) : (
+                                  <Save className="w-2.5 h-2.5" />
+                                )}
+                                Save
+                              </button>
+                              <button
+                                onClick={() => cancelNoteOnly(invoice.id)}
+                                disabled={saving === invoice.id}
+                                className="p-0.5 hover:bg-gray-200 text-gray-500 rounded transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })()}
                 {/* Expanded Details */}
                 {isExpanded && (
                   <tr key={`${invoice.id}-expanded`}>

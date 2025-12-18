@@ -39,6 +39,16 @@ const getInvoiceSortPriority = (invoice: InvoiceData): number => {
   return 3;
 };
 
+// Sort invoices by priority first, then by date (closest to pay first = ascending)
+const sortInvoicesByPriorityAndDate = (a: InvoiceData, b: InvoiceData): number => {
+  const priorityDiff = getInvoiceSortPriority(a) - getInvoiceSortPriority(b);
+  if (priorityDiff !== 0) return priorityDiff;
+  // Within same priority, sort by date ascending (closest dates first)
+  const dateA = getInvoiceDate(a) || 0;
+  const dateB = getInvoiceDate(b) || 0;
+  return dateA - dateB;
+};
+
 const isFailedInvoice = (inv: InvoiceData) =>
   inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0;
 
@@ -146,7 +156,7 @@ function PaymentForm({
       .filter(inv => {
         return inv.status === 'open' && inv.amount_remaining > 0 && inv.attempt_count > 0;
       })
-      .sort((a, b) => getInvoiceSortPriority(a) - getInvoiceSortPriority(b));
+      .sort(sortInvoicesByPriorityAndDate);
   }, [invoices]);
 
   // Calculate total amount of all failed payments
@@ -172,7 +182,7 @@ function PaymentForm({
         }
         return false;
       })
-      .sort((a, b) => getInvoiceSortPriority(a) - getInvoiceSortPriority(b));
+      .sort(sortInvoicesByPriorityAndDate);
   }, [invoices, showAllInvoices, amount, totalFailedAmount]);
 
   // Calculate amounts

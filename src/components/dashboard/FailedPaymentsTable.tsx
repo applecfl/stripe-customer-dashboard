@@ -39,8 +39,9 @@ import {
   CheckCircle,
   XCircle,
   Save,
+  StickyNote,
+  X,
 } from 'lucide-react';
-import { NoteButton } from './NoteButton';
 
 // Payment attempt type from API
 interface PaymentAttempt {
@@ -115,6 +116,12 @@ export function FailedPaymentsTable({
   const [editValue, setEditValue] = useState('');
   const [savingAmount, setSavingAmount] = useState<string | null>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
+
+  // Inline note editing state
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const [noteEditValue, setNoteEditValue] = useState('');
+  const [pendingNotes, setPendingNotes] = useState<Record<string, string>>({});
+  const [savingNote, setSavingNote] = useState<string | null>(null);
 
   // Pause confirmation modal state
   const [pauseModal, setPauseModal] = useState<{
@@ -288,6 +295,84 @@ export function FailedPaymentsTable({
     } else if (e.key === 'Escape') {
       cancelEditAmount();
     }
+  };
+
+  // Get invoice note from metadata
+  const getInvoiceNote = (invoice: InvoiceData): string => {
+    return invoice.note || '';
+  };
+
+  // Get displayed note (pending or original)
+  const getDisplayedNote = (invoice: InvoiceData): string => {
+    if (pendingNotes[invoice.id] !== undefined) return pendingNotes[invoice.id];
+    return getInvoiceNote(invoice);
+  };
+
+  // Start editing note
+  const startEditNote = (invoice: InvoiceData) => {
+    setNoteEditValue(getDisplayedNote(invoice));
+    setEditingNote(invoice.id);
+  };
+
+  // Handle note input change
+  const handleNoteInputChange = (invoiceId: string, newValue: string) => {
+    setNoteEditValue(newValue);
+    setPendingNotes(prev => ({ ...prev, [invoiceId]: newValue }));
+  };
+
+  // Close note editor
+  const closeNoteEditor = () => {
+    setEditingNote(null);
+    setNoteEditValue('');
+  };
+
+  // Save note for an invoice
+  const saveNoteOnly = async (invoice: InvoiceData) => {
+    const pendingNote = pendingNotes[invoice.id];
+    if (pendingNote === undefined || pendingNote === getInvoiceNote(invoice)) return;
+
+    setSavingNote(invoice.id);
+    try {
+      let url = `/api/stripe/invoices/${invoice.id}`;
+      if (token) {
+        url += `?token=${encodeURIComponent(token)}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update-note',
+          note: pendingNote.trim(),
+          accountId,
+        }),
+      });
+
+      if (response.ok) {
+        setPendingNotes(prev => {
+          const updated = { ...prev };
+          delete updated[invoice.id];
+          return updated;
+        });
+        onRefresh();
+      } else {
+        const data = await response.json();
+        console.error('Failed to save note:', data.error);
+      }
+    } catch (error) {
+      console.error('Error saving note:', error);
+    } finally {
+      setSavingNote(null);
+    }
+  };
+
+  // Cancel note change
+  const cancelNoteOnly = (invoiceId: string) => {
+    setPendingNotes(prev => {
+      const updated = { ...prev };
+      delete updated[invoiceId];
+      return updated;
+    });
   };
 
   // Open pause/resume confirmation modal
@@ -506,13 +591,6 @@ export function FailedPaymentsTable({
                       <>
                         {/* Desktop: action buttons with icons */}
                         <div className="hidden sm:flex items-center justify-end gap-1.5">
-                          <NoteButton
-                            invoice={invoice}
-                            token={token}
-                            accountId={accountId}
-                            onNoteUpdated={onRefresh}
-                            size="sm"
-                          />
                           {editingAmount === invoice.id && (
                             <button
                               onMouseDown={(e) => {
@@ -575,16 +653,19 @@ export function FailedPaymentsTable({
                             <Ban className="w-3.5 h-3.5" />
                             Void
                           </button>
+                          {/* Add Note button - always last, only show if no note exists */}
+                          {!getDisplayedNote(invoice) && editingNote !== invoice.id && (
+                            <button
+                              onClick={() => startEditNote(invoice)}
+                              className="inline-flex items-center gap-1 p-1 sm:px-2 sm:py-1 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                              title="Add note"
+                            >
+                              <StickyNote className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                         {/* Mobile: compact icon buttons */}
                         <div className="sm:hidden flex items-center justify-end gap-1">
-                          <NoteButton
-                            invoice={invoice}
-                            token={token}
-                            accountId={accountId}
-                            onNoteUpdated={onRefresh}
-                            size="sm"
-                          />
                           {editingAmount === invoice.id && (
                             <button
                               onMouseDown={(e) => {
@@ -641,10 +722,101 @@ export function FailedPaymentsTable({
                           >
                             <Ban className="w-4 h-4" />
                           </button>
+                          {/* Add Note button - always last, only show if no note exists */}
+                          {!getDisplayedNote(invoice) && editingNote !== invoice.id && (
+                            <button
+                              onClick={() => startEditNote(invoice)}
+                              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                              title="Add note"
+                            >
+                              <StickyNote className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </>
                     </TableCell>
                   </TableRow>
+                  {/* Note Alert Row - only show if note exists or editing */}
+                  {(() => {
+                    const displayedNote = getDisplayedNote(invoice);
+                    const originalNote = getInvoiceNote(invoice);
+                    const noteChanged = pendingNotes[invoice.id] !== undefined &&
+                      pendingNotes[invoice.id] !== originalNote;
+                    const showNote = displayedNote || editingNote === invoice.id;
+
+                    if (!showNote) return null;
+
+                    return (
+                      <tr key={`${invoice.id}-note`}>
+                        <td colSpan={5} className="px-2 sm:px-3 py-1 border-b border-gray-100">
+                          <div className={`flex items-center gap-2 px-2 py-1 rounded ${
+                            noteChanged ? 'bg-amber-50 border border-amber-200' : 'bg-gray-100 border border-gray-200'
+                          }`}>
+                            <StickyNote className={`w-3.5 h-3.5 flex-shrink-0 ${noteChanged ? 'text-amber-600' : 'text-gray-400'}`} />
+                            {editingNote === invoice.id ? (
+                              <input
+                                type="text"
+                                value={noteEditValue}
+                                onChange={(e) => handleNoteInputChange(invoice.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    closeNoteEditor();
+                                    if (noteChanged) saveNoteOnly(invoice);
+                                  } else if (e.key === 'Escape') {
+                                    closeNoteEditor();
+                                    cancelNoteOnly(invoice.id);
+                                  }
+                                }}
+                                onBlur={() => closeNoteEditor()}
+                                autoFocus
+                                placeholder="Add a note..."
+                                className="flex-1 text-xs bg-transparent border-none focus:outline-none focus:ring-0 p-0"
+                              />
+                            ) : (
+                              <button
+                                onClick={() => startEditNote(invoice)}
+                                className="flex-1 text-left text-xs text-gray-600 hover:text-gray-800"
+                              >
+                                {displayedNote || 'Add a note...'}
+                              </button>
+                            )}
+                            {noteChanged && (
+                              <div className="flex items-center gap-1">
+                                {savingNote === invoice.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                ) : (
+                                  <>
+                                    <button
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        saveNoteOnly(invoice);
+                                      }}
+                                      className="p-0.5 text-green-600 hover:bg-green-100 rounded"
+                                      title="Save note"
+                                    >
+                                      <Save className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        cancelNoteOnly(invoice.id);
+                                        closeNoteEditor();
+                                      }}
+                                      className="p-0.5 text-gray-500 hover:bg-gray-200 rounded"
+                                      title="Cancel"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })()}
                   {/* Expanded payment attempts section */}
                   {isExpanded && (
                     <tr key={`${invoice.id}-expanded`}>
