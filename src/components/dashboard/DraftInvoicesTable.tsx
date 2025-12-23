@@ -170,13 +170,13 @@ export function FutureInvoicesTable({
   // Filter to only draft invoices - show all in one table sorted by date
   const allDraftInvoices = invoices.filter(inv => inv.status === 'draft');
 
-  // Sort all draft invoices by date (active first, then paused)
+  // Sort all draft invoices by date (closest to charge first, then paused at bottom)
   const draftInvoices = allDraftInvoices
     .sort((a, b) => {
       // Sort paused invoices to the bottom
       if (a.isPaused && !b.isPaused) return 1;
       if (!a.isPaused && b.isPaused) return -1;
-      // Then sort by date
+      // Sort by date - closest to charge first (ascending order)
       return getFinalizeDate(a) - getFinalizeDate(b);
     });
 
