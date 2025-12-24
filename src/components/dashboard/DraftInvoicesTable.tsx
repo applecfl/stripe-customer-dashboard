@@ -855,7 +855,21 @@ export function FutureInvoicesTable({
   }, [isUpdating, onUpdatingChange]);
 
   if (allDraftInvoices.length === 0) {
-    return null;
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-gray-400" />
+            Scheduled Payments
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-gray-500">
+            No scheduled payments
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

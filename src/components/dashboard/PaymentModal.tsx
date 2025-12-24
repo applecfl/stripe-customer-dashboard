@@ -131,7 +131,7 @@ function PaymentForm({
   const [showAddCard, setShowAddCard] = useState(false);
   const [saveCard, setSaveCard] = useState(false);
   const [scheduleMode, setScheduleMode] = useState(false); // Toggle between pay now and schedule
-  const [scheduledDate, setScheduledDate] = useState(''); // Date string for scheduling
+  const [scheduledDate, setScheduledDate] = useState(''); // Date string in MM/DD/YYYY format
 
   // For invoice selection - now includes the primary invoice if provided
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>(() =>
@@ -408,9 +408,16 @@ function PaymentForm({
       setLoading(true);
 
       try {
-        // Convert date string to Unix timestamp (start of day in local timezone)
-        const dateObj = new Date(scheduledDate + 'T00:00:00');
+        // Convert date string (YYYY-MM-DD from date input) to Unix timestamp at 12:00 noon
+        const dateObj = new Date(scheduledDate + 'T12:00:00');
         const scheduledTimestamp = Math.floor(dateObj.getTime() / 1000);
+
+        // If we have an original invoice (e.g., from failed payment), include it to be voided
+        // and copy its metadata to the new draft
+        const sourceInvoice = invoice && isFailedInvoice(invoice) ? {
+          id: invoice.id,
+          metadata: invoice.metadata,
+        } : undefined;
 
         const response = await fetch(withToken('/api/stripe/invoices/create-draft'), {
           method: 'POST',
@@ -424,6 +431,7 @@ function PaymentForm({
             scheduledDate: scheduledTimestamp,
             accountId,
             paymentMethodId,
+            sourceInvoice, // Include source invoice to void and copy metadata
           }),
         });
 
@@ -612,15 +620,14 @@ function PaymentForm({
                 return (
                   <label
                     key={inv.id}
-                    className={`flex items-center gap-2 p-2 transition-colors ${
-                      isDisabled
+                    className={`flex items-center gap-2 p-2 transition-colors ${isDisabled
                         ? 'cursor-not-allowed opacity-50 bg-gray-100'
                         : isSelected
                           ? willBeFullyPaid
                             ? 'bg-green-50 cursor-pointer'
                             : 'bg-amber-50 cursor-pointer'
                           : 'bg-red-50/50 hover:bg-red-50 cursor-pointer'
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -661,13 +668,12 @@ function PaymentForm({
                 const willBeFullyPaid = outstandingBreakdown && outstandingBreakdown.remaining === 0;
                 return (
                   <label
-                    className={`flex items-center gap-2 p-2 transition-colors ${
-                      outstandingSelected
+                    className={`flex items-center gap-2 p-2 transition-colors ${outstandingSelected
                         ? willBeFullyPaid
                           ? 'bg-green-50 cursor-pointer'
                           : 'bg-amber-50 cursor-pointer'
                         : 'bg-amber-50/30 hover:bg-amber-50 cursor-pointer'
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -711,15 +717,14 @@ function PaymentForm({
                 return (
                   <label
                     key={inv.id}
-                    className={`flex items-center gap-2 p-2 transition-colors ${
-                      isDisabled
+                    className={`flex items-center gap-2 p-2 transition-colors ${isDisabled
                         ? 'cursor-not-allowed opacity-50 bg-gray-100'
                         : isSelected
                           ? willBeFullyPaid
                             ? 'bg-green-50 cursor-pointer'
                             : 'bg-amber-50 cursor-pointer'
                           : 'hover:bg-gray-50 cursor-pointer'
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"

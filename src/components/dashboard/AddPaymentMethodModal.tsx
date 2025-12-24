@@ -16,11 +16,12 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 interface AddPaymentMethodFormProps {
   customerId: string;
   accountId?: string;
+  token?: string;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-function AddPaymentMethodForm({ customerId, accountId, onSuccess, onCancel }: AddPaymentMethodFormProps) {
+function AddPaymentMethodForm({ customerId, accountId, token, onSuccess, onCancel }: AddPaymentMethodFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -58,7 +59,11 @@ function AddPaymentMethodForm({ customerId, accountId, onSuccess, onCancel }: Ad
       }
 
       // Attach to customer via our API
-      const response = await fetch('/api/stripe/payment-methods', {
+      let url = '/api/stripe/payment-methods';
+      if (token) {
+        url += `?token=${encodeURIComponent(token)}`;
+      }
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,6 +164,7 @@ interface AddPaymentMethodModalProps {
   onClose: () => void;
   customerId: string;
   accountId?: string;
+  token?: string;
   onSuccess: () => void;
 }
 
@@ -167,6 +173,7 @@ export function AddPaymentMethodModal({
   onClose,
   customerId,
   accountId,
+  token,
   onSuccess,
 }: AddPaymentMethodModalProps) {
   const handleSuccess = () => {
@@ -180,6 +187,7 @@ export function AddPaymentMethodModal({
         <AddPaymentMethodForm
           customerId={customerId}
           accountId={accountId}
+          token={token}
           onSuccess={handleSuccess}
           onCancel={onClose}
         />

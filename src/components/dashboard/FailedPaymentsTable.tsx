@@ -242,8 +242,12 @@ export function FailedPaymentsTable({
 
   // Save amount change - uses credit note for open invoices
   const saveAmount = async (invoice: InvoiceData) => {
+    console.log('saveAmount called', { editValue, invoiceId: invoice.id, currentAmount: invoice.amount_due });
     const newAmount = Math.round(parseFloat(editValue) * 100);
+    console.log('Parsed newAmount:', newAmount);
+
     if (isNaN(newAmount) || newAmount <= 0 || newAmount === invoice.amount_due) {
+      console.log('Early return: invalid or same amount');
       cancelEditAmount();
       return;
     }
@@ -262,6 +266,8 @@ export function FailedPaymentsTable({
         url += `?token=${encodeURIComponent(token)}`;
       }
 
+      console.log('Calling adjust API:', { url, invoiceId: invoice.id, newAmount, accountId });
+
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -271,6 +277,8 @@ export function FailedPaymentsTable({
           accountId,
         }),
       });
+
+      console.log('API response status:', response.status);
 
       if (response.ok) {
         // Refresh data after successful update
@@ -403,6 +411,15 @@ export function FailedPaymentsTable({
     setPauseReason('');
   };
 
+  // Check if any invoices are still loading their attempts
+  const isLoadingAny = loadingAttempts.size > 0;
+  const isRefreshingAny = refreshingId !== null;
+
+  // Notify parent of loading state changes (must be before any early returns!)
+  useEffect(() => {
+    onUpdatingChange?.(isLoadingAny || isRefreshingAny);
+  }, [isLoadingAny, isRefreshingAny, onUpdatingChange]);
+
   if (failedInvoices.length === 0) {
     return (
       <Card>
@@ -420,15 +437,6 @@ export function FailedPaymentsTable({
       </Card>
     );
   }
-
-  // Check if any invoices are still loading their attempts
-  const isLoadingAny = loadingAttempts.size > 0;
-  const isRefreshingAny = refreshingId !== null;
-
-  // Notify parent of loading state changes
-  useEffect(() => {
-    onUpdatingChange?.(isLoadingAny || isRefreshingAny);
-  }, [isLoadingAny, isRefreshingAny, onUpdatingChange]);
 
   return (
     <Card>

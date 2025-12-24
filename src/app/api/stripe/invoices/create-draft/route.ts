@@ -3,6 +3,11 @@ import { getStripeForAccount } from '@/lib/stripe';
 import { mapInvoice } from '@/lib/mappers';
 import { InvoiceData, ApiResponse } from '@/types';
 
+interface SourceInvoice {
+  id: string;
+  metadata?: Record<string, string>;
+}
+
 interface CreateDraftRequest {
   customerId: string;
   amount: number; // in cents
@@ -12,6 +17,7 @@ interface CreateDraftRequest {
   scheduledDate?: number; // Unix timestamp for when to finalize
   accountId: string;
   paymentMethodId?: string; // Payment method to use for this invoice
+  sourceInvoice?: SourceInvoice; // Original invoice to void and copy metadata from
 }
 
 export async function POST(
@@ -19,7 +25,7 @@ export async function POST(
 ): Promise<NextResponse<ApiResponse<InvoiceData>>> {
   try {
     const body: CreateDraftRequest = await request.json();
-    const { customerId, amount, currency, description, invoiceUID, scheduledDate, accountId, paymentMethodId } = body;
+    const { customerId, amount, currency, description, invoiceUID, scheduledDate, accountId, paymentMethodId, sourceInvoice } = body;
 
     if (!customerId || !amount || !currency) {
       return NextResponse.json(
@@ -37,16 +43,32 @@ export async function POST(
 
     const stripe = getStripeForAccount(accountId);
 
-    // Create a draft invoice
+    // If there's a source invoice (e.g., failed payment), void it first
+    if (sourceInvoice?.id) {
+      try {
+        await stripe.invoices.voidInvoice(sourceInvoice.id);
+      } catch (voidError) {
+        console.error('Error voiding source invoice:', voidError);
+        // Continue even if void fails - the invoice might already be voided or in an invalid state
+      }
+    }
+
+    // Build metadata - copy from source invoice if available, then overlay our values
+    const metadata: Record<string, string> = {
+      ...(sourceInvoice?.metadata || {}), // Copy metadata from source invoice
+      ...(invoiceUID && { invoiceUID }), // Override with new invoiceUID if provided
+      ...(scheduledDate && { scheduledFinalizeAt: scheduledDate.toString() }),
+      ...(sourceInvoice?.id && { sourceInvoiceId: sourceInvoice.id, voidReason: 'Rescheduled as future payment' }),
+    };
+
+    // Create a draft invoice with automatically_finalizes_at for exact scheduling
     const invoice = await stripe.invoices.create({
       customer: customerId,
       collection_method: 'charge_automatically',
       auto_advance: scheduledDate ? true : false,
       ...(paymentMethodId && { default_payment_method: paymentMethodId }),
-      metadata: {
-        ...(invoiceUID && { invoiceUID }),
-        ...(scheduledDate && { scheduledFinalizeAt: scheduledDate.toString() }),
-      },
+      ...(scheduledDate && { automatically_finalizes_at: scheduledDate }),
+      metadata,
     });
 
     // Add an invoice item for the amount
@@ -58,24 +80,8 @@ export async function POST(
       description: description || 'Payment',
     });
 
-    // If scheduled date is provided, set the due_date
-    let updatedInvoice = invoice;
-    if (scheduledDate) {
-      const now = Math.floor(Date.now() / 1000);
-      const isFutureDate = scheduledDate > now;
-
-      updatedInvoice = await stripe.invoices.update(invoice.id, {
-        auto_advance: true,
-        ...(isFutureDate && { due_date: scheduledDate }),
-        metadata: {
-          ...invoice.metadata,
-          scheduledFinalizeAt: scheduledDate.toString(),
-        },
-      });
-    }
-
     // Retrieve the full invoice with line items
-    const fullInvoice = await stripe.invoices.retrieve(updatedInvoice.id, {
+    const fullInvoice = await stripe.invoices.retrieve(invoice.id, {
       expand: ['lines'],
     });
 

@@ -40,43 +40,20 @@ export async function POST(
       );
     }
 
-    // Check if date is in the future (Stripe's due_date only accepts future dates)
-    const now = Math.floor(Date.now() / 1000);
-    const isFutureDate = scheduledDate > now;
+    console.log(`Updating invoice ${invoiceId} with automatically_finalizes_at=${scheduledDate}`);
 
-    console.log(`Updating invoice ${invoiceId} with scheduledFinalizeAt=${scheduledDate}, isFutureDate=${isFutureDate}`);
-
-    // Step 1: First, disable auto_advance to clear any existing schedule
-    if (invoice.auto_advance) {
-      console.log('Disabling auto_advance first to clear existing schedule');
-      await stripe.invoices.update(invoiceId, { auto_advance: false });
-    }
-
-    // Step 2: Re-enable with new settings
-    const updatePayload: {
-      auto_advance: boolean;
-      due_date?: number;
-      metadata: Record<string, string>;
-    } = {
+    // Update with automatically_finalizes_at for exact scheduling at 12:00 noon
+    const updatedInvoice = await stripe.invoices.update(invoiceId, {
       auto_advance: true,
+      automatically_finalizes_at: scheduledDate,
       metadata: {
         ...invoice.metadata,
         scheduledFinalizeAt: scheduledDate.toString(),
       },
-    };
-
-    // Only set due_date if it's in the future
-    if (isFutureDate) {
-      updatePayload.due_date = scheduledDate;
-    }
-
-    console.log('Update payload:', JSON.stringify(updatePayload, null, 2));
-
-    const updatedInvoice = await stripe.invoices.update(invoiceId, updatePayload);
+    });
 
     console.log(`Updated invoice:`, {
       metadata: updatedInvoice.metadata,
-      due_date: updatedInvoice.due_date,
       auto_advance: updatedInvoice.auto_advance,
       automatically_finalizes_at: updatedInvoice.automatically_finalizes_at,
     });

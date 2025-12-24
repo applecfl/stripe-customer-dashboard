@@ -893,6 +893,7 @@ function DashboardContent() {
         onClose={() => setShowAddPaymentMethodModal(false)}
         customerId={customerId}
         accountId={accountId}
+        token={token}
         onSuccess={refreshData}
       />
 
