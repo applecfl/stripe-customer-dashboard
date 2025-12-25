@@ -485,8 +485,16 @@ export function FutureInvoicesTable({
   };
 
   // Get displayed amount (pending or original)
+  // For draft invoices, amount_due might be 0 - use line items total as fallback
   const getDisplayedAmount = (invoice: InvoiceData): number => {
-    return pendingChanges[invoice.id]?.amount ?? invoice.amount_due;
+    if (pendingChanges[invoice.id]?.amount !== undefined) {
+      return pendingChanges[invoice.id].amount;
+    }
+    // If amount_due is 0, calculate from line items
+    if (invoice.amount_due === 0 && invoice.lines && invoice.lines.length > 0) {
+      return invoice.lines.reduce((sum, line) => sum + line.amount, 0);
+    }
+    return invoice.amount_due;
   };
 
   // Get displayed date (pending or original)
