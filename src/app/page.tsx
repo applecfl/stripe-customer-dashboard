@@ -97,9 +97,20 @@ function DashboardContent() {
     const paid = paidFromStripe + paidFromOther;
 
     // Scheduled = draft invoices
+    // For draft invoices, amount_due might be 0 - use subtotal/total as fallback
+    const getInvoiceAmount = (inv: InvoiceData): number => {
+      if (inv.amount_due === 0) {
+        if (inv.subtotal && inv.subtotal > 0) return inv.subtotal;
+        if (inv.total && inv.total > 0) return inv.total;
+        if (inv.lines && inv.lines.length > 0) {
+          return inv.lines.reduce((sum, line) => sum + line.amount, 0);
+        }
+      }
+      return inv.amount_due;
+    };
     const scheduled = invoices
       .filter(inv => inv.status === 'draft')
-      .reduce((sum, inv) => sum + inv.amount_due, 0);
+      .reduce((sum, inv) => sum + getInvoiceAmount(inv), 0);
 
     // Failed = open invoices with attempt_count > 0
     const failed = invoices

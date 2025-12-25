@@ -141,10 +141,22 @@ function PaymentForm({
   const [outstandingSelected, setOutstandingSelected] = useState(false); // Track if outstanding amount is selected
 
   // Helper to get effective remaining amount for an invoice
+  // For draft invoices, amount_due might be 0 - use subtotal/total as fallback
   const getEffectiveRemaining = (inv: InvoiceData): number => {
     if (inv.status === 'draft') {
+      // Get the base amount - use fallback if amount_due is 0
+      let baseAmount = inv.amount_due;
+      if (baseAmount === 0) {
+        if (inv.subtotal && inv.subtotal > 0) {
+          baseAmount = inv.subtotal;
+        } else if (inv.total && inv.total > 0) {
+          baseAmount = inv.total;
+        } else if (inv.lines && inv.lines.length > 0) {
+          baseAmount = inv.lines.reduce((sum, line) => sum + line.amount, 0);
+        }
+      }
       const metadataTotalPaid = inv.metadata?.totalPaid ? parseInt(inv.metadata.totalPaid) : 0;
-      return Math.max(0, inv.amount_due - metadataTotalPaid);
+      return Math.max(0, baseAmount - metadataTotalPaid);
     }
     return inv.amount_remaining;
   };
@@ -165,11 +177,12 @@ function PaymentForm({
   }, [failedInvoices]);
 
   // Get all payable invoices sorted by priority (failed first, then draft)
-  // Draft invoices only shown if: showAllInvoices OR amount > totalFailedAmount
+  // Draft invoices shown if: showAllInvoices OR amount > totalFailedAmount OR no failed invoices exist
   // Now includes the primary invoice in the list (no longer excluded)
   const payableInvoices = useMemo(() => {
     const payAmountValue = amount ? Math.round(parseFloat(amount) * 100) : 0;
-    const shouldShowDrafts = showAllInvoices || payAmountValue > totalFailedAmount;
+    const noFailedInvoices = failedInvoices.length === 0;
+    const shouldShowDrafts = showAllInvoices || payAmountValue > totalFailedAmount || noFailedInvoices;
 
     return invoices
       .filter(inv => {
@@ -183,7 +196,7 @@ function PaymentForm({
         return false;
       })
       .sort(sortInvoicesByPriorityAndDate);
-  }, [invoices, showAllInvoices, amount, totalFailedAmount]);
+  }, [invoices, showAllInvoices, amount, totalFailedAmount, failedInvoices.length]);
 
   // Calculate amounts
   const payAmount = amount ? Math.round(parseFloat(amount) * 100) : 0;

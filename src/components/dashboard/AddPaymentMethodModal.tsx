@@ -194,7 +194,12 @@ export function AddPaymentMethodModal({
       setLoadingKey(true);
       setKeyError(null);
 
-      fetch(`/api/stripe/account-info?accountId=${encodeURIComponent(accountId)}`)
+      // Include token if provided for authentication
+      let url = `/api/stripe/account-info?accountId=${encodeURIComponent(accountId)}`;
+      if (token) {
+        url += `&token=${encodeURIComponent(token)}`;
+      }
+      fetch(url)
         .then(res => res.json())
         .then(data => {
           if (data.success && data.data?.publishableKey) {
