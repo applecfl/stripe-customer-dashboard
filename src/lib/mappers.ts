@@ -16,6 +16,8 @@ export function mapInvoice(invoice: Stripe.Invoice): InvoiceData {
     amount_due: invoice.amount_due ?? 0,
     amount_paid: invoice.amount_paid ?? 0,
     amount_remaining: invoice.amount_remaining ?? 0,
+    subtotal: invoice.subtotal ?? 0,
+    total: invoice.total ?? 0,
     currency: invoice.currency,
     due_date: invoice.due_date ?? null,
     created: invoice.created,

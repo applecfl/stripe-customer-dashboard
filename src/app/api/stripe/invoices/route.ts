@@ -56,29 +56,27 @@ export async function GET(
       }
     }
 
-    // Debug: log all invoices and their metadata
-    console.log('Total invoices found:', allInvoices.length);
-    console.log('Looking for invoiceUID:', invoiceUID);
-
-    // Debug: log draft invoices with their scheduledFinalizeAt
-    const draftInvoices = allInvoices.filter(inv => inv.status === 'draft');
-    console.log(`Found ${draftInvoices.length} draft invoices`);
-    draftInvoices.forEach(inv => {
-      console.log(`Draft invoice ${inv.id}:`, {
-        scheduledFinalizeAt: inv.metadata?.scheduledFinalizeAt,
-        due_date: inv.due_date,
-        auto_finalizes: inv.automatically_finalizes_at,
-        fullMetadata: inv.metadata
-      });
-    });
-
     // Filter by invoiceUID if provided (check both cases for metadata key)
     let filteredInvoices = allInvoices;
     if (invoiceUID) {
       filteredInvoices = allInvoices.filter(
         (inv) => inv.metadata?.invoiceUID === invoiceUID || inv.metadata?.InvoiceUID === invoiceUID
       );
-      console.log('Filtered invoices count:', filteredInvoices.length);
+    }
+
+    // Debug: Log draft invoice amounts from Stripe API
+    const draftInvoices = filteredInvoices.filter(inv => inv.status === 'draft');
+    if (draftInvoices.length > 0) {
+      console.log(`[INVOICES] Found ${draftInvoices.length} draft invoices from Stripe API:`);
+      draftInvoices.forEach(inv => {
+        console.log(`  Draft ${inv.id}:`, {
+          amount_due: inv.amount_due,
+          subtotal: inv.subtotal,
+          total: inv.total,
+          lines_count: inv.lines?.data?.length || 0,
+          lines_total: inv.lines?.data?.reduce((sum, l) => sum + l.amount, 0) || 0,
+        });
+      });
     }
 
     const invoiceData: InvoiceData[] = filteredInvoices.map(mapInvoice);

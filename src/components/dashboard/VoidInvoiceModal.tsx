@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { InvoiceData } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Modal, ModalFooter, Button, Textarea } from '@/components/ui';
-import { XCircle, Wallet } from 'lucide-react';
+import { XCircle } from 'lucide-react';
 
 interface VoidInvoiceModalProps {
   isOpen: boolean;
@@ -23,7 +23,6 @@ export function VoidInvoiceModal({
   invoice,
   onVoid,
 }: VoidInvoiceModalProps) {
-  const [addCredit, setAddCredit] = useState(true);
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -38,7 +37,7 @@ export function VoidInvoiceModal({
     try {
       await onVoid({
         invoiceId: invoice.id,
-        addCredit,
+        addCredit: false, // Never add credit - it affects other draft invoices
         reason: reason || undefined,
       });
       handleClose();
@@ -50,7 +49,6 @@ export function VoidInvoiceModal({
   };
 
   const handleClose = () => {
-    setAddCredit(true);
     setReason('');
     setError('');
     onClose();
@@ -94,30 +92,6 @@ export function VoidInvoiceModal({
         </div>
 
         <div className="space-y-4">
-          {/* Add Credit Option */}
-          <div className="bg-green-50 rounded-xl p-4 border border-green-200">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={addCredit}
-                onChange={(e) => setAddCredit(e.target.checked)}
-                className="mt-1 w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500"
-              />
-              <div>
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-green-600" />
-                  <p className="font-medium text-green-800">
-                    Add remaining amount as credit
-                  </p>
-                </div>
-                <p className="text-sm text-green-600 mt-0.5">
-                  {formatCurrency(invoice.amount_remaining, invoice.currency)} will be added
-                  to the customer&apos;s credit balance.
-                </p>
-              </div>
-            </label>
-          </div>
-
           {/* Reason */}
           <Textarea
             label="Reason (optional)"

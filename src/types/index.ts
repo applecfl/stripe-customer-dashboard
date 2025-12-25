@@ -19,6 +19,8 @@ export interface InvoiceData {
   amount_due: number;
   amount_paid: number;
   amount_remaining: number;
+  subtotal: number;
+  total: number;
   currency: string;
   due_date: number | null;
   created: number;

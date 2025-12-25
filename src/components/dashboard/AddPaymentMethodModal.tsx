@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+import { useState, useEffect, useMemo } from 'react';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 import {
   Elements,
   CardElement,
@@ -9,9 +9,17 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { Modal, ModalFooter, Button } from '@/components/ui';
-import { CreditCard, Plus } from 'lucide-react';
+import { CreditCard, Plus, Loader2 } from 'lucide-react';
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+// Cache for Stripe instances per publishable key
+const stripePromiseCache: Map<string, Promise<Stripe | null>> = new Map();
+
+function getStripePromise(publishableKey: string): Promise<Stripe | null> {
+  if (!stripePromiseCache.has(publishableKey)) {
+    stripePromiseCache.set(publishableKey, loadStripe(publishableKey));
+  }
+  return stripePromiseCache.get(publishableKey)!;
+}
 
 interface AddPaymentMethodFormProps {
   customerId: string;
@@ -176,22 +184,83 @@ export function AddPaymentMethodModal({
   token,
   onSuccess,
 }: AddPaymentMethodModalProps) {
+  const [publishableKey, setPublishableKey] = useState<string | null>(null);
+  const [loadingKey, setLoadingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
+  // Fetch publishable key when modal opens
+  useEffect(() => {
+    if (isOpen && accountId) {
+      setLoadingKey(true);
+      setKeyError(null);
+
+      fetch(`/api/stripe/account-info?accountId=${encodeURIComponent(accountId)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.data?.publishableKey) {
+            setPublishableKey(data.data.publishableKey);
+          } else {
+            // Fallback to env variable
+            setPublishableKey(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || null);
+          }
+        })
+        .catch(() => {
+          // Fallback to env variable on error
+          setPublishableKey(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || null);
+        })
+        .finally(() => {
+          setLoadingKey(false);
+        });
+    } else if (isOpen && !accountId) {
+      // No accountId, use default
+      setPublishableKey(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || null);
+    }
+  }, [isOpen, accountId]);
+
+  // Create stripe promise when publishable key changes
+  const stripePromise = useMemo(() => {
+    if (!publishableKey) return null;
+    return getStripePromise(publishableKey);
+  }, [publishableKey]);
+
   const handleSuccess = () => {
     onSuccess();
     onClose();
   };
 
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setPublishableKey(null);
+      setKeyError(null);
+    }
+  }, [isOpen]);
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Add Payment Method" size="md">
-      <Elements stripe={stripePromise}>
-        <AddPaymentMethodForm
-          customerId={customerId}
-          accountId={accountId}
-          token={token}
-          onSuccess={handleSuccess}
-          onCancel={onClose}
-        />
-      </Elements>
+      {loadingKey ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      ) : keyError ? (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          {keyError}
+        </div>
+      ) : stripePromise ? (
+        <Elements stripe={stripePromise}>
+          <AddPaymentMethodForm
+            customerId={customerId}
+            accountId={accountId}
+            token={token}
+            onSuccess={handleSuccess}
+            onCancel={onClose}
+          />
+        </Elements>
+      ) : (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          Unable to initialize payment form. Please try again.
+        </div>
+      )}
     </Modal>
   );
 }

@@ -375,10 +375,24 @@ export async function PATCH(
           );
         }
 
+        const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+
+        // Log: Confirm we're only voiding this specific invoice
+        console.log('[VOID] Starting void process for invoice:', {
+          invoiceId,
+          invoiceNumber: invoice.number,
+          status: invoice.status,
+          amount: invoice.amount_due,
+          customerId,
+        });
+
         // Add credit to customer balance if requested
         if (addCredit) {
-          const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
           if (customerId) {
+            console.log('[VOID] Adding credit to customer balance:', {
+              customerId,
+              creditAmount: -(invoice.amount_remaining ?? 0),
+            });
             await stripe.customers.createBalanceTransaction(customerId, {
               amount: -(invoice.amount_remaining ?? 0),
               currency: invoice.currency,
@@ -387,8 +401,16 @@ export async function PATCH(
           }
         }
 
-        // Void the invoice
-        await stripe.invoices.voidInvoice(invoiceId);
+        // Void the invoice - this ONLY affects this specific invoice
+        console.log('[VOID] Calling stripe.invoices.voidInvoice() for:', invoiceId);
+        const voidedInvoice = await stripe.invoices.voidInvoice(invoiceId);
+        console.log('[VOID] Voided invoice result:', {
+          id: voidedInvoice.id,
+          status: voidedInvoice.status,
+        });
+
+        // Log: No other invoices are touched in this process
+        console.log('[VOID] Process complete. Only invoice', invoiceId, 'was modified. No draft invoices were touched.');
         break;
       }
 

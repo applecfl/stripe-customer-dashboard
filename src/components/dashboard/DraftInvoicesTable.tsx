@@ -485,14 +485,25 @@ export function FutureInvoicesTable({
   };
 
   // Get displayed amount (pending or original)
-  // For draft invoices, amount_due might be 0 - use line items total as fallback
+  // For draft invoices, amount_due might be 0 - use subtotal/total as fallback
   const getDisplayedAmount = (invoice: InvoiceData): number => {
-    if (pendingChanges[invoice.id]?.amount !== undefined) {
-      return pendingChanges[invoice.id].amount;
+    const pendingAmount = pendingChanges[invoice.id]?.amount;
+    if (pendingAmount !== undefined) {
+      return pendingAmount;
     }
-    // If amount_due is 0, calculate from line items
-    if (invoice.amount_due === 0 && invoice.lines && invoice.lines.length > 0) {
-      return invoice.lines.reduce((sum, line) => sum + line.amount, 0);
+    // If amount_due is 0, use subtotal (more reliable than line items sum)
+    // subtotal is the sum of line items before tax, total includes tax
+    if (invoice.amount_due === 0) {
+      // Prefer subtotal, fall back to total, then line items
+      if (invoice.subtotal && invoice.subtotal > 0) {
+        return invoice.subtotal;
+      }
+      if (invoice.total && invoice.total > 0) {
+        return invoice.total;
+      }
+      if (invoice.lines && invoice.lines.length > 0) {
+        return invoice.lines.reduce((sum, line) => sum + line.amount, 0);
+      }
     }
     return invoice.amount_due;
   };
