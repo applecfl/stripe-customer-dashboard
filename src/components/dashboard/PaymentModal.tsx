@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
   CardElement,
@@ -11,9 +10,8 @@ import {
 import { InvoiceData, PaymentMethodData } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Modal, ModalFooter, Button, Input, Textarea } from '@/components/ui';
-import { CreditCard, Plus, Check, FileText, AlertTriangle, CircleDollarSign, Calendar, Clock } from 'lucide-react';
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+import { CreditCard, Plus, Check, FileText, AlertTriangle, CircleDollarSign, Calendar, Clock, Loader2 } from 'lucide-react';
+import { getStripePromise, fetchPublishableKey } from '@/lib/stripe-client';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -987,11 +985,40 @@ export function PaymentModal({
   outstandingAmount = 0,
 }: PaymentModalProps) {
   const [result, setResult] = useState<{ type: 'success' | 'error'; message?: string } | null>(null);
+  const [publishableKey, setPublishableKey] = useState<string | null>(null);
+  const [loadingKey, setLoadingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
 
-  // Reset result when modal opens/closes
+  // Fetch publishable key when modal opens
+  useEffect(() => {
+    if (isOpen && accountId) {
+      setLoadingKey(true);
+      setKeyError(null);
+      fetchPublishableKey(accountId, token)
+        .then(key => {
+          setPublishableKey(key);
+        })
+        .catch(err => {
+          setKeyError(err instanceof Error ? err.message : 'Failed to load payment form');
+        })
+        .finally(() => {
+          setLoadingKey(false);
+        });
+    }
+  }, [isOpen, accountId, token]);
+
+  // Create stripe promise when publishable key changes
+  const stripePromise = useMemo(() => {
+    if (!publishableKey) return null;
+    return getStripePromise(publishableKey);
+  }, [publishableKey]);
+
+  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setResult(null);
+      setPublishableKey(null);
+      setKeyError(null);
     }
   }, [isOpen]);
 
@@ -1091,25 +1118,39 @@ export function PaymentModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="md">
-      <Elements stripe={stripePromise}>
-        <PaymentForm
-          invoice={invoice}
-          invoices={invoices}
-          paymentMethods={paymentMethods}
-          customerId={customerId}
-          invoiceUID={invoiceUID}
-          currency={currency}
-          token={token}
-          accountId={accountId}
-          onSuccess={onSuccess}
-          onClose={onClose}
-          onPaymentMethodAdded={onPaymentMethodAdded}
-          onFormSuccess={handleFormSuccess}
-          onFormError={handleFormError}
-          isOpen={isOpen}
-          outstandingAmount={outstandingAmount}
-        />
-      </Elements>
+      {loadingKey ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      ) : keyError ? (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          {keyError}
+        </div>
+      ) : stripePromise ? (
+        <Elements stripe={stripePromise}>
+          <PaymentForm
+            invoice={invoice}
+            invoices={invoices}
+            paymentMethods={paymentMethods}
+            customerId={customerId}
+            invoiceUID={invoiceUID}
+            currency={currency}
+            token={token}
+            accountId={accountId}
+            onSuccess={onSuccess}
+            onClose={onClose}
+            onPaymentMethodAdded={onPaymentMethodAdded}
+            onFormSuccess={handleFormSuccess}
+            onFormError={handleFormError}
+            isOpen={isOpen}
+            outstandingAmount={outstandingAmount}
+          />
+        </Elements>
+      ) : (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          Unable to initialize payment form. Please try again.
+        </div>
+      )}
     </Modal>
   );
 }

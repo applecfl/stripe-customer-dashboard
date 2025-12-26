@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Elements,
   CardElement,
@@ -9,11 +8,10 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { Modal, ModalFooter, Button } from '@/components/ui';
-import { CreditCard, Check, Plus, XCircle, Calendar } from 'lucide-react';
+import { CreditCard, Check, Plus, XCircle, Calendar, Loader2 } from 'lucide-react';
 import { InvoiceData, PaymentMethodData } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+import { getStripePromise, fetchPublishableKey } from '@/lib/stripe-client';
 
 interface ChangePaymentMethodModalProps {
   isOpen: boolean;
@@ -25,6 +23,7 @@ interface ChangePaymentMethodModalProps {
   onPaymentMethodAdded?: () => void; // Callback to refresh payment methods
   customerId: string;
   accountId?: string;
+  token?: string;
   mode?: 'single' | 'bulk';
 }
 
@@ -386,15 +385,65 @@ function ChangePaymentMethodForm({
 
 // Main wrapper component with Stripe Elements
 export function ChangePaymentMethodModal(props: ChangePaymentMethodModalProps) {
+  const [publishableKey, setPublishableKey] = useState<string | null>(null);
+  const [loadingKey, setLoadingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
+  // Fetch publishable key when modal opens
+  useEffect(() => {
+    if (props.isOpen && props.accountId) {
+      setLoadingKey(true);
+      setKeyError(null);
+      fetchPublishableKey(props.accountId, props.token)
+        .then(key => {
+          setPublishableKey(key);
+        })
+        .catch(err => {
+          setKeyError(err instanceof Error ? err.message : 'Failed to load payment form');
+        })
+        .finally(() => {
+          setLoadingKey(false);
+        });
+    }
+  }, [props.isOpen, props.accountId, props.token]);
+
+  // Create stripe promise when publishable key changes
+  const stripePromise = useMemo(() => {
+    if (!publishableKey) return null;
+    return getStripePromise(publishableKey);
+  }, [publishableKey]);
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!props.isOpen) {
+      setPublishableKey(null);
+      setKeyError(null);
+    }
+  }, [props.isOpen]);
+
   return (
     <Modal isOpen={props.isOpen} onClose={props.onClose} title={
       props.mode === 'bulk'
         ? `Change Payment Method (${(props.invoices || []).filter(inv => inv.status === 'open' || inv.status === 'draft').length})`
         : `Change Payment Method${props.invoice?.number ? ` - ${props.invoice.number}` : ''}`
     } size="md">
-      <Elements stripe={stripePromise}>
-        <ChangePaymentMethodForm {...props} />
-      </Elements>
+      {loadingKey ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      ) : keyError ? (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          {keyError}
+        </div>
+      ) : stripePromise ? (
+        <Elements stripe={stripePromise}>
+          <ChangePaymentMethodForm {...props} />
+        </Elements>
+      ) : (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          Unable to initialize payment form. Please try again.
+        </div>
+      )}
     </Modal>
   );
 }

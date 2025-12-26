@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Elements,
   CardElement,
@@ -9,9 +8,10 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { Modal, ModalFooter, Button, Input, Textarea } from '@/components/ui';
-import { CreditCard, DollarSign, FileText, AlertTriangle, Plus } from 'lucide-react';
+import { CreditCard, DollarSign, FileText, AlertTriangle, Plus, Loader2 } from 'lucide-react';
 import { InvoiceData } from '@/types';
 import { formatCurrency } from '@/lib/utils';
+import { getStripePromise, fetchPublishableKey } from '@/lib/stripe-client';
 
 // Sort priority: Failed (open with attempts) -> Open -> Draft
 const getInvoiceSortPriority = (invoice: InvoiceData): number => {
@@ -20,8 +20,6 @@ const getInvoiceSortPriority = (invoice: InvoiceData): number => {
   if (invoice.status === 'draft') return 2;
   return 3;
 };
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 interface PayNowFormProps {
   customerId: string;
@@ -407,6 +405,8 @@ interface PayNowModalProps {
   invoices: InvoiceData[];
   invoiceUID: string;
   currency: string;
+  accountId?: string;
+  token?: string;
   onSuccess: () => void;
 }
 
@@ -417,8 +417,46 @@ export function PayNowModal({
   invoices,
   invoiceUID,
   currency,
+  accountId,
+  token,
   onSuccess,
 }: PayNowModalProps) {
+  const [publishableKey, setPublishableKey] = useState<string | null>(null);
+  const [loadingKey, setLoadingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
+  // Fetch publishable key when modal opens
+  useEffect(() => {
+    if (isOpen && accountId) {
+      setLoadingKey(true);
+      setKeyError(null);
+      fetchPublishableKey(accountId, token)
+        .then(key => {
+          setPublishableKey(key);
+        })
+        .catch(err => {
+          setKeyError(err instanceof Error ? err.message : 'Failed to load payment form');
+        })
+        .finally(() => {
+          setLoadingKey(false);
+        });
+    }
+  }, [isOpen, accountId, token]);
+
+  // Create stripe promise when publishable key changes
+  const stripePromise = useMemo(() => {
+    if (!publishableKey) return null;
+    return getStripePromise(publishableKey);
+  }, [publishableKey]);
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setPublishableKey(null);
+      setKeyError(null);
+    }
+  }, [isOpen]);
+
   const handleSuccess = () => {
     onSuccess();
     onClose();
@@ -426,16 +464,30 @@ export function PayNowModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Pay Now" size="lg">
-      <Elements stripe={stripePromise}>
-        <PayNowForm
-          customerId={customerId}
-          invoices={invoices}
-          invoiceUID={invoiceUID}
-          currency={currency}
-          onSuccess={handleSuccess}
-          onCancel={onClose}
-        />
-      </Elements>
+      {loadingKey ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      ) : keyError ? (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          {keyError}
+        </div>
+      ) : stripePromise ? (
+        <Elements stripe={stripePromise}>
+          <PayNowForm
+            customerId={customerId}
+            invoices={invoices}
+            invoiceUID={invoiceUID}
+            currency={currency}
+            onSuccess={handleSuccess}
+            onCancel={onClose}
+          />
+        </Elements>
+      ) : (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          Unable to initialize payment form. Please try again.
+        </div>
+      )}
     </Modal>
   );
 }

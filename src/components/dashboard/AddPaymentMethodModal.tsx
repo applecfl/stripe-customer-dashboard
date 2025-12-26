@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { loadStripe, Stripe } from '@stripe/stripe-js';
 import {
   Elements,
   CardElement,
@@ -10,16 +9,7 @@ import {
 } from '@stripe/react-stripe-js';
 import { Modal, ModalFooter, Button } from '@/components/ui';
 import { CreditCard, Plus, Loader2 } from 'lucide-react';
-
-// Cache for Stripe instances per publishable key
-const stripePromiseCache: Map<string, Promise<Stripe | null>> = new Map();
-
-function getStripePromise(publishableKey: string): Promise<Stripe | null> {
-  if (!stripePromiseCache.has(publishableKey)) {
-    stripePromiseCache.set(publishableKey, loadStripe(publishableKey));
-  }
-  return stripePromiseCache.get(publishableKey)!;
-}
+import { getStripePromise, fetchPublishableKey } from '@/lib/stripe-client';
 
 interface AddPaymentMethodFormProps {
   customerId: string;
@@ -193,34 +183,18 @@ export function AddPaymentMethodModal({
     if (isOpen && accountId) {
       setLoadingKey(true);
       setKeyError(null);
-
-      // Include token if provided for authentication
-      let url = `/api/stripe/account-info?accountId=${encodeURIComponent(accountId)}`;
-      if (token) {
-        url += `&token=${encodeURIComponent(token)}`;
-      }
-      fetch(url)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.data?.publishableKey) {
-            setPublishableKey(data.data.publishableKey);
-          } else {
-            // Fallback to env variable
-            setPublishableKey(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || null);
-          }
+      fetchPublishableKey(accountId, token)
+        .then(key => {
+          setPublishableKey(key);
         })
-        .catch(() => {
-          // Fallback to env variable on error
-          setPublishableKey(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || null);
+        .catch(err => {
+          setKeyError(err instanceof Error ? err.message : 'Failed to load payment form');
         })
         .finally(() => {
           setLoadingKey(false);
         });
-    } else if (isOpen && !accountId) {
-      // No accountId, use default
-      setPublishableKey(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || null);
     }
-  }, [isOpen, accountId]);
+  }, [isOpen, accountId, token]);
 
   // Create stripe promise when publishable key changes
   const stripePromise = useMemo(() => {

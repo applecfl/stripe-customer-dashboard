@@ -35,8 +35,13 @@ export async function GET(
       );
     }
 
-    // Use account's publishable key or fall back to the global one
-    const publishableKey = accountInfo.publishableKey || process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
+    // No fallbacks - publishable key must be in STRIPE_LIST
+    if (!accountInfo.publishableKey) {
+      return NextResponse.json(
+        { success: false, error: `No publishable key configured for account ${accountId}` },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
@@ -44,7 +49,7 @@ export async function GET(
         name: accountInfo.name,
         id: accountInfo.id,
         logo: accountInfo.logo,
-        publishableKey,
+        publishableKey: accountInfo.publishableKey,
       },
     });
   } catch (error) {

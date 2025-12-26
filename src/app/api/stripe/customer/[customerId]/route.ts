@@ -173,9 +173,9 @@ export async function PATCH(
       limit: 100,
     });
 
-    // Filter by invoiceUID if provided
+    // Filter by InvoiceUID if provided (check both cases for backwards compatibility)
     const filteredInvoices = invoiceUID
-      ? invoices.data.filter((inv) => inv.metadata?.invoiceUID === invoiceUID)
+      ? invoices.data.filter((inv) => inv.metadata?.InvoiceUID === invoiceUID || inv.metadata?.invoiceUID === invoiceUID)
       : invoices.data;
 
     let pausedCount = 0;

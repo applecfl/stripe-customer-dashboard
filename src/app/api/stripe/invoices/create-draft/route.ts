@@ -56,7 +56,7 @@ export async function POST(
     // Build metadata - copy from source invoice if available, then overlay our values
     const metadata: Record<string, string> = {
       ...(sourceInvoice?.metadata || {}), // Copy metadata from source invoice
-      ...(invoiceUID && { invoiceUID }), // Override with new invoiceUID if provided
+      ...(invoiceUID && { InvoiceUID: invoiceUID }), // Override with new InvoiceUID if provided
       ...(scheduledDate && { scheduledFinalizeAt: scheduledDate.toString() }),
       ...(sourceInvoice?.id && { sourceInvoiceId: sourceInvoice.id, voidReason: 'Rescheduled as future payment' }),
     };

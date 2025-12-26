@@ -85,31 +85,17 @@ export function getAvailableAccountIds(): string[] {
   }
 }
 
-// Legacy support: Get default Stripe instance (first account or STRIPE_SECRET_KEY fallback)
+// Legacy support: Get default Stripe instance (first account from STRIPE_LIST only - no fallbacks)
 let defaultStripeInstance: Stripe | null = null;
 
 function getDefaultStripe(): Stripe {
   if (!defaultStripeInstance) {
-    // Try STRIPE_LIST first
-    try {
-      const stripeList = getStripeList();
-      const firstAccountId = Object.keys(stripeList)[0];
-      if (firstAccountId) {
-        defaultStripeInstance = getStripeForAccount(firstAccountId);
-        return defaultStripeInstance;
-      }
-    } catch {
-      // Fall back to STRIPE_SECRET_KEY
+    const stripeList = getStripeList();
+    const firstAccountId = Object.keys(stripeList)[0];
+    if (!firstAccountId) {
+      throw new Error('STRIPE_LIST has no accounts configured');
     }
-
-    // Fallback to legacy STRIPE_SECRET_KEY
-    if (!process.env.STRIPE_SECRET_KEY) {
-      throw new Error('Neither STRIPE_LIST nor STRIPE_SECRET_KEY is set in environment variables');
-    }
-    defaultStripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-11-17.clover',
-      typescript: true,
-    });
+    defaultStripeInstance = getStripeForAccount(firstAccountId);
   }
   return defaultStripeInstance;
 }

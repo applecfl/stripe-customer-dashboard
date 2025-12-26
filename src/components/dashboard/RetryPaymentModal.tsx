@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Elements,
   CardElement,
@@ -11,9 +10,8 @@ import {
 import { InvoiceData, PaymentMethodData } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { Modal, ModalFooter, Button } from '@/components/ui';
-import { CreditCard, Plus, Check, RefreshCw } from 'lucide-react';
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+import { CreditCard, Plus, Check, RefreshCw, Loader2 } from 'lucide-react';
+import { getStripePromise, fetchPublishableKey } from '@/lib/stripe-client';
 
 interface RetryPaymentModalProps {
   isOpen: boolean;
@@ -21,6 +19,8 @@ interface RetryPaymentModalProps {
   invoice: InvoiceData | null;
   paymentMethods: PaymentMethodData[];
   customerId?: string;
+  accountId?: string;
+  token?: string;
   onRetry: (data: {
     invoiceId: string;
     paymentMethodId?: string;
@@ -297,15 +297,46 @@ export function RetryPaymentModal({
   invoice,
   paymentMethods,
   customerId,
+  accountId,
+  token,
   onRetry,
   onPaymentMethodAdded,
 }: RetryPaymentModalProps) {
   const [result, setResult] = useState<{ type: 'success' | 'error'; message?: string } | null>(null);
+  const [publishableKey, setPublishableKey] = useState<string | null>(null);
+  const [loadingKey, setLoadingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
 
-  // Reset result when modal opens/closes
+  // Fetch publishable key when modal opens
+  useEffect(() => {
+    if (isOpen && accountId) {
+      setLoadingKey(true);
+      setKeyError(null);
+      fetchPublishableKey(accountId, token)
+        .then(key => {
+          setPublishableKey(key);
+        })
+        .catch(err => {
+          setKeyError(err instanceof Error ? err.message : 'Failed to load payment form');
+        })
+        .finally(() => {
+          setLoadingKey(false);
+        });
+    }
+  }, [isOpen, accountId, token]);
+
+  // Create stripe promise when publishable key changes
+  const stripePromise = useMemo(() => {
+    if (!publishableKey) return null;
+    return getStripePromise(publishableKey);
+  }, [publishableKey]);
+
+  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setResult(null);
+      setPublishableKey(null);
+      setKeyError(null);
     }
   }, [isOpen]);
 
@@ -406,18 +437,32 @@ export function RetryPaymentModal({
   // Show main form modal
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Retry Payment" size="md">
-      <Elements stripe={stripePromise}>
-        <RetryForm
-          invoice={invoice}
-          paymentMethods={paymentMethods}
-          customerId={customerIdToUse}
-          onRetry={onRetry}
-          onClose={onClose}
-          onPaymentMethodAdded={onPaymentMethodAdded}
-          onSuccess={handleSuccess}
-          onError={handleError}
-        />
-      </Elements>
+      {loadingKey ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      ) : keyError ? (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          {keyError}
+        </div>
+      ) : stripePromise ? (
+        <Elements stripe={stripePromise}>
+          <RetryForm
+            invoice={invoice}
+            paymentMethods={paymentMethods}
+            customerId={customerIdToUse}
+            onRetry={onRetry}
+            onClose={onClose}
+            onPaymentMethodAdded={onPaymentMethodAdded}
+            onSuccess={handleSuccess}
+            onError={handleError}
+          />
+        </Elements>
+      ) : (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          Unable to initialize payment form. Please try again.
+        </div>
+      )}
     </Modal>
   );
 }

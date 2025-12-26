@@ -128,6 +128,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow debug-key endpoint - for debugging only
+  if (pathname === '/api/stripe/debug-key') {
+    return NextResponse.next();
+  }
+
   // Allow static files, _next, etc.
   if (
     pathname.startsWith('/_next') ||
