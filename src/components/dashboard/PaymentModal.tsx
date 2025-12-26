@@ -77,7 +77,7 @@ interface PaymentFormProps {
   onSuccess: () => void;
   onClose: () => void;
   onPaymentMethodAdded?: () => void;
-  onFormSuccess: () => void;
+  onFormSuccess: (scheduled?: boolean) => void;
   onFormError: (error: string) => void;
   isOpen: boolean;
   outstandingAmount?: number;
@@ -452,7 +452,7 @@ function PaymentForm({
         }
 
         onSuccess();
-        onFormSuccess();
+        onFormSuccess(true); // Pass true to indicate scheduled payment
       } catch (err) {
         onFormError(err instanceof Error ? err.message : 'Failed to create scheduled payment');
       } finally {
@@ -984,7 +984,7 @@ export function PaymentModal({
   onPaymentMethodAdded,
   outstandingAmount = 0,
 }: PaymentModalProps) {
-  const [result, setResult] = useState<{ type: 'success' | 'error'; message?: string } | null>(null);
+  const [result, setResult] = useState<{ type: 'success' | 'error'; message?: string; scheduled?: boolean } | null>(null);
   const [publishableKey, setPublishableKey] = useState<string | null>(null);
   const [loadingKey, setLoadingKey] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -1027,8 +1027,8 @@ export function PaymentModal({
     onClose();
   };
 
-  const handleFormSuccess = () => {
-    setResult({ type: 'success' });
+  const handleFormSuccess = (scheduled?: boolean) => {
+    setResult({ type: 'success', scheduled });
   };
 
   const handleFormError = (error: string) => {
@@ -1042,25 +1042,32 @@ export function PaymentModal({
 
   // Show success modal
   if (result?.type === 'success') {
+    const isScheduled = result.scheduled;
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
         <div className="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-          <div className="bg-green-50 p-6 text-center">
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-              <Check className="w-8 h-8 text-green-600" />
+          <div className={`${isScheduled ? 'bg-amber-50' : 'bg-green-50'} p-6 text-center`}>
+            <div className={`w-16 h-16 rounded-full ${isScheduled ? 'bg-amber-100' : 'bg-green-100'} flex items-center justify-center mx-auto mb-4`}>
+              {isScheduled ? (
+                <Calendar className="w-8 h-8 text-amber-600" />
+              ) : (
+                <Check className="w-8 h-8 text-green-600" />
+              )}
             </div>
-            <h3 className="text-lg font-semibold text-green-900 mb-2">
-              Payment Successful
+            <h3 className={`text-lg font-semibold ${isScheduled ? 'text-amber-900' : 'text-green-900'} mb-2`}>
+              {isScheduled ? 'Future Payment Scheduled' : 'Payment Successful'}
             </h3>
-            <p className="text-sm text-green-700">
-              The payment has been processed successfully.
+            <p className={`text-sm ${isScheduled ? 'text-amber-700' : 'text-green-700'}`}>
+              {isScheduled
+                ? 'The payment has been scheduled successfully.'
+                : 'The payment has been processed successfully.'}
             </p>
           </div>
           <div className="p-4">
             <button
               type="button"
               onClick={handleClose}
-              className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+              className={`w-full px-4 py-2.5 ${isScheduled ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'} text-white rounded-lg transition-colors font-medium`}
             >
               Done
             </button>
