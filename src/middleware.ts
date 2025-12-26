@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Note: We can't import from @/lib/auth in middleware because Edge runtime
+// Note2: We can't import from @/lib/auth in middleware because Edge runtime
 // has limited crypto support. We'll re-implement the verification here.
 
 const ALLOWED_IPS = [
