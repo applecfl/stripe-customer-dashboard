@@ -33,6 +33,8 @@ interface RetryFormProps {
   invoice: InvoiceData;
   paymentMethods: PaymentMethodData[];
   customerId: string;
+  accountId?: string;
+  token?: string;
   onRetry: RetryPaymentModalProps['onRetry'];
   onClose: () => void;
   onPaymentMethodAdded?: () => void;
@@ -40,7 +42,7 @@ interface RetryFormProps {
   onError: (error: string) => void;
 }
 
-function RetryForm({ invoice, paymentMethods, customerId, onRetry, onClose, onPaymentMethodAdded, onSuccess, onError }: RetryFormProps) {
+function RetryForm({ invoice, paymentMethods, customerId, accountId, token, onRetry, onClose, onPaymentMethodAdded, onSuccess, onError }: RetryFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [paymentMethodId, setPaymentMethodId] = useState('');
@@ -97,13 +99,18 @@ function RetryForm({ invoice, paymentMethods, customerId, onRetry, onClose, onPa
 
         // If saving card, attach to customer via API
         if (saveCard) {
-          const response = await fetch('/api/stripe/payment-methods', {
+          let url = '/api/stripe/payment-methods';
+          if (token) {
+            url += `?token=${encodeURIComponent(token)}`;
+          }
+          const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               customerId,
               paymentMethodId: pmIdToUse,
               setAsDefault: false,
+              accountId,
             }),
           });
 
@@ -451,6 +458,8 @@ export function RetryPaymentModal({
             invoice={invoice}
             paymentMethods={paymentMethods}
             customerId={customerIdToUse}
+            accountId={accountId}
+            token={token}
             onRetry={onRetry}
             onClose={onClose}
             onPaymentMethodAdded={onPaymentMethodAdded}

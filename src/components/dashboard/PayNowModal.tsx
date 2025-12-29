@@ -26,11 +26,13 @@ interface PayNowFormProps {
   invoices: InvoiceData[];
   invoiceUID: string;
   currency: string;
+  accountId?: string;
+  token?: string;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onCancel }: PayNowFormProps) {
+function PayNowForm({ customerId, invoices, invoiceUID, currency, accountId, token, onSuccess, onCancel }: PayNowFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -156,7 +158,11 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
       }
 
       // Call our API to process the payment and distribute to invoices
-      const response = await fetch('/api/stripe/pay-now', {
+      let url = '/api/stripe/pay-now';
+      if (token) {
+        url += `?token=${encodeURIComponent(token)}`;
+      }
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -169,6 +175,7 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, onSuccess, onC
           selectedInvoiceIds: selectedInvoiceIds.length > 0 ? selectedInvoiceIds : null,
           applyToAll,
           saveCard,
+          accountId,
         }),
       });
 
@@ -479,6 +486,8 @@ export function PayNowModal({
             invoices={invoices}
             invoiceUID={invoiceUID}
             currency={currency}
+            accountId={accountId}
+            token={token}
             onSuccess={handleSuccess}
             onCancel={onClose}
           />

@@ -884,6 +884,8 @@ function DashboardContent() {
         invoice={retryModal}
         paymentMethods={paymentMethods}
         customerId={customer.id}
+        accountId={accountId}
+        token={token}
         onRetry={handleRetryInvoice}
         onPaymentMethodAdded={refreshData}
       />
@@ -917,6 +919,7 @@ function DashboardContent() {
         onPaymentMethodAdded={refreshData}
         customerId={customer.id}
         accountId={accountId}
+        token={token}
         mode="single"
       />
 
@@ -930,6 +933,7 @@ function DashboardContent() {
         onPaymentMethodAdded={refreshData}
         customerId={customer.id}
         accountId={accountId}
+        token={token}
         mode="bulk"
       />
 

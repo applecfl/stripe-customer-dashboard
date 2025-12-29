@@ -13,6 +13,8 @@ interface AddCreditModalProps {
   invoices: InvoiceData[];
   invoiceUID: string;
   currency: string;
+  accountId?: string;
+  token?: string;
   onSuccess: () => void;
 }
 
@@ -23,6 +25,8 @@ export function AddCreditModal({
   invoices,
   invoiceUID,
   currency,
+  accountId,
+  token,
   onSuccess,
 }: AddCreditModalProps) {
   const [amount, setAmount] = useState('');
@@ -99,7 +103,11 @@ export function AddCreditModal({
     setError('');
 
     try {
-      const response = await fetch('/api/stripe/add-credit', {
+      let url = '/api/stripe/add-credit';
+      if (token) {
+        url += `?token=${encodeURIComponent(token)}`;
+      }
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -110,6 +118,7 @@ export function AddCreditModal({
           invoiceUID,
           selectedInvoiceIds: selectedInvoiceIds.length > 0 ? selectedInvoiceIds : null,
           applyToAll,
+          accountId,
         }),
       });
 

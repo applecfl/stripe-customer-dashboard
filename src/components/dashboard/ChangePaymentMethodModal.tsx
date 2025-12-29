@@ -38,6 +38,7 @@ function ChangePaymentMethodForm({
   onPaymentMethodAdded,
   customerId,
   accountId,
+  token,
   mode = 'single',
 }: ChangePaymentMethodModalProps) {
   const stripe = useStripe();
@@ -110,7 +111,11 @@ function ChangePaymentMethodForm({
         }
 
         // Attach to customer via our API
-        const response = await fetch('/api/stripe/payment-methods', {
+        let url = '/api/stripe/payment-methods';
+        if (token) {
+          url += `?token=${encodeURIComponent(token)}`;
+        }
+        const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

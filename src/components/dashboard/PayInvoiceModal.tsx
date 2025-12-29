@@ -34,11 +34,13 @@ interface PayInvoiceModalProps {
 // Add New Card Form Component
 interface AddCardFormProps {
   customerId: string;
+  accountId?: string;
+  token?: string;
   onSuccess: (paymentMethodId: string) => void;
   onCancel: () => void;
 }
 
-function AddCardForm({ customerId, onSuccess, onCancel }: AddCardFormProps) {
+function AddCardForm({ customerId, accountId, token, onSuccess, onCancel }: AddCardFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -77,13 +79,18 @@ function AddCardForm({ customerId, onSuccess, onCancel }: AddCardFormProps) {
 
       // If saving card, attach to customer via API
       if (saveCard) {
-        const response = await fetch('/api/stripe/payment-methods', {
+        let url = '/api/stripe/payment-methods';
+        if (token) {
+          url += `?token=${encodeURIComponent(token)}`;
+        }
+        const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             customerId,
             paymentMethodId: paymentMethod.id,
             setAsDefault: false,
+            accountId,
           }),
         });
 
@@ -174,6 +181,8 @@ interface PayFormProps {
   invoice: InvoiceData;
   paymentMethods: PaymentMethodData[];
   customerId: string;
+  accountId?: string;
+  token?: string;
   onPay: PayInvoiceModalProps['onPay'];
   onClose: () => void;
   onPaymentMethodAdded?: () => void;
@@ -181,7 +190,7 @@ interface PayFormProps {
   onError: (error: string) => void;
 }
 
-function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymentMethodAdded, onSuccess, onError }: PayFormProps) {
+function PayForm({ invoice, paymentMethods, customerId, accountId, token, onPay, onClose, onPaymentMethodAdded, onSuccess, onError }: PayFormProps) {
   const [amount, setAmount] = useState('');
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [note, setNote] = useState('');
@@ -255,6 +264,8 @@ function PayForm({ invoice, paymentMethods, customerId, onPay, onClose, onPaymen
     return (
       <AddCardForm
         customerId={customerId}
+        accountId={accountId}
+        token={token}
         onSuccess={handleCardAdded}
         onCancel={() => setShowAddCard(false)}
       />
@@ -607,6 +618,8 @@ export function PayInvoiceModal({
             invoice={invoice}
             paymentMethods={paymentMethods}
             customerId={customerIdToUse}
+            accountId={accountId}
+            token={token}
             onPay={onPay}
             onClose={onClose}
             onPaymentMethodAdded={onPaymentMethodAdded}
