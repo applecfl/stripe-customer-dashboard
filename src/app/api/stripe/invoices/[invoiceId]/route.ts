@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
 import { getStripeForAccount } from '@/lib/stripe';
 import { mapInvoice } from '@/lib/mappers';
 import { InvoiceData, ApiResponse } from '@/types';
@@ -159,11 +160,21 @@ export async function POST(
   }
 }
 
+// Response type for 3DS authentication required
+interface Requires3DSResponse {
+  success: true;
+  data: {
+    requiresAction: true;
+    clientSecret: string;
+    paymentIntentId: string;
+  };
+}
+
 // Update invoice (pause, adjust amount, void, change payment method)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ invoiceId: string }> }
-): Promise<NextResponse<ApiResponse<InvoiceData>>> {
+): Promise<NextResponse<ApiResponse<InvoiceData> | Requires3DSResponse>> {
   try {
     const { invoiceId } = await params;
     const body = await request.json();
@@ -349,20 +360,121 @@ export async function PATCH(
           });
         }
 
-        // Attempt to pay the invoice again
-        const paidInvoice = await stripe.invoices.pay(invoiceId, {
-          payment_method: paymentMethodId || undefined,
-        });
+        try {
+          // Attempt to pay the invoice again
+          const paidInvoice = await stripe.invoices.pay(invoiceId, {
+            payment_method: paymentMethodId || undefined,
+          });
 
-        // Check if payment actually succeeded
-        if (paidInvoice.status !== 'paid') {
-          // Payment failed - get the error details
-          const errorMessage = paidInvoice.last_finalization_error?.message ||
-            'Payment failed. Please try a different payment method.';
-          return NextResponse.json(
-            { success: false, error: errorMessage },
-            { status: 400 }
-          );
+          // Check if payment actually succeeded
+          if (paidInvoice.status !== 'paid') {
+            // Get the payment intent from the invoice to check for 3DS requirement
+            // Cast to access payment_intent which exists on Invoice but may not be in older TS types
+            const invoiceWithPI = paidInvoice as typeof paidInvoice & { payment_intent?: string | { id: string; status: string; client_secret: string | null } };
+            const paymentIntent = invoiceWithPI.payment_intent;
+            if (paymentIntent) {
+              const pi = typeof paymentIntent === 'string'
+                ? await stripe.paymentIntents.retrieve(paymentIntent)
+                : paymentIntent;
+
+              // If 3DS authentication is required, return client_secret for frontend handling
+              if (pi.status === 'requires_action' && pi.client_secret) {
+                return NextResponse.json({
+                  success: true as const,
+                  data: {
+                    requiresAction: true as const,
+                    clientSecret: pi.client_secret,
+                    paymentIntentId: pi.id,
+                  },
+                });
+              }
+            }
+
+            // Payment failed for other reasons - get the error details
+            const errorMessage = paidInvoice.last_finalization_error?.message ||
+              'Payment failed. Please try a different payment method.';
+            return NextResponse.json(
+              { success: false, error: errorMessage },
+              { status: 400 }
+            );
+          }
+        } catch (payError: unknown) {
+          // Handle 3DS required error - Stripe throws an exception with code 'invoice_payment_intent_requires_action'
+          // Stripe errors can have the code at different levels depending on the error type
+          const err = payError as { code?: string; type?: string; raw?: { code?: string }; message?: string };
+          const errorCode = err.code || err.raw?.code;
+          console.log('[RETRY] Caught error:', JSON.stringify({ code: err.code, rawCode: err.raw?.code, type: err.type, message: err.message }, null, 2));
+
+          // Check for 3DS required - either by code or by message content
+          const is3DSRequired = errorCode === 'invoice_payment_intent_requires_action' ||
+            (err.message && err.message.includes('requires additional user action'));
+
+          if (is3DSRequired) {
+            console.log('[RETRY] 3DS required detected, fetching invoice payment intent...');
+            // Retrieve the invoice with expanded payment_intent
+            const updatedInvoice = await stripe.invoices.retrieve(invoiceId, {
+              expand: ['payment_intent'],
+            }) as Stripe.Invoice & { payment_intent?: string | Stripe.PaymentIntent | null };
+            console.log('[RETRY] Invoice retrieved, payment_intent:', updatedInvoice.payment_intent);
+
+            // The payment_intent could be a string ID or an expanded object
+            let paymentIntentId: string | undefined;
+            if (typeof updatedInvoice.payment_intent === 'string') {
+              paymentIntentId = updatedInvoice.payment_intent;
+            } else if (updatedInvoice.payment_intent && typeof updatedInvoice.payment_intent === 'object') {
+              paymentIntentId = updatedInvoice.payment_intent.id;
+            }
+
+            // If no payment_intent on invoice, try to find it via the customer's payment intents
+            if (!paymentIntentId) {
+              console.log('[RETRY] No payment_intent on invoice, searching customer payment intents...');
+              const customerId = typeof updatedInvoice.customer === 'string'
+                ? updatedInvoice.customer
+                : updatedInvoice.customer?.id;
+
+              if (customerId) {
+                // List recent payment intents for this customer
+                const paymentIntents = await stripe.paymentIntents.list({
+                  customer: customerId,
+                  limit: 10,
+                });
+
+                // Find one that requires action and matches this invoice amount
+                const matchingPI = paymentIntents.data.find(pi =>
+                  pi.status === 'requires_action' &&
+                  pi.amount === updatedInvoice.amount_due
+                );
+
+                if (matchingPI) {
+                  console.log('[RETRY] Found matching payment intent:', matchingPI.id);
+                  paymentIntentId = matchingPI.id;
+                }
+              }
+            }
+
+            if (paymentIntentId) {
+              const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+              console.log('[RETRY] PaymentIntent status:', pi.status, 'has client_secret:', !!pi.client_secret);
+
+              if (pi.client_secret) {
+                console.log('[RETRY] Returning 3DS response with client_secret');
+                return NextResponse.json({
+                  success: true as const,
+                  data: {
+                    requiresAction: true as const,
+                    clientSecret: pi.client_secret,
+                    paymentIntentId: pi.id,
+                  },
+                });
+              } else {
+                console.log('[RETRY] No client_secret found on payment intent');
+              }
+            } else {
+              console.log('[RETRY] No payment_intent found');
+            }
+          }
+          // Re-throw other errors to be caught by the outer try-catch
+          throw payError;
         }
         break;
       }

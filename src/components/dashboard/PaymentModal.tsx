@@ -506,6 +506,7 @@ function PaymentForm({
               customerId,
               paymentMethodId: paymentMethod.id,
               setAsDefault: false,
+              accountId,
             }),
           });
 
@@ -523,8 +524,8 @@ function PaymentForm({
       const invoicesToPay: string[] = [...selectedInvoices];
 
       // Call our unified payment API
-      // Apply to all only if no invoices are selected
-      const shouldApplyToAll = invoicesToPay.length === 0;
+      // Never auto-apply to all invoices - only pay explicitly selected ones
+      const shouldApplyToAll = false;
 
       const response = await fetch(withToken('/api/stripe/pay-now'), {
         method: 'POST',
@@ -546,6 +547,52 @@ function PaymentForm({
       const result = await response.json();
       if (!result.success) {
         throw new Error(result.error);
+      }
+
+      // Check if 3DS authentication is required
+      if (result.data?.requiresAction && result.data?.clientSecret) {
+        if (!stripe) {
+          throw new Error('Stripe not loaded');
+        }
+
+        const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(
+          result.data.clientSecret
+        );
+
+        if (confirmError) {
+          throw new Error(confirmError.message);
+        }
+
+        // Payment failed after 3DS
+        if (paymentIntent?.status === 'requires_payment_method') {
+          throw new Error('Your card was declined. Please try a different payment method.');
+        }
+
+        if (paymentIntent?.status !== 'succeeded') {
+          throw new Error(`Payment failed with status: ${paymentIntent?.status || 'unknown'}. Please try again.`);
+        }
+
+        // After 3DS success, complete payment distribution
+        const finalizeUrl = token
+          ? `/api/stripe/pay-now/finalize?token=${encodeURIComponent(token)}`
+          : '/api/stripe/pay-now/finalize';
+        const finalizeResponse = await fetch(finalizeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paymentIntentId: result.data.paymentIntentId,
+            customerId,
+            invoiceUID,
+            selectedInvoiceIds: invoicesToPay,
+            applyToAll: shouldApplyToAll,
+            accountId,
+          }),
+        });
+
+        const finalizeResult = await finalizeResponse.json();
+        if (!finalizeResult.success) {
+          throw new Error(finalizeResult.error);
+        }
       }
 
       onSuccess();

@@ -404,7 +404,7 @@ function DashboardContent() {
     }
   };
 
-  const handleRetryInvoice = async (data: { invoiceId: string; paymentMethodId?: string }) => {
+  const handleRetryInvoice = async (data: { invoiceId: string; paymentMethodId?: string }): Promise<{ requiresAction?: boolean; clientSecret?: string; paymentIntentId?: string } | null> => {
     const response = await fetchWithAuth(withToken(`/api/stripe/invoices/${data.invoiceId}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -416,7 +416,13 @@ function DashboardContent() {
       throw new Error(result.error);
     }
 
+    // If 3DS authentication is required, return the data for frontend handling
+    if (result.data?.requiresAction) {
+      return result.data;
+    }
+
     await refreshData();
+    return null;
   };
 
   const handleRefund = async (data: {

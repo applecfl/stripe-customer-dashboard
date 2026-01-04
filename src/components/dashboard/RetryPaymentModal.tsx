@@ -24,7 +24,7 @@ interface RetryPaymentModalProps {
   onRetry: (data: {
     invoiceId: string;
     paymentMethodId?: string;
-  }) => Promise<void>;
+  }) => Promise<{ requiresAction?: boolean; clientSecret?: string; paymentIntentId?: string } | null>;
   onPaymentMethodAdded?: () => void;
 }
 
@@ -122,10 +122,39 @@ function RetryForm({ invoice, paymentMethods, customerId, accountId, token, onRe
         }
       }
 
-      await onRetry({
+      const result = await onRetry({
         invoiceId: invoice.id,
         paymentMethodId: pmIdToUse || undefined,
       });
+
+      // Check if 3DS authentication is required
+      if (result?.requiresAction && result?.clientSecret) {
+        if (!stripe) {
+          throw new Error('Stripe not loaded');
+        }
+
+        // Handle 3DS authentication in browser
+        const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(
+          result.clientSecret
+        );
+
+        if (confirmError) {
+          throw new Error(confirmError.message);
+        }
+
+        if (paymentIntent?.status === 'succeeded') {
+          onSuccess();
+          return;
+        }
+
+        // Payment failed after 3DS - get specific error
+        if (paymentIntent?.status === 'requires_payment_method') {
+          throw new Error('Your card was declined. Please try a different payment method.');
+        }
+
+        throw new Error(`Payment failed with status: ${paymentIntent?.status || 'unknown'}. Please try again.`);
+      }
+
       onSuccess();
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Failed to retry payment');

@@ -184,6 +184,49 @@ function PayNowForm({ customerId, invoices, invoiceUID, currency, accountId, tok
         throw new Error(result.error);
       }
 
+      // Check if 3DS authentication is required
+      if (result.data?.requiresAction && result.data?.clientSecret) {
+        const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(
+          result.data.clientSecret
+        );
+
+        if (confirmError) {
+          throw new Error(confirmError.message);
+        }
+
+        // Payment failed after 3DS - get specific error
+        if (paymentIntent?.status === 'requires_payment_method') {
+          throw new Error('Your card was declined. Please try a different payment method.');
+        }
+
+        if (paymentIntent?.status !== 'succeeded') {
+          throw new Error(`Payment failed with status: ${paymentIntent?.status || 'unknown'}. Please try again.`);
+        }
+
+        // After 3DS success, we need to complete the payment distribution
+        // Call the API again to finalize (the payment intent is now succeeded)
+        const finalizeUrl = token
+          ? `/api/stripe/pay-now/finalize?token=${encodeURIComponent(token)}`
+          : '/api/stripe/pay-now/finalize';
+        const finalizeResponse = await fetch(finalizeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paymentIntentId: result.data.paymentIntentId,
+            customerId,
+            invoiceUID,
+            selectedInvoiceIds: selectedInvoiceIds.length > 0 ? selectedInvoiceIds : null,
+            applyToAll,
+            accountId,
+          }),
+        });
+
+        const finalizeResult = await finalizeResponse.json();
+        if (!finalizeResult.success) {
+          throw new Error(finalizeResult.error);
+        }
+      }
+
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process payment');

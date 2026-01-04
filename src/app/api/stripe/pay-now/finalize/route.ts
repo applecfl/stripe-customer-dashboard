@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
 
-interface PayNowResult {
+interface FinalizeResult {
   paymentIntentId: string;
   amountPaid: number;
   invoicesPaid: Array<{
@@ -13,37 +13,23 @@ interface PayNowResult {
   creditAdded: number;
 }
 
-// Response type for 3DS authentication required
-interface Requires3DSResponse {
-  success: true;
-  data: {
-    requiresAction: true;
-    clientSecret: string | null;
-    paymentIntentId: string;
-  };
-}
-
 export async function POST(
   request: NextRequest
-): Promise<NextResponse<ApiResponse<PayNowResult> | Requires3DSResponse>> {
+): Promise<NextResponse<ApiResponse<FinalizeResult>>> {
   try {
     const body = await request.json();
     const {
+      paymentIntentId,
       customerId,
-      paymentMethodId,
-      amount,
-      currency,
-      reason,
       invoiceUID,
       selectedInvoiceIds,
       applyToAll,
-      saveCard,
       accountId,
     } = body;
 
-    if (!customerId || !paymentMethodId || !amount) {
+    if (!paymentIntentId || !customerId) {
       return NextResponse.json(
-        { success: false, error: 'customerId, paymentMethodId, and amount are required' },
+        { success: false, error: 'paymentIntentId and customerId are required' },
         { status: 400 }
       );
     }
@@ -57,66 +43,27 @@ export async function POST(
 
     const stripe = getStripeForAccount(accountId);
 
-    // If saveCard is true, attach the payment method to the customer first
-    if (saveCard) {
-      try {
-        // Attach payment method to customer
-        await stripe.paymentMethods.attach(paymentMethodId, {
-          customer: customerId,
-        });
-      } catch (attachError) {
-        // Might already be attached, which is fine
-        console.log('Payment method attachment:', attachError);
-      }
-    }
-
-    // Create the payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount,
-      currency: currency || 'usd',
-      customer: customerId,
-      payment_method: paymentMethodId,
-      confirm: true,
-      automatic_payment_methods: {
-        enabled: true,
-        allow_redirects: 'never',
-      },
-      setup_future_usage: saveCard ? 'off_session' : undefined,
-      metadata: {
-        reason,
-        InvoiceUID: invoiceUID,
-        payNow: 'true',
-        selectedInvoiceIds: selectedInvoiceIds ? selectedInvoiceIds.join(',') : '',
-        cardSaved: saveCard ? 'true' : 'false',
-      },
-    });
-
-    // Handle 3DS authentication required
-    if (paymentIntent.status === 'requires_action') {
-      return NextResponse.json({
-        success: true,
-        data: {
-          requiresAction: true,
-          clientSecret: paymentIntent.client_secret,
-          paymentIntentId: paymentIntent.id,
-        },
-      });
-    }
+    // Retrieve the payment intent to verify it succeeded
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     if (paymentIntent.status !== 'succeeded') {
       return NextResponse.json(
-        { success: false, error: `Payment failed with status: ${paymentIntent.status}` },
+        { success: false, error: `Payment not completed. Status: ${paymentIntent.status}` },
         { status: 400 }
       );
     }
 
+    const amount = paymentIntent.amount;
+    const currency = paymentIntent.currency;
+    const reason = paymentIntent.metadata?.reason;
+
     // Now distribute the payment to invoices or add as credit
     let remainingAmount = amount;
-    const invoicesPaid: PayNowResult['invoicesPaid'] = [];
+    const invoicesPaid: FinalizeResult['invoicesPaid'] = [];
     let creditAdded = 0;
 
     // Get open invoices to pay
-    let invoicesToPay: typeof selectedInvoiceIds = [];
+    let invoicesToPay: string[] = [];
 
     if (selectedInvoiceIds && selectedInvoiceIds.length > 0) {
       // Pay specific invoices in order
@@ -151,7 +98,6 @@ export async function POST(
       failedInvoices.sort((a, b) => (a.due_date || a.created) - (b.due_date || b.created));
 
       // Sort draft invoices by Payment date ascending (closest/soonest first)
-      // Prioritize metadata.scheduledFinalizeAt since that's where we store user's custom date
       filteredDraft.sort((a, b) => {
         const aDate = (a.metadata?.scheduledFinalizeAt ? parseInt(a.metadata.scheduledFinalizeAt, 10) : null) ||
           a.automatically_finalizes_at ||
@@ -159,7 +105,7 @@ export async function POST(
         const bDate = (b.metadata?.scheduledFinalizeAt ? parseInt(b.metadata.scheduledFinalizeAt, 10) : null) ||
           b.automatically_finalizes_at ||
           b.due_date || b.created;
-        return aDate - bDate; // Ascending - closest Payment date first
+        return aDate - bDate;
       });
 
       // Combine: failed first, then draft
@@ -170,7 +116,7 @@ export async function POST(
     for (const invoiceId of invoicesToPay) {
       if (remainingAmount <= 0) break;
 
-      let invoice = await stripe.invoices.retrieve(invoiceId);
+      const invoice = await stripe.invoices.retrieve(invoiceId);
 
       // Get the amount to work with based on invoice status
       let invoiceAmount = 0;
@@ -208,18 +154,13 @@ export async function POST(
         const isFullyPaid = amountToApply >= invoiceAmount;
 
         if (invoice.status === 'draft') {
-          // For draft invoices:
-          // If fully paid -> delete the draft
-          // If partially paid -> update the invoice line items to reduce the amount
-
           if (isFullyPaid) {
             // Fully paid - delete the draft invoice
             try {
               await stripe.invoices.del(invoiceId);
-              console.log(`Deleted draft invoice ${invoiceId} - fully paid via PayNow`);
+              console.log(`Deleted draft invoice ${invoiceId} - fully paid via PayNow (3DS)`);
             } catch (deleteError) {
               console.log('Could not delete draft invoice:', invoiceId, deleteError);
-              // If delete fails, just update metadata
               await stripe.invoices.update(invoiceId, {
                 metadata: {
                   ...invoice.metadata,
@@ -234,25 +175,15 @@ export async function POST(
               });
             }
           } else {
-            // Partial payment - reduce the draft invoice amount by adding negative line item
+            // Partial payment - add negative adjustment
+            await stripe.invoiceItems.create({
+              customer: customerId,
+              invoice: invoiceId,
+              amount: -amountToApply,
+              currency: invoice.currency,
+              description: `Payment received via PayNow (${paymentIntent.id})${reason ? ` - ${reason}` : ''}`,
+            });
 
-            // Get the invoice lines
-            const lines = await stripe.invoices.listLineItems(invoiceId, { limit: 100 });
-
-            if (lines.data.length > 0) {
-              // Strategy: Update the first line item to reflect the new amount
-              // Or add a discount line item for the payment received
-              // Using invoice item approach - add a negative adjustment
-              await stripe.invoiceItems.create({
-                customer: customerId,
-                invoice: invoiceId,
-                amount: -amountToApply,
-                currency: invoice.currency,
-                description: `Payment received via PayNow (${paymentIntent.id})${reason ? ` - ${reason}` : ''}`,
-              });
-            }
-
-            // Update metadata
             await stripe.invoices.update(invoiceId, {
               metadata: {
                 ...invoice.metadata,
@@ -276,18 +207,13 @@ export async function POST(
 
           remainingAmount -= amountToApply;
         } else {
-          // For open invoices:
-          // If fully paid, void the invoice first, then no credit note needed
-          // If partially paid, create credit note to reduce amount_remaining
-
+          // For open invoices
           if (isFullyPaid) {
-            // Void the invoice - this marks it as voided and no longer collectable
             try {
               await stripe.invoices.voidInvoice(invoiceId);
-              console.log(`Voided invoice ${invoiceId} - fully paid via PayNow`);
+              console.log(`Voided invoice ${invoiceId} - fully paid via PayNow (3DS)`);
             } catch (voidError) {
               console.log('Could not void invoice:', invoiceId, voidError);
-              // If void fails, fall back to credit note approach
               await stripe.creditNotes.create({
                 invoice: invoiceId,
                 amount: amountToApply,
@@ -301,7 +227,6 @@ export async function POST(
               });
             }
           } else {
-            // Partial payment - use credit note to reduce amount_remaining
             await stripe.creditNotes.create({
               invoice: invoiceId,
               amount: amountToApply,
@@ -315,7 +240,6 @@ export async function POST(
             });
           }
 
-          // Update invoice metadata with payment history (if invoice still exists/accessible)
           try {
             await stripe.invoices.update(invoiceId, {
               metadata: {
@@ -330,7 +254,6 @@ export async function POST(
               },
             });
           } catch (updateError) {
-            // Invoice may have been voided, metadata update not critical
             console.log('Could not update invoice metadata:', invoiceId);
           }
 
@@ -351,7 +274,6 @@ export async function POST(
     // Credit is only added via credit notes when partially paying specific invoices
 
     // Update the payment intent metadata with results
-    // Store amounts and dates per invoice for display even after invoice is deleted
     await stripe.paymentIntents.update(paymentIntent.id, {
       metadata: {
         ...paymentIntent.metadata,
@@ -360,6 +282,7 @@ export async function POST(
         invoiceAmounts: invoicesPaid.map(ip => ip.amountApplied.toString()).join(','),
         totalAppliedToInvoices: (amount - remainingAmount).toString(),
         creditAdded: creditAdded.toString(),
+        finalizedAfter3DS: 'true',
       },
     });
 
@@ -373,9 +296,9 @@ export async function POST(
       },
     });
   } catch (error) {
-    console.error('Error processing pay now:', error);
+    console.error('Error finalizing pay now:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to process payment' },
+      { success: false, error: error instanceof Error ? error.message : 'Failed to finalize payment' },
       { status: 500 }
     );
   }
