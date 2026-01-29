@@ -74,6 +74,17 @@ export interface PaymentData {
   customer: string | null;
   description: string | null;
   refund_reason: string | null;
+  // Payment method details (card info)
+  payment_method?: {
+    id: string;
+    type: string;
+    card?: {
+      brand: string;
+      last4: string;
+      exp_month: number;
+      exp_year: number;
+    };
+  } | null;
 }
 
 export interface PaymentMethodData {

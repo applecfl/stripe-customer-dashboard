@@ -38,6 +38,7 @@ export async function GET(
       const piParams: Stripe.PaymentIntentListParams = {
         customer: customerId,
         limit: 100,
+        expand: ['data.payment_method'],
       };
       if (piStartingAfter) {
         piParams.starting_after = piStartingAfter;
@@ -278,6 +279,20 @@ export async function GET(
 
         // If we have an expanded charge, use it for details
         if (charge && typeof charge !== 'string') {
+          // Extract payment method from charge
+          const chargePmDetails = charge.payment_method_details;
+          const chargePmId = charge.payment_method;
+          const chargePaymentMethod: PaymentData['payment_method'] = chargePmDetails?.card ? {
+            id: typeof chargePmId === 'string' ? chargePmId : '',
+            type: chargePmDetails.type || 'card',
+            card: {
+              brand: chargePmDetails.card.brand || 'unknown',
+              last4: chargePmDetails.card.last4 || '****',
+              exp_month: chargePmDetails.card.exp_month || 0,
+              exp_year: chargePmDetails.card.exp_year || 0,
+            },
+          } : null;
+
           invoiceBasedPayments.push({
             id: piId,
             amount: charge.amount,
@@ -293,6 +308,7 @@ export async function GET(
             customer: typeof charge.customer === 'string' ? charge.customer : charge.customer?.id || null,
             description: charge.description || rawInv.description || null,
             refund_reason: null,
+            payment_method: chargePaymentMethod,
           });
         } else {
           // No expanded charge, create from invoice data
@@ -311,6 +327,7 @@ export async function GET(
             customer: typeof rawInv.customer === 'string' ? rawInv.customer : rawInv.customer?.id || null,
             description: rawInv.description || `Payment for invoice ${rawInv.number}`,
             refund_reason: null,
+            payment_method: null,
           });
         }
         return;
@@ -324,6 +341,20 @@ export async function GET(
         // Skip if we already processed this charge
         if (processedIds.has(charge.id)) return;
         processedIds.add(charge.id);
+
+        // Extract payment method from charge
+        const chargePmDetails2 = charge.payment_method_details;
+        const chargePmId2 = charge.payment_method;
+        const chargePaymentMethod2: PaymentData['payment_method'] = chargePmDetails2?.card ? {
+          id: typeof chargePmId2 === 'string' ? chargePmId2 : '',
+          type: chargePmDetails2.type || 'card',
+          card: {
+            brand: chargePmDetails2.card.brand || 'unknown',
+            last4: chargePmDetails2.card.last4 || '****',
+            exp_month: chargePmDetails2.card.exp_month || 0,
+            exp_year: chargePmDetails2.card.exp_year || 0,
+          },
+        } : null;
 
         invoiceBasedPayments.push({
           id: charge.id,
@@ -340,6 +371,7 @@ export async function GET(
           customer: typeof charge.customer === 'string' ? charge.customer : charge.customer?.id || null,
           description: charge.description || rawInv.description || null,
           refund_reason: null,
+          payment_method: chargePaymentMethod2,
         });
       } else if (!charge && !chargeId && rawInv.paid_out_of_band === true) {
         // Invoice was explicitly marked paid out-of-band (no charge/payment_intent)
@@ -359,6 +391,7 @@ export async function GET(
           customer: typeof rawInv.customer === 'string' ? rawInv.customer : rawInv.customer?.id || null,
           description: rawInv.description || `Payment for invoice ${rawInv.number}`,
           refund_reason: null,
+          payment_method: null,
         });
       }
     });
@@ -427,6 +460,22 @@ export async function GET(
       // Get refund info if available
       const refundInfo = refundMap.get(pi.id);
 
+      // Extract payment method details if expanded
+      let paymentMethodData: PaymentData['payment_method'] = null;
+      if (pi.payment_method && typeof pi.payment_method !== 'string') {
+        const pm = pi.payment_method as Stripe.PaymentMethod;
+        paymentMethodData = {
+          id: pm.id,
+          type: pm.type,
+          card: pm.card ? {
+            brand: pm.card.brand,
+            last4: pm.card.last4,
+            exp_month: pm.card.exp_month,
+            exp_year: pm.card.exp_year,
+          } : undefined,
+        };
+      }
+
       return {
         id: pi.id,
         amount: pi.amount,
@@ -442,6 +491,7 @@ export async function GET(
         customer: typeof pi.customer === 'string' ? pi.customer : pi.customer?.id || null,
         description: pi.description ?? null,
         refund_reason: refundInfo?.reason ?? null,
+        payment_method: paymentMethodData,
       };
     });
 

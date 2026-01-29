@@ -421,6 +421,22 @@ export function InvoicesTable({
                                 <div className="flex items-start gap-2">
                                   <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
                                   <div className="space-y-1">
+                                    {/* Show card that was attempted */}
+                                    {(() => {
+                                      const pm = invoice.default_payment_method
+                                        ? paymentMethodMap.get(invoice.default_payment_method)
+                                        : null;
+                                      if (pm?.card) {
+                                        return (
+                                          <div className="flex items-center gap-2 text-xs text-red-700 mb-1">
+                                            <CreditCard className="w-3.5 h-3.5" />
+                                            <span className="capitalize">{pm.card.brand}</span>
+                                            <span>•••• {pm.card.last4}</span>
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
                                     {invoice.last_payment_error?.message && (
                                       <p className="text-sm text-red-700">{invoice.last_payment_error.message}</p>
                                     )}

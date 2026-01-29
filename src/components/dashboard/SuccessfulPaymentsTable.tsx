@@ -250,6 +250,7 @@ export function SuccessfulPaymentsTable({
             <TableRow hoverable={false}>
               <th className="p-0"></th>
               <TableHead compact>Amount</TableHead>
+              <TableHead compact>Card</TableHead>
               <TableHead compact>Date</TableHead>
               <TableHead align="right" compact>Actions</TableHead>
             </TableRow>
@@ -301,6 +302,19 @@ export function SuccessfulPaymentsTable({
                           </span>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell compact>
+                      {payment.payment_method?.card ? (
+                        <div className="flex items-center gap-1.5">
+                          <CreditCard className="w-3.5 h-3.5 text-gray-400" />
+                          <div className="text-xs">
+                            <span className="text-gray-700 capitalize">{payment.payment_method.card.brand}</span>
+                            <span className="text-gray-400 ml-1">•••• {payment.payment_method.card.last4}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
                     </TableCell>
                     <TableCell compact>
                       <div>
@@ -628,6 +642,18 @@ export function SuccessfulPaymentsTable({
                       </span>
                     </TableCell>
                     <TableCell compact>
+                      <span className={`inline-flex items-center gap-1 text-xs ${
+                        isZelle
+                          ? 'text-purple-600'
+                          : isCash
+                            ? 'text-green-600'
+                            : 'text-amber-600'
+                      }`}>
+                        {getPaymentTypeIcon(payment.paymentType, "w-3.5 h-3.5")}
+                        <span className="capitalize">{payment.paymentType}</span>
+                      </span>
+                    </TableCell>
+                    <TableCell compact>
                       <div>
                         <span className="text-gray-600 text-xs sm:text-sm">
                           {paymentDate.toLocaleDateString('en-US', {
@@ -639,16 +665,7 @@ export function SuccessfulPaymentsTable({
                       </div>
                     </TableCell>
                     <TableCell align="right" compact>
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs rounded-md font-medium ${
-                        isZelle
-                          ? 'text-purple-700 bg-purple-100'
-                          : isCash
-                            ? 'text-green-700 bg-green-100'
-                            : 'text-amber-700 bg-amber-100'
-                      }`}>
-                        {getPaymentTypeIcon(payment.paymentType, "w-3 h-3")}
-                        {payment.paymentType}
-                      </span>
+                      <span className="text-gray-400 text-xs">-</span>
                     </TableCell>
                   </TableRow>
 
