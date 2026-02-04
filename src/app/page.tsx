@@ -27,6 +27,7 @@ import {
   ChangeDueDateModal,
   RetryPaymentModal,
   SendReminderModal,
+  CreateInvoiceModal,
 } from '@/components/dashboard';
 import { AlertCircle, RefreshCw, CreditCard, AlertTriangle, CheckCircle, Clock, Loader2 } from 'lucide-react';
 
@@ -145,6 +146,7 @@ function DashboardContent() {
   const [showBulkChangePaymentMethodModal, setShowBulkChangePaymentMethodModal] = useState(false);
   const [changeDueDateModal, setChangeDueDateModal] = useState<InvoiceData | null>(null);
   const [showBulkChangeDueDateModal, setShowBulkChangeDueDateModal] = useState(false);
+  const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
 
   // Check if response indicates session expired (401) and redirect
   const checkSessionExpired = useCallback((response: Response) => {
@@ -710,6 +712,7 @@ function DashboardContent() {
           otherPayments={otherPayments}
           onAddPaymentMethod={() => setShowAddPaymentMethodModal(true)}
           onPayNow={() => setPaymentModal({ isOpen: true })}
+          onCreateInvoice={() => setShowCreateInvoiceModal(true)}
           onTabChange={setActiveTab}
         />
 
@@ -817,6 +820,7 @@ function DashboardContent() {
             onRefresh={refreshData}
             onUpdatingChange={setIsChildUpdating}
             onAddCard={() => setShowAddPaymentMethodModal(true)}
+            onCreateInvoice={() => setShowCreateInvoiceModal(true)}
           />
         )}
 
@@ -958,6 +962,18 @@ function DashboardContent() {
         invoices={invoices}
         onChangeDueDate={handleChangeDueDate}
         mode="bulk"
+      />
+
+      <CreateInvoiceModal
+        isOpen={showCreateInvoiceModal}
+        onClose={() => setShowCreateInvoiceModal(false)}
+        customerId={customerId}
+        paymentMethods={paymentMethods}
+        currency={customer.currency}
+        token={token}
+        accountId={accountId}
+        invoiceUID={invoiceUID}
+        onSuccess={refreshData}
       />
     </div>
   );

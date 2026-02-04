@@ -204,3 +204,20 @@ export interface OtherPayment {
   paymentType: string;
   description: string;
 }
+
+// Invoice creation types
+export type InvoiceFrequency = 'Weekly' | 'Bi-Weekly' | 'Monthly' | 'Dates';
+
+export interface CreateInvoicesRequest {
+  customerId: string;
+  amount: number;
+  description: string;
+  paymentMethodId?: string;
+  currency?: string;
+  frequency: InvoiceFrequency;
+  cycles?: number;
+  startDate?: string;
+  dates?: string[];
+  firstPaymentNumber?: number;
+  metadata?: Record<string, string>;
+}

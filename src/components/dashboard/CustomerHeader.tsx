@@ -16,6 +16,7 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  Plus,
 } from 'lucide-react';
 
 interface CustomerHeaderProps {
@@ -27,6 +28,7 @@ interface CustomerHeaderProps {
   otherPayments?: OtherPayment[];
   onAddPaymentMethod: () => void;
   onPayNow: () => void;
+  onCreateInvoice?: () => void;
   onTabChange?: (tab: 'failed' | 'success' | 'future') => void;
 }
 
@@ -39,6 +41,7 @@ export function CustomerHeader({
   otherPayments,
   onAddPaymentMethod,
   onPayNow,
+  onCreateInvoice,
   onTabChange,
 }: CustomerHeaderProps) {
   const [copied, setCopied] = useState(false);
@@ -159,6 +162,15 @@ export function CustomerHeader({
                 <span>Charge</span>
               </Button>
             </Tooltip>
+            {onCreateInvoice && (
+              <Tooltip content="Create invoice">
+                <Button variant="outline" size="sm" onClick={onCreateInvoice} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
+                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Create Invoice</span>
+                  <span className="sm:hidden">Invoice</span>
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip content="Add payment method">
               <Button variant="outline" size="sm" onClick={onAddPaymentMethod} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
                 <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />

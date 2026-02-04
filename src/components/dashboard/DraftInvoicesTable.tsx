@@ -50,6 +50,7 @@ interface FutureInvoicesTableProps {
   onRefresh: () => void;
   onUpdatingChange?: (isUpdating: boolean) => void;
   onAddCard?: () => void;
+  onCreateInvoice?: () => void;
   // Keep old props for compatibility but we won't use them
   onChangeDueDate?: (invoice: InvoiceData) => void;
   onAdjustAmount?: (invoice: InvoiceData) => void;
@@ -78,6 +79,7 @@ export function FutureInvoicesTable({
   onRefresh,
   onUpdatingChange,
   onAddCard,
+  onCreateInvoice,
 }: FutureInvoicesTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -876,7 +878,19 @@ export function FutureInvoicesTable({
   if (allDraftInvoices.length === 0) {
     return (
       <Card>
-        <CardHeader>
+        <CardHeader
+          action={
+            onCreateInvoice && (
+              <button
+                onClick={onCreateInvoice}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Create Invoice
+              </button>
+            )
+          }
+        >
           <div className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-gray-400" />
             Scheduled Payments
@@ -895,9 +909,20 @@ export function FutureInvoicesTable({
     <Card>
       <CardHeader
         action={
-          <span className="text-sm text-gray-500">
-            {draftInvoices.length} payment{draftInvoices.length !== 1 ? 's' : ''}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500">
+              {draftInvoices.length} payment{draftInvoices.length !== 1 ? 's' : ''}
+            </span>
+            {onCreateInvoice && (
+              <button
+                onClick={onCreateInvoice}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Create Invoice
+              </button>
+            )}
+          </div>
         }
       >
         <div className="flex items-center gap-2">

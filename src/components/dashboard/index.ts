@@ -15,3 +15,4 @@ export { ChangePaymentMethodModal } from './ChangePaymentMethodModal';
 export { ChangeDueDateModal } from './ChangeDueDateModal';
 export { RetryPaymentModal } from './RetryPaymentModal';
 export { SendReminderModal } from './SendReminderModal';
+export { CreateInvoiceModal } from './CreateInvoiceModal';
