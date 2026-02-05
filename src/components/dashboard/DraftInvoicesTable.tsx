@@ -886,7 +886,7 @@ export function FutureInvoicesTable({
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Create Invoice
+                Multi Payment
               </button>
             )
           }
@@ -919,7 +919,7 @@ export function FutureInvoicesTable({
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Create Invoice
+                Multi Payment
               </button>
             )}
           </div>

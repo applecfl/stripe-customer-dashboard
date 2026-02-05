@@ -163,11 +163,11 @@ export function CustomerHeader({
               </Button>
             </Tooltip>
             {onCreateInvoice && (
-              <Tooltip content="Create invoice">
+              <Tooltip content="Create multi payment">
                 <Button variant="outline" size="sm" onClick={onCreateInvoice} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
                   <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span className="hidden sm:inline">Create Invoice</span>
-                  <span className="sm:hidden">Invoice</span>
+                  <span className="hidden sm:inline">Multi Payment</span>
+                  <span className="sm:hidden">Multi</span>
                 </Button>
               </Tooltip>
             )}

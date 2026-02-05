@@ -147,6 +147,7 @@ function DashboardContent() {
   const [changeDueDateModal, setChangeDueDateModal] = useState<InvoiceData | null>(null);
   const [showBulkChangeDueDateModal, setShowBulkChangeDueDateModal] = useState(false);
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
+  const [returnToCreateInvoice, setReturnToCreateInvoice] = useState(false);
 
   // Check if response indicates session expired (401) and redirect
   const checkSessionExpired = useCallback((response: Response) => {
@@ -913,11 +914,24 @@ function DashboardContent() {
 
       <AddPaymentMethodModal
         isOpen={showAddPaymentMethodModal}
-        onClose={() => setShowAddPaymentMethodModal(false)}
+        onClose={() => {
+          setShowAddPaymentMethodModal(false);
+          if (returnToCreateInvoice) {
+            setReturnToCreateInvoice(false);
+            setShowCreateInvoiceModal(true);
+          }
+        }}
         customerId={customerId}
         accountId={accountId}
         token={token}
-        onSuccess={refreshData}
+        onSuccess={() => {
+          refreshData();
+          setShowAddPaymentMethodModal(false);
+          if (returnToCreateInvoice) {
+            setReturnToCreateInvoice(false);
+            setShowCreateInvoiceModal(true);
+          }
+        }}
       />
 
       <ChangePaymentMethodModal
@@ -974,6 +988,11 @@ function DashboardContent() {
         accountId={accountId}
         invoiceUID={invoiceUID}
         onSuccess={refreshData}
+        onAddCard={() => {
+          setShowCreateInvoiceModal(false);
+          setReturnToCreateInvoice(true);
+          setShowAddPaymentMethodModal(true);
+        }}
       />
     </div>
   );

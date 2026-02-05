@@ -16,6 +16,7 @@ interface CreateInvoiceModalProps {
   accountId?: string;
   invoiceUID?: string;
   onSuccess: () => void;
+  onAddCard?: () => void;
 }
 
 const FREQUENCY_OPTIONS: { value: InvoiceFrequency; label: string; description: string }[] = [
@@ -38,6 +39,7 @@ export function CreateInvoiceModal({
   accountId,
   invoiceUID: defaultInvoiceUID = '',
   onSuccess,
+  onAddCard,
 }: CreateInvoiceModalProps) {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -125,12 +127,14 @@ export function CreateInvoiceModal({
     return manualEndDate ? calculatedCycles : (parseInt(cycles) || 1);
   }, [frequency, customDates.length, manualEndDate, calculatedCycles, cycles]);
 
-  // Calculate end date - doesn't need amount
+  // Calculate end date - one day after the last payment
   const endDate = useMemo(() => {
     if (frequency === 'Dates') {
       if (customDates.length === 0) return null;
       const sortedDates = customDates.map(d => new Date(d)).sort((a, b) => b.getTime() - a.getTime());
-      return sortedDates[0];
+      const lastPayment = sortedDates[0];
+      lastPayment.setDate(lastPayment.getDate() + 1); // Add one day
+      return lastPayment;
     }
 
     if (!startDate) return null;
@@ -149,6 +153,7 @@ export function CreateInvoiceModal({
         lastDate.setMonth(lastDate.getMonth() + (numPayments - 1));
         break;
     }
+    lastDate.setDate(lastDate.getDate() + 1); // Add one day after last payment
     return lastDate;
   }, [frequency, startDate, customDates, effectiveNumPayments]);
 
@@ -496,9 +501,21 @@ export function CreateInvoiceModal({
 
           {/* Payment Method Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Payment Method
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Payment Method
+              </label>
+              {onAddCard && (
+                <button
+                  type="button"
+                  onClick={onAddCard}
+                  className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Card
+                </button>
+              )}
+            </div>
             <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-36 overflow-y-auto">
               {paymentMethods.map((pm) => (
                 <label
