@@ -21,4 +21,3 @@ env:
 
   - variable: GMAIL_DELEGATED_USER
     secret: GMAIL_DELEGATED_USER
-
