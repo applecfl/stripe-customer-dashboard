@@ -17,8 +17,6 @@ export async function POST(request: NextRequest) {
       'CreateTuitionStatement'
     );
 
-    console.log('Statement HTML (first 500 chars):', html.substring(0, 500));
-
     return NextResponse.json({ success: true, data: { html } });
   } catch (error) {
     console.error('Error creating tuition statement:', error);
