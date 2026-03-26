@@ -27,3 +27,6 @@ env:
 
   - variable: SERVER_APP_NAME
     value: Connect
+
+  - variable: GOTENBERG_URL
+    value: https://gotenberg-108659558028.us-central1.run.app
