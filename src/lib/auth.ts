@@ -1,5 +1,10 @@
 import { createHmac } from 'crypto';
 
+// IPv6 prefixes to allow (matches any address starting with these)
+const ALLOWED_IPV6_PREFIXES = [
+  "2a01:6500:a052:1669:",
+];
+
 // Whitelisted IPs that can generate tokens (Magic SQL servers)
 export const ALLOWED_IPS = [
   "35.208.69.250",
@@ -14,6 +19,7 @@ export const ALLOWED_IPS = [
   "67.23.68.219",
   "12.5.183.42",
   "12.5.183.44",
+  "2a01:6500:a052:1669:4cd4:a0e7:2b4d:60a2",
   "::1", // localhost IPv6
   "127.0.0.1", // localhost IPv4
 ];
@@ -95,7 +101,13 @@ export function isAllowedIP(ip: string | null): boolean {
   // Handle IPv6-mapped IPv4 addresses (::ffff:192.168.1.1)
   const cleanIP = ip.replace(/^::ffff:/, '');
 
-  return ALLOWED_IPS.includes(cleanIP) || ALLOWED_IPS.includes(ip);
+  // Check exact match
+  if (ALLOWED_IPS.includes(cleanIP) || ALLOWED_IPS.includes(ip)) {
+    return true;
+  }
+
+  // Check IPv6 prefix match
+  return ALLOWED_IPV6_PREFIXES.some(prefix => cleanIP.startsWith(prefix) || ip.startsWith(prefix));
 }
 
 /**

@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { CustomerData, ExtendedCustomerInfo, InvoiceData } from '@/types';
 import { Modal, ModalFooter, Button } from '@/components/ui';
 import { Send, AlertCircle, CheckCircle, X, RotateCcw, Bold, Italic, Link, List, Plus, Loader2, Paperclip, Eye } from 'lucide-react';
+import html2canvas from 'html2canvas-pro';
+import jsPDF from 'jspdf';
 
 interface TuitionStatementModalProps {
   isOpen: boolean;
@@ -163,15 +165,49 @@ export function TuitionStatementModal({
           const processedHtml = replaceTags(result.data.html);
           setStatementHtml(processedHtml);
 
-          // Generate PDF from the processed HTML
-          const pdfRes = await fetch(`/api/stripe/generate-pdf?token=${encodeURIComponent(token)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ html: processedHtml }),
-          });
-          const pdfResult = await pdfRes.json();
-          if (pdfResult.success) {
-            setPdfBase64(pdfResult.data.pdf);
+          // Generate PDF client-side using html2canvas + jsPDF
+          try {
+            const container = document.createElement('div');
+            container.style.position = 'absolute';
+            container.style.left = '-9999px';
+            container.style.top = '0';
+            container.style.width = '794px'; // A4 width at 96 DPI
+            container.innerHTML = processedHtml;
+            document.body.appendChild(container);
+
+            const canvas = await html2canvas(container, {
+              scale: 2,
+              useCORS: true,
+              logging: false,
+              backgroundColor: '#ffffff',
+            });
+
+            document.body.removeChild(container);
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const imgWidth = pdfWidth;
+            const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pdfHeight;
+
+            while (heightLeft > 0) {
+              position -= pdfHeight;
+              pdf.addPage();
+              pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+              heightLeft -= pdfHeight;
+            }
+
+            const pdfOutput = pdf.output('datauristring').split(',')[1];
+            setPdfBase64(pdfOutput);
+          } catch (pdfErr) {
+            console.error('Client-side PDF generation failed:', pdfErr);
           }
         }
       })

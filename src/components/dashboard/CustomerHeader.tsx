@@ -158,7 +158,7 @@ export function CustomerHeader({
           </div>
 
           {/* Right Side - Action Buttons */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <Tooltip content="Charge customer">
               <Button variant="primary" size="sm" onClick={onPayNow} className="justify-center text-xs sm:text-sm px-2.5 sm:px-3">
                 <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
