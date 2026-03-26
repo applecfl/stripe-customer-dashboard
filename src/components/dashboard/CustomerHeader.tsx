@@ -17,6 +17,7 @@ import {
   Clock,
   XCircle,
   Plus,
+  FileText,
 } from 'lucide-react';
 
 interface CustomerHeaderProps {
@@ -29,6 +30,7 @@ interface CustomerHeaderProps {
   onAddPaymentMethod: () => void;
   onPayNow: () => void;
   onCreateInvoice?: () => void;
+  onCreateTuitionStatement?: () => void;
   onTabChange?: (tab: 'failed' | 'success' | 'future') => void;
 }
 
@@ -42,6 +44,7 @@ export function CustomerHeader({
   onAddPaymentMethod,
   onPayNow,
   onCreateInvoice,
+  onCreateTuitionStatement,
   onTabChange,
 }: CustomerHeaderProps) {
   const [copied, setCopied] = useState(false);
@@ -120,9 +123,9 @@ export function CustomerHeader({
       {/* Top Section - Customer Name, UID, and Actions */}
       <div className="px-3 sm:px-6 py-3 sm:py-5">
         {/* First Row - Customer Name/Avatar/UID + Action Buttons */}
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
           {/* Left Side - Customer Info */}
-          <div className="flex items-start gap-3 sm:gap-4">
+          <div className="flex items-start gap-3 sm:gap-4 min-w-0">
             {/* Avatar */}
             <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-lg sm:rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-lg sm:text-2xl font-bold shadow-lg flex-shrink-0">
               {customer.name?.charAt(0).toUpperCase() || 'C'}
@@ -155,29 +158,35 @@ export function CustomerHeader({
           </div>
 
           {/* Right Side - Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 mr-1 sm:mr-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <Tooltip content="Charge customer">
-              <Button variant="primary" size="sm" onClick={onPayNow} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
+              <Button variant="primary" size="sm" onClick={onPayNow} className="justify-center text-xs sm:text-sm px-2.5 sm:px-3">
                 <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span>Charge</span>
               </Button>
             </Tooltip>
             {onCreateInvoice && (
               <Tooltip content="Create multi payment">
-                <Button variant="outline" size="sm" onClick={onCreateInvoice} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
+                <Button variant="outline" size="sm" onClick={onCreateInvoice} className="justify-center text-xs sm:text-sm px-2.5 sm:px-3">
                   <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span className="hidden sm:inline">Multi Payment</span>
-                  <span className="sm:hidden">Multi</span>
+                  <span>Multi Payment</span>
                 </Button>
               </Tooltip>
             )}
             <Tooltip content="Add payment method">
-              <Button variant="outline" size="sm" onClick={onAddPaymentMethod} className="flex-1 sm:flex-none justify-center text-xs sm:text-sm px-3 sm:px-4">
+              <Button variant="outline" size="sm" onClick={onAddPaymentMethod} className="justify-center text-xs sm:text-sm px-2.5 sm:px-3">
                 <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Add Card</span>
-                <span className="sm:hidden">Add</span>
+                <span>Add Card</span>
               </Button>
             </Tooltip>
+            {onCreateTuitionStatement && (
+              <Tooltip content="Create Tuition Statement">
+                <Button variant="outline" size="sm" onClick={onCreateTuitionStatement} className="justify-center text-xs sm:text-sm px-2.5 sm:px-3">
+                  <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Statement</span>
+                </Button>
+              </Tooltip>
+            )}
           </div>
         </div>
 

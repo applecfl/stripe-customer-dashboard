@@ -21,3 +21,9 @@ env:
 
   - variable: GMAIL_DELEGATED_USER
     secret: GMAIL_DELEGATED_USER
+
+  - variable: SERVER_SECRET
+    secret: SERVER_SECRET
+
+  - variable: SERVER_APP_NAME
+    value: Connect

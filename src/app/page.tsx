@@ -27,6 +27,7 @@ import {
   ChangeDueDateModal,
   RetryPaymentModal,
   SendReminderModal,
+  TuitionStatementModal,
   CreateInvoiceModal,
 } from '@/components/dashboard';
 import { AlertCircle, RefreshCw, CreditCard, AlertTriangle, CheckCircle, Clock, Loader2 } from 'lucide-react';
@@ -141,6 +142,7 @@ function DashboardContent() {
   const [refundModal, setRefundModal] = useState<PaymentData | null>(null);
   const [retryModal, setRetryModal] = useState<InvoiceData | null>(null);
   const [sendReminderModal, setSendReminderModal] = useState<InvoiceData | null>(null);
+  const [showTuitionStatementModal, setShowTuitionStatementModal] = useState(false);
   const [showAddPaymentMethodModal, setShowAddPaymentMethodModal] = useState(false);
   const [changePaymentMethodModal, setChangePaymentMethodModal] = useState<InvoiceData | null>(null);
   const [showBulkChangePaymentMethodModal, setShowBulkChangePaymentMethodModal] = useState(false);
@@ -714,6 +716,7 @@ function DashboardContent() {
           onAddPaymentMethod={() => setShowAddPaymentMethodModal(true)}
           onPayNow={() => setPaymentModal({ isOpen: true })}
           onCreateInvoice={() => setShowCreateInvoiceModal(true)}
+          onCreateTuitionStatement={() => setShowTuitionStatementModal(true)}
           onTabChange={setActiveTab}
         />
 
@@ -910,6 +913,17 @@ function DashboardContent() {
         accountId={accountId}
         paymentLink={sendReminderModal?.hosted_invoice_url || ''}
         extendedInfo={extendedInfo}
+      />
+
+      <TuitionStatementModal
+        isOpen={showTuitionStatementModal}
+        onClose={() => setShowTuitionStatementModal(false)}
+        invoiceUID={invoiceUID}
+        token={token}
+        customer={customer}
+        extendedInfo={extendedInfo}
+        invoices={invoices}
+        accountId={accountId}
       />
 
       <AddPaymentMethodModal
