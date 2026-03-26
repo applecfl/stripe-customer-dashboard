@@ -183,7 +183,7 @@ export function CustomerHeader({
               <Tooltip content="Create Tuition Statement">
                 <Button variant="outline" size="sm" onClick={onCreateTuitionStatement} className="justify-center text-xs sm:text-sm px-2.5 sm:px-3">
                   <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span>Statement</span>
+                  <span>Create Statement</span>
                 </Button>
               </Tooltip>
             )}
