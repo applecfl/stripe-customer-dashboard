@@ -30,3 +30,6 @@ env:
 
   - variable: GOTENBERG_URL
     value: https://gotenberg-108659558028.us-central1.run.app
+
+  - variable: GOTENBERG_API_KEY
+    secret: GOTENBERG_API_KEY

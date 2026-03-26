@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const GOTENBERG_URL = process.env.GOTENBERG_URL || 'http://localhost:3000';
+const GOTENBERG_API_KEY = process.env.GOTENBERG_API_KEY || '';
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,6 +30,9 @@ export async function POST(request: NextRequest) {
     const response = await fetch(`${GOTENBERG_URL}/forms/chromium/convert/html`, {
       method: 'POST',
       body: formData,
+      headers: {
+        'X-Api-Key': GOTENBERG_API_KEY,
+      },
     });
 
     if (!response.ok) {
