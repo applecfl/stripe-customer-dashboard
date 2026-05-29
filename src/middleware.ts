@@ -86,6 +86,19 @@ async function createSignature(data: string, secret: string): Promise<string> {
 }
 
 /**
+ * Constant-time string comparison (Edge has no crypto.timingSafeEqual).
+ * Always compares the full length to avoid an early-exit timing side channel.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
+/**
  * Verify and decode token
  */
 async function verifyToken(token: string, secret: string): Promise<TokenPayload | null> {
@@ -95,9 +108,9 @@ async function verifyToken(token: string, secret: string): Promise<TokenPayload 
 
     const [encodedPayload, signature] = parts;
 
-    // Verify signature
+    // Verify signature (constant-time, reject empty/malformed).
     const expectedSignature = await createSignature(encodedPayload, secret);
-    if (expectedSignature !== signature) return null;
+    if (!signature || !constantTimeEqual(expectedSignature, signature)) return null;
 
     // Decode payload (base64url to string)
     const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
@@ -147,6 +160,14 @@ export async function middleware(request: NextRequest) {
 
   // Allow expired page
   if (pathname === '/expired') {
+    return NextResponse.next();
+  }
+
+  // Allow the payment-link button IMAGE endpoint through. It's loaded by email
+  // clients (no headers) and must render even for an EXPIRED token (to show a grey
+  // "Link Expired" button), so it can't go through the normal token gate. It does
+  // its own verification internally and never returns sensitive data (only a PNG).
+  if (pathname === '/api/stripe/pay-link/button') {
     return NextResponse.next();
   }
 

@@ -22,8 +22,11 @@ interface SendTuitionStatementRequest {
   payAmount?: number;
 }
 
-// Build the HTML for the Pay Now button block injected into the email.
-function buildPayButton(payUrl: string, amountCents: number): string {
+// Build the Pay Now button block. The button is a server-rendered PNG so it can
+// reflect live state when the email is OPENED (blue while active, grey once the
+// link expires after 7 days or has been paid). The image is wrapped in the link.
+// A text link below is the fallback for clients that block images.
+function buildPayButton(payUrl: string, imgUrl: string, amountCents: number): string {
   const dollars = (amountCents / 100).toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -31,10 +34,13 @@ function buildPayButton(payUrl: string, amountCents: number): string {
   return `
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr><td align="center" style="padding: 8px 40px 32px;">
-      <a href="${payUrl}" style="display:inline-block;background-color:#4f46e5;color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;padding:14px 32px;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-        Pay ${dollars} Now
+      <a href="${payUrl}" style="text-decoration:none;">
+        <img src="${imgUrl}" alt="Pay ${dollars} Now" width="320" style="display:block;border:0;outline:none;max-width:320px;height:auto;" />
       </a>
-      <p style="margin:12px 0 0;font-size:12px;color:#a1a1aa;">Secure payment powered by Stripe. This link expires in 7 days.</p>
+      <p style="margin:12px 0 0;font-size:12px;color:#a1a1aa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        Secure payment powered by Stripe. This link expires in 7 days.
+        <br/><a href="${payUrl}" style="color:#4f46e5;">Tap here if the button doesn't load.</a>
+      </p>
     </td></tr>
   </table>`;
 }
@@ -61,7 +67,7 @@ async function sendWithGmailAPI(
   subject: string,
   textContent: string,
   htmlContent: string,
-  pdfBuffer: Buffer,
+  pdfBuffer: Buffer | null,
   customDelegatedUser?: string
 ): Promise<void> {
   const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -84,7 +90,6 @@ async function sendWithGmailAPI(
 
   const boundary = '====boundary_mixed====';
   const altBoundary = '====boundary_alt====';
-  const pdfBase64 = pdfBuffer.toString('base64');
 
   const messageParts = [
     `From: "${from.name}" <${from.address}>`,
@@ -110,15 +115,21 @@ async function sendWithGmailAPI(
     '',
     `--${altBoundary}--`,
     '',
-    `--${boundary}`,
-    'Content-Type: application/pdf; name="Tuition_Statement.pdf"',
-    'Content-Disposition: attachment; filename="Tuition_Statement.pdf"',
-    'Content-Transfer-Encoding: base64',
-    '',
-    pdfBase64,
-    '',
-    `--${boundary}--`,
   ];
+
+  // Only attach the PDF when present (payment requests have no attachment).
+  if (pdfBuffer) {
+    messageParts.push(
+      `--${boundary}`,
+      'Content-Type: application/pdf; name="Tuition_Statement.pdf"',
+      'Content-Disposition: attachment; filename="Tuition_Statement.pdf"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      pdfBuffer.toString('base64'),
+      ''
+    );
+  }
+  messageParts.push(`--${boundary}--`);
 
   const message = messageParts.join('\r\n');
 
@@ -142,7 +153,7 @@ async function sendWithNodemailer(
   subject: string,
   textContent: string,
   htmlContent: string,
-  pdfBuffer: Buffer
+  pdfBuffer: Buffer | null
 ): Promise<void> {
   const gmailUser = process.env.GMAIL_USER;
   const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
@@ -168,13 +179,9 @@ async function sendWithNodemailer(
     subject,
     text: textContent,
     html: htmlContent,
-    attachments: [
-      {
-        filename: 'Tuition_Statement.pdf',
-        content: pdfBuffer,
-        contentType: 'application/pdf',
-      },
-    ],
+    attachments: pdfBuffer
+      ? [{ filename: 'Tuition_Statement.pdf', content: pdfBuffer, contentType: 'application/pdf' }]
+      : [],
   });
 }
 
@@ -204,14 +211,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!pdfBase64) {
+    // A PDF is required for a statement, but a payment request (pay button, no PDF) is fine.
+    if (!pdfBase64 && !includePayButton) {
       return NextResponse.json(
         { success: false, error: 'PDF is required' },
         { status: 400 }
       );
     }
 
-    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+    const pdfBuffer = pdfBase64 ? Buffer.from(pdfBase64, 'base64') : null;
 
     let htmlContent = emailHtml || defaultEmailBody;
 
@@ -226,11 +234,16 @@ export async function POST(request: NextRequest) {
         );
       }
       const { token: payToken } = generatePaymentLinkToken(customerId, invoiceUID, accountId, amountCents);
-      const payUrl = `${getBaseUrl(request)}/pay?token=${encodeURIComponent(payToken)}`;
-      htmlContent = injectPayButton(htmlContent, buildPayButton(payUrl, amountCents));
+      const base = getBaseUrl(request);
+      const enc = encodeURIComponent(payToken);
+      const payUrl = `${base}/pay?token=${enc}`;
+      const imgUrl = `${base}/api/stripe/pay-link/button?token=${enc}`;
+      htmlContent = injectPayButton(htmlContent, buildPayButton(payUrl, imgUrl, amountCents));
     }
 
-    const textContent = `Dear ${recipientName || 'Parent/Guardian'},\n\nAttached please find your current tuition statement.\n\nThank you,\nLEC Administration`;
+    const textContent = pdfBuffer
+      ? `Dear ${recipientName || 'Parent/Guardian'},\n\nAttached please find your current tuition statement.\n\nThank you,\nLEC Administration`
+      : `Dear ${recipientName || 'Parent/Guardian'},\n\nYou have an outstanding balance. Please use the secure payment link in this email to pay.\n\nThank you,\nLEC Administration`;
 
     const fromEmail = senderEmail || process.env.GMAIL_DELEGATED_USER || process.env.GMAIL_USER || 'noreply@lecfl.com';
     const fromName = senderName || 'LEC Administration';

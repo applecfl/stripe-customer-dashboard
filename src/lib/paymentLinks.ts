@@ -54,6 +54,18 @@ export async function claimPaymentLink(
 }
 
 /**
+ * Record the PaymentIntent id on a (still pending) link as soon as it's created,
+ * so a retry after a success-but-not-marked failure can reconcile instead of
+ * charging again. Does not change status.
+ */
+export async function recordPaymentIntent(sig: string, paymentIntentId: string): Promise<void> {
+  await getDb().collection(COLLECTION).doc(sig).set(
+    { paymentIntentId },
+    { merge: true }
+  );
+}
+
+/**
  * Mark a claimed link as paid. Call after the PaymentIntent succeeds.
  * Once 'paid', the link can never be charged again (claimPaymentLink rejects it).
  * A failed charge leaves the doc 'pending', so the customer can simply retry.

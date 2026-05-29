@@ -88,6 +88,7 @@ function InnerForm({ token, amount, savedMethods, onPaid }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paymentMethodId,
+          // Server determines new-vs-saved from the PM's owner; this is only a hint.
           saveCard: selected === 'new' ? saveCard : false,
         }),
       });
@@ -216,6 +217,7 @@ export function PayLinkForm(props: PayLinkFormProps) {
   if (paid) {
     return (
       <div className="text-center py-8">
+        {/* Logo is already shown by the page above; don't duplicate it here. */}
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle className="w-9 h-9 text-green-600" />
         </div>
@@ -229,6 +231,11 @@ export function PayLinkForm(props: PayLinkFormProps) {
 
   return (
     <div>
+      {props.customerName && (
+        <p className="text-lg font-semibold text-gray-900 mb-4">
+          Hi {props.customerName.split(' ')[0]},
+        </p>
+      )}
       <div className="mb-6">
         <p className="text-sm text-gray-500">{props.description || 'Amount due'}</p>
         <p className="text-3xl font-bold text-gray-900">{formatCurrency(props.amount, 'usd')}</p>

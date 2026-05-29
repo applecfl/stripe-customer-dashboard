@@ -75,11 +75,12 @@ export default async function PayPage({
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
-        <div className="flex items-center gap-2 mb-6">
-          <span className="text-lg font-semibold text-gray-900">
-            {customerName ? `Hi ${customerName.split(' ')[0]},` : 'Payment'}
-          </span>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png"
+          alt="LEC"
+          className="h-12 w-auto mx-auto mb-6"
+        />
         <PayLinkForm
           token={token}
           accountId={accountId!}
@@ -98,6 +99,12 @@ function Centered({ icon, title, message }: { icon: 'check' | 'error'; title: st
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png"
+          alt="LEC"
+          className="h-10 w-auto mx-auto mb-6"
+        />
         <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
           icon === 'check' ? 'bg-green-100' : 'bg-amber-100'
         }`}>

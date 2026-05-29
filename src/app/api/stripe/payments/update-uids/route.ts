@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
-import { isAllowedIP, getClientIP } from '@/lib/auth';
+import { isClientChainAllowed, getClientIP } from '@/lib/auth';
 
 interface UpdateUIDItem {
   PaymentID: string;
@@ -26,10 +26,10 @@ export async function POST(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse<UpdateResult[]>>> {
   try {
-    // Validate IP is in whitelist
+    // Validate the forwarding chain is whitelisted (resistant to XFF spoofing).
     const clientIP = getClientIP(request);
-    if (!isAllowedIP(clientIP)) {
-      console.warn(`Update UIDs rejected - IP not allowed: ${clientIP}`);
+    if (!isClientChainAllowed(request)) {
+      console.warn(`Update UIDs rejected - IP not allowed: ${clientIP} (xff: ${request.headers.get('x-forwarded-for')})`);
       return NextResponse.json(
         { success: false, error: 'Access denied' },
         { status: 403 }

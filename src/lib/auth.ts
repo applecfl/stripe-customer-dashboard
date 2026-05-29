@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 // IPv6 prefixes to allow (matches any address starting with these)
 const ALLOWED_IPV6_PREFIXES = [
@@ -98,11 +98,68 @@ function createSignature(data: string): string {
 }
 
 /**
- * Verify HMAC signature
+ * Verify HMAC signature using a constant-time comparison to avoid leaking
+ * the expected signature byte-by-byte via a timing side channel.
  */
 function verifySignature(data: string, signature: string): boolean {
-  const expectedSignature = createSignature(data);
-  return expectedSignature === signature;
+  const expected = createSignature(data);
+  // Reject obviously malformed/empty signatures up front.
+  if (!signature || signature.length !== expected.length) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signature);
+  // Lengths are equal here, but guard anyway (timingSafeEqual throws otherwise).
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+/**
+ * Check whether any client-supplied forwarding header presents a whitelisted IP.
+ *
+ * SECURITY NOTE: x-forwarded-for is partly client-controlled — a caller can prepend
+ * a spoofed value. We therefore require that EVERY hop in the chain (after stripping
+ * the platform's own infra hops) is itself whitelisted, rather than trusting only the
+ * leftmost entry. Since the real trusted servers (Magic SQL) are the only sources that
+ * should ever appear, a spoofed extra hop introduces a non-whitelisted IP and fails the
+ * check. This keeps the existing trusted servers working while blocking simple spoofs.
+ */
+export function isClientChainAllowed(request: Request): boolean {
+  const xff = request.headers.get('x-forwarded-for');
+  const candidates: string[] = [];
+
+  if (xff) {
+    for (const part of xff.split(',')) {
+      candidates.push(part.trim());
+    }
+  }
+  for (const h of ['x-real-ip', 'x-vercel-forwarded-for', 'cf-connecting-ip']) {
+    const v = request.headers.get(h);
+    if (v) candidates.push(v.trim());
+  }
+
+  if (candidates.length === 0) return false;
+
+  // At least one whitelisted IP must be present...
+  const hasAllowed = candidates.some(ip => isAllowedIP(ip));
+  if (!hasAllowed) return false;
+
+  // ...and every non-infrastructure hop must be whitelisted, so an attacker can't
+  // simply prepend a fake whitelisted IP to their real (non-whitelisted) one.
+  const allOk = candidates.every(ip => isAllowedIP(ip) || isInfraHop(ip));
+  return allOk;
+}
+
+// Google Front End / load-balancer ranges that legitimately appear as a hop in the
+// forwarding chain. These are NOT trusted as the client — they're just tolerated so
+// the real (whitelisted) client IP next to them still validates.
+//
+// IMPORTANT: we deliberately do NOT trust the whole 35.0.0.0/8 — that block contains
+// customer-operated GCP VMs, so an attacker on a 35.x VM could otherwise spoof a
+// chain. We allow only the documented Google LB proxy ranges (35.191.0.0/16 and
+// 130.211.0.0/22), the App Hosting front-end range we actually observe (192.178.x),
+// link-local, and RFC1918 private ranges.
+function isInfraHop(ip: string): boolean {
+  const clean = ip.replace(/^::ffff:/, '');
+  return /^(35\.191\.|130\.211\.|192\.178\.|169\.254\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(clean);
 }
 
 /**
@@ -237,6 +294,35 @@ export function verifyToken(token: string): TokenPayload | null {
     }
 
     return payload;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify a token's SIGNATURE but tolerate expiry, reporting it via `expired`.
+ * Used ONLY by the email button-image endpoint, which must render a grey
+ * "Link Expired" button for a validly-signed-but-expired token (vs. a forged one,
+ * which returns null). Never use this for authorization — a forged token still
+ * returns null, but an expired one returns a payload, so callers MUST check
+ * `expired` and never grant access on an expired token.
+ */
+export function verifyTokenAllowExpired(
+  token: string
+): { payload: TokenPayload; expired: boolean } | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 2) return null;
+    const [encodedPayload, signature] = parts;
+    if (!verifySignature(encodedPayload, signature)) return null;
+
+    const payload: TokenPayload = JSON.parse(
+      Buffer.from(encodedPayload, 'base64url').toString('utf-8')
+    );
+    if (!payload.customerId || !payload.invoiceUID || !payload.accountId) return null;
+
+    const now = Math.floor(Date.now() / 1000);
+    return { payload, expired: payload.exp < now };
   } catch {
     return null;
   }

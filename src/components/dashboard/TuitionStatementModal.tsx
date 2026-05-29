@@ -14,6 +14,11 @@ interface TuitionStatementModalProps {
   extendedInfo?: ExtendedCustomerInfo;
   invoices: InvoiceData[];
   accountId: string;
+  // 'statement' (default): emails the tuition statement PDF, with an optional pay button.
+  // 'payment': a softer "Payment Request" email with the pay button always on and no PDF.
+  mode?: 'statement' | 'payment';
+  // Outstanding balance in cents — used as the default pay amount in 'payment' mode.
+  outstandingAmount?: number;
 }
 
 export function TuitionStatementModal({
@@ -25,7 +30,10 @@ export function TuitionStatementModal({
   extendedInfo,
   invoices,
   accountId,
+  mode = 'statement',
+  outstandingAmount = 0,
 }: TuitionStatementModalProps) {
+  const isPaymentMode = mode === 'payment';
   const [loading, setLoading] = useState(false);
   const [fetchingStatement, setFetchingStatement] = useState(false);
   const [error, setError] = useState('');
@@ -37,8 +45,11 @@ export function TuitionStatementModal({
   const [statementHtml, setStatementHtml] = useState('');
   const [pdfBase64, setPdfBase64] = useState('');
   // Pay Now button: include a single-use payment link in the email.
-  const defaultPayAmount = extendedInfo?.totalAmount ?? 0;
-  const [includePayButton, setIncludePayButton] = useState(defaultPayAmount > 0);
+  // In payment mode default to the outstanding balance; otherwise the token total.
+  const defaultPayAmount = isPaymentMode
+    ? outstandingAmount
+    : (extendedInfo?.totalAmount ?? 0);
+  const [includePayButton, setIncludePayButton] = useState(isPaymentMode || defaultPayAmount > 0);
   const [payAmountInput, setPayAmountInput] = useState(
     defaultPayAmount > 0 ? (defaultPayAmount / 100).toFixed(2) : ''
   );
@@ -68,9 +79,37 @@ export function TuitionStatementModal({
     });
   };
 
-  const defaultSubject = `Tuition Statement - ${description || 'Current Statement'}`;
+  const defaultSubject = isPaymentMode
+    ? `Payment Request - ${description || 'Outstanding Balance'}`
+    : `Tuition Statement - ${description || 'Current Statement'}`;
 
   const logoUrl = 'https://lecfl.com/wp-content/uploads/2024/08/LEC-Logo-Primary-1.png';
+
+  // Amount shown in the payment-request email body — tracks the live input so
+  // editing the amount updates the email copy too.
+  const payAmountDisplay = (payAmountCents > 0 ? payAmountCents / 100 : 0)
+    .toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+
+  // Header title + body paragraphs differ by mode. Payment mode uses warm, gentle copy.
+  const emailTitle = isPaymentMode ? 'Payment Request' : 'Tuition Statement';
+  const emailBodyParagraphs = isPaymentMode
+    ? `
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
+                Dear ${parentsName},
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
+                We hope this message finds you well. This is a friendly reminder that you have an outstanding balance of <strong>${payAmountDisplay}</strong>${description ? ` for ${description}` : ''}.
+              </p>
+              <p style="margin: 0 0 8px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
+                To make your payment quickly and securely, simply tap the button below. It only takes a moment.
+              </p>`
+    : `
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
+                Dear ${parentsName},
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
+                Attached please find your current statement for ${description} as of ${today}.
+              </p>`;
 
   const defaultEmailBody = `
 <!DOCTYPE html>
@@ -88,18 +127,12 @@ export function TuitionStatementModal({
           <tr>
             <td style="padding: 40px 40px 20px; text-align: center;">
               <img src="${logoUrl}" alt="LEC" style="max-width: 180px; height: auto; margin-bottom: 20px;" />
-              <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #18181b;">Tuition Statement</h1>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #18181b;">${emailTitle}</h1>
             </td>
           </tr>
           <!-- Content -->
           <tr>
-            <td style="padding: 20px 40px;">
-              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                Dear ${parentsName},
-              </p>
-              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                Attached please find your current statement for ${description} as of ${today}.
-              </p>
+            <td style="padding: 20px 40px;">${emailBodyParagraphs}
             </td>
           </tr>
           <!-- Footer -->
@@ -157,6 +190,12 @@ export function TuitionStatementModal({
     setStatementHtml('');
     setPdfBase64('');
 
+    // Payment-request mode sends a short email with a pay button only — no PDF.
+    if (isPaymentMode) {
+      setFetchingStatement(false);
+      return;
+    }
+
     // Fetch statement HTML from server, replace tags, then generate PDF
     setFetchingStatement(true);
     fetch(`/api/stripe/tuition-statement?token=${encodeURIComponent(token)}`, {
@@ -190,9 +229,12 @@ export function TuitionStatementModal({
       });
   }, [isOpen, invoiceUID]);
 
-  // Setup editable iframe with email body
+  // Setup / refresh the editable iframe with the email body. Re-runs when the
+  // body changes (e.g. the amount edited in payment mode) so the email copy stays
+  // in sync — but NOT once the user has manually edited the body, to avoid wiping
+  // their changes.
   useEffect(() => {
-    if (isOpen && iframeRef.current) {
+    if (isOpen && iframeRef.current && !hasChanges) {
       const iframe = iframeRef.current;
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
       if (doc) {
@@ -206,7 +248,7 @@ export function TuitionStatementModal({
         });
       }
     }
-  }, [isOpen, defaultEmailBody]);
+  }, [isOpen, defaultEmailBody, hasChanges]);
 
   const handleSubjectChange = (value: string) => {
     setSubject(value);
@@ -288,6 +330,12 @@ export function TuitionStatementModal({
       return;
     }
 
+    // Payment request must have a positive amount (it has no PDF to fall back on).
+    if (isPaymentMode && payAmountCents <= 0) {
+      setError('Please enter a payment amount');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -301,7 +349,7 @@ export function TuitionStatementModal({
           subject,
           emailHtml: hasChanges ? emailHtml : undefined,
           defaultEmailBody,
-          pdfBase64,
+          pdfBase64: isPaymentMode ? undefined : pdfBase64,
           accountId,
           senderName: extendedInfo?.senderName,
           senderEmail: extendedInfo?.senderEmail,
@@ -353,12 +401,12 @@ export function TuitionStatementModal({
   // Success state
   if (success) {
     return (
-      <Modal isOpen={isOpen} onClose={handleClose} title="Statement Sent" size="sm">
+      <Modal isOpen={isOpen} onClose={handleClose} title={isPaymentMode ? 'Request Sent' : 'Statement Sent'} size="sm">
         <div className="text-center py-6">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Tuition Statement Sent!</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">{isPaymentMode ? 'Payment Request Sent!' : 'Tuition Statement Sent!'}</h3>
           <p className="text-gray-600 text-sm">
             The tuition statement has been sent to{' '}
             <span className="font-medium">{emails.length} recipient{emails.length !== 1 ? 's' : ''}</span>
@@ -377,7 +425,7 @@ export function TuitionStatementModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Send Tuition Statement"
+      title={isPaymentMode ? 'Send Payment Request' : 'Send Tuition Statement'}
       size="full"
     >
       <div className="flex flex-col h-[calc(100vh-200px)] min-h-[500px]">
@@ -456,7 +504,8 @@ export function TuitionStatementModal({
             />
           </div>
 
-          {/* Attachment indicator */}
+          {/* Attachment indicator (statement mode only — payment requests have no PDF) */}
+          {!isPaymentMode && (
           <div className="flex items-center gap-3">
             <label className="text-sm font-medium text-gray-500 w-16">Attach:</label>
             <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-700">
@@ -484,6 +533,7 @@ export function TuitionStatementModal({
               </button>
             )}
           </div>
+          )}
         </div>
 
         {/* Pay Now button option */}
@@ -501,16 +551,21 @@ export function TuitionStatementModal({
           {includePayButton && (
             <div className="flex items-center gap-1.5">
               <span className="text-sm text-gray-500">for</span>
-              <span className="text-sm text-gray-500">$</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={payAmountInput}
-                onChange={(e) => setPayAmountInput(e.target.value)}
-                className="w-28 px-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="0.00"
-              />
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-gray-500">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={payAmountInput}
+                  onChange={(e) => {
+                    // Allow only digits and a single decimal point.
+                    const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                    setPayAmountInput(cleaned);
+                  }}
+                  className="w-28 pl-5 pr-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="0.00"
+                />
+              </div>
               <span className="text-xs text-gray-400">(single-use, 7-day link)</span>
             </div>
           )}
@@ -612,9 +667,16 @@ export function TuitionStatementModal({
         <Button variant="secondary" onClick={handleClose} disabled={loading}>
           Cancel
         </Button>
-        <Button onClick={handleSend} loading={loading} disabled={emails.length === 0 || fetchingStatement || !pdfBase64}>
+        <Button
+          onClick={handleSend}
+          loading={loading}
+          disabled={
+            emails.length === 0 ||
+            (isPaymentMode ? payAmountCents <= 0 : (fetchingStatement || !pdfBase64))
+          }
+        >
           <Send className="w-4 h-4" />
-          Send Statement
+          {isPaymentMode ? 'Send Payment Request' : 'Send Statement'}
         </Button>
       </ModalFooter>
     </Modal>

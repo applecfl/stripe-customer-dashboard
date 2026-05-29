@@ -18,6 +18,7 @@ import {
   XCircle,
   Plus,
   FileText,
+  Send,
 } from 'lucide-react';
 
 interface CustomerHeaderProps {
@@ -31,6 +32,7 @@ interface CustomerHeaderProps {
   onPayNow: () => void;
   onCreateInvoice?: () => void;
   onCreateTuitionStatement?: () => void;
+  onSendPaymentRequest?: () => void;
   onTabChange?: (tab: 'failed' | 'success' | 'future') => void;
 }
 
@@ -45,6 +47,7 @@ export function CustomerHeader({
   onPayNow,
   onCreateInvoice,
   onCreateTuitionStatement,
+  onSendPaymentRequest,
   onTabChange,
 }: CustomerHeaderProps) {
   const [copied, setCopied] = useState(false);
@@ -184,6 +187,14 @@ export function CustomerHeader({
                 <Button variant="outline" size="sm" onClick={onCreateTuitionStatement} className="justify-center text-xs sm:text-sm px-2.5 sm:px-3">
                   <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span>Create Statement</span>
+                </Button>
+              </Tooltip>
+            )}
+            {onSendPaymentRequest && (
+              <Tooltip content="Email a secure pay-now link">
+                <Button variant="outline" size="sm" onClick={onSendPaymentRequest} className="justify-center text-xs sm:text-sm px-2.5 sm:px-3">
+                  <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Payment Request</span>
                 </Button>
               </Tooltip>
             )}

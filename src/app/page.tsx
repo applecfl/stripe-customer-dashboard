@@ -127,6 +127,15 @@ function DashboardContent() {
     return Math.max(0, total - paid - scheduled - failed);
   }, [payments, invoices, otherPayments, extendedInfo]);
 
+  // Failed payments total (open invoices with attempt_count > 0), in cents.
+  // Used as the default amount for a Payment Request — that's what actually
+  // failed to collect and needs to be paid.
+  const failedPaymentsAmount = useMemo(() => {
+    return invoices
+      .filter(inv => inv.status === 'open' && inv.attempt_count > 0)
+      .reduce((sum, inv) => sum + inv.amount_remaining, 0);
+  }, [invoices]);
+
   // UI state
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -143,6 +152,7 @@ function DashboardContent() {
   const [retryModal, setRetryModal] = useState<InvoiceData | null>(null);
   const [sendReminderModal, setSendReminderModal] = useState<InvoiceData | null>(null);
   const [showTuitionStatementModal, setShowTuitionStatementModal] = useState(false);
+  const [showPaymentRequestModal, setShowPaymentRequestModal] = useState(false);
   const [showAddPaymentMethodModal, setShowAddPaymentMethodModal] = useState(false);
   const [changePaymentMethodModal, setChangePaymentMethodModal] = useState<InvoiceData | null>(null);
   const [showBulkChangePaymentMethodModal, setShowBulkChangePaymentMethodModal] = useState(false);
@@ -717,6 +727,7 @@ function DashboardContent() {
           onPayNow={() => setPaymentModal({ isOpen: true })}
           onCreateInvoice={() => setShowCreateInvoiceModal(true)}
           onCreateTuitionStatement={() => setShowTuitionStatementModal(true)}
+          onSendPaymentRequest={() => setShowPaymentRequestModal(true)}
           onTabChange={setActiveTab}
         />
 
@@ -918,6 +929,19 @@ function DashboardContent() {
       <TuitionStatementModal
         isOpen={showTuitionStatementModal}
         onClose={() => setShowTuitionStatementModal(false)}
+        invoiceUID={invoiceUID}
+        token={token}
+        customer={customer}
+        extendedInfo={extendedInfo}
+        invoices={invoices}
+        accountId={accountId}
+      />
+
+      <TuitionStatementModal
+        mode="payment"
+        outstandingAmount={failedPaymentsAmount}
+        isOpen={showPaymentRequestModal}
+        onClose={() => setShowPaymentRequestModal(false)}
         invoiceUID={invoiceUID}
         token={token}
         customer={customer}

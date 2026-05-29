@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateToken, generatePaymentLinkToken, isAllowedIP, getClientIP, ExtendedCustomerInfo, OtherPayment } from '@/lib/auth';
+import { generateToken, generatePaymentLinkToken, isClientChainAllowed, getClientIP, ExtendedCustomerInfo, OtherPayment } from '@/lib/auth';
 
 interface GenerateTokenRequest {
   CustomerID: string;
@@ -47,12 +47,12 @@ export async function POST(
   request: NextRequest
 ): Promise<NextResponse<GenerateTokenResponse>> {
   try {
-    // Get client IP
+    // Get client IP (for logging)
     const clientIP = getClientIP(request);
 
-    // Validate IP is in whitelist
-    if (!isAllowedIP(clientIP)) {
-      console.warn(`Token generation rejected - IP not allowed: ${clientIP}`);
+    // Validate the full forwarding chain is whitelisted (resistant to XFF spoofing).
+    if (!isClientChainAllowed(request)) {
+      console.warn(`Token generation rejected - IP not allowed: ${clientIP} (xff: ${request.headers.get('x-forwarded-for')})`);
       return NextResponse.json(
         { success: false, error: 'Access denied' },
         { status: 403 }

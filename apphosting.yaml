@@ -33,3 +33,8 @@ env:
 
   - variable: GOTENBERG_API_KEY
     secret: GOTENBERG_API_KEY
+
+  # Public base URL used to build absolute links/images in emails (pay link +
+  # the live-state Pay Now button image). Must be the customer-facing domain.
+  - variable: PUBLIC_BASE_URL
+    value: https://stripe.lec.li

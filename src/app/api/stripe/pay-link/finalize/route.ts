@@ -49,31 +49,46 @@ export async function POST(
     const stripe = getStripeForAccount(accountId);
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
-    // Bind the PI to this token: same customer, same amount.
+    // C3 — bind the PI to THIS link, not just to the customer+amount. The PI must
+    // be the one this link created (payLinkSig stamped at creation), belong to the
+    // token's customer, and match the signed amount. This blocks finalizing some
+    // other, unrelated succeeded PaymentIntent of the same amount.
     const piCustomer = typeof paymentIntent.customer === 'string'
       ? paymentIntent.customer
       : paymentIntent.customer?.id;
-    if (piCustomer !== customerId || paymentIntent.amount !== amount) {
-      return NextResponse.json({ success: false, error: 'Payment mismatch' }, { status: 400 });
+    if (
+      paymentIntent.metadata?.payLinkSig !== sig ||
+      piCustomer !== customerId ||
+      paymentIntent.amount !== amount
+    ) {
+      return NextResponse.json({ success: false, error: 'Payment could not be verified.' }, { status: 400 });
     }
     if (paymentIntent.status !== 'succeeded') {
       return NextResponse.json(
-        { success: false, error: `Payment not completed. Status: ${paymentIntent.status}` },
+        { success: false, error: 'Your payment was not completed. Please try again.' },
         { status: 400 }
       );
     }
 
-    const { invoicesPaid } = await distributePayment({
-      stripe,
-      paymentIntent,
-      customerId,
-      invoiceUID,
-      amount,
-      reason: 'Payment link',
-      applyToAll: true,
-    });
-
+    // Mark consumed first (prevents any re-charge), then distribute.
     await markPaymentLinkPaid(sig, paymentIntent.id);
+
+    let invoicesPaid: Awaited<ReturnType<typeof distributePayment>>['invoicesPaid'] = [];
+    try {
+      ({ invoicesPaid } = await distributePayment({
+        stripe,
+        paymentIntent,
+        customerId,
+        invoiceUID,
+        amount,
+        reason: 'Payment link',
+        applyToAll: true,
+      }));
+    } catch (distErr) {
+      console.error('pay-link finalize: paid but distribution failed', {
+        paymentIntentId: paymentIntent.id, sig, error: distErr,
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -82,7 +97,7 @@ export async function POST(
   } catch (error) {
     console.error('Error finalizing pay-link:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to finalize payment' },
+      { success: false, error: 'We could not finalize your payment. Please contact us.' },
       { status: 500 }
     );
   }

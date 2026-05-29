@@ -32,6 +32,17 @@ export async function POST(
       );
     }
 
+    // SECURITY: only dashboard tokens may be refreshed. A payment_link token must
+    // never be exchanged for a dashboard token — that would let a customer's pay
+    // link escalate into full admin access. Pay links are single-use & long-lived
+    // and are never refreshed (only the dashboard calls this endpoint).
+    if (payload.kind === 'payment_link') {
+      return NextResponse.json(
+        { success: false, error: 'This token cannot be refreshed' },
+        { status: 403 }
+      );
+    }
+
     // Generate a new token with the same customer/invoice/account data
     const { token, expiresAt } = generateToken(payload.customerId, payload.invoiceUID, payload.accountId);
 

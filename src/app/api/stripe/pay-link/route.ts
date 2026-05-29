@@ -3,7 +3,7 @@ import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
 import { verifyToken, getTokenSignature } from '@/lib/auth';
 import { distributePayment } from '@/lib/payNowCore';
-import { claimPaymentLink, markPaymentLinkPaid, getPaymentLink } from '@/lib/paymentLinks';
+import { claimPaymentLink, markPaymentLinkPaid, getPaymentLink, recordPaymentIntent } from '@/lib/paymentLinks';
 
 // Customer-facing single-use payment. SECURITY: the chargeable values
 // (customerId, accountId, amount) come ONLY from the signed payment_link token,
@@ -42,17 +42,63 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Malformed payment link' }, { status: 400 });
     }
 
-    // Body: only the payment method + whether to save it.
+    // Body: only the payment method + save flag. Chargeable values never come from
+    // here. NOTE: we do NOT trust any client "isNewCard" flag — we determine new vs
+    // saved server-side from the PM's actual owner.
     const body = await request.json();
     const paymentMethodId: string | undefined = body?.paymentMethodId;
     const saveCard: boolean = !!body?.saveCard;
-    if (!paymentMethodId) {
-      return NextResponse.json({ success: false, error: 'paymentMethodId is required' }, { status: 400 });
+    if (!paymentMethodId || typeof paymentMethodId !== 'string') {
+      return NextResponse.json({ success: false, error: 'A payment method is required' }, { status: 400 });
     }
 
     const sig = getTokenSignature(token);
+    const stripe = getStripeForAccount(accountId);
 
-    // Single-use gate: reject if this link was already paid.
+    // C2 — payment-method ownership, enforced server-side regardless of client flags.
+    // Retrieve the PM and inspect its owner:
+    //  - attached to THIS customer  -> a saved card, allowed
+    //  - unattached (customer null) -> a freshly tokenized new card, allowed
+    //  - attached to ANOTHER customer -> reject (can't charge someone else's card)
+    let pmOwner: string | null = null;
+    try {
+      const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+      pmOwner = typeof pm.customer === 'string' ? pm.customer : pm.customer?.id ?? null;
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Selected payment method is not available.' },
+        { status: 400 }
+      );
+    }
+    if (pmOwner !== null && pmOwner !== customerId) {
+      return NextResponse.json(
+        { success: false, error: 'Selected payment method is not available.' },
+        { status: 400 }
+      );
+    }
+    const isNewCard = pmOwner === null; // unattached => new card
+
+    // H2 — idempotency: if a PaymentIntent for this link already succeeded (e.g. a
+    // prior attempt charged but failed to mark paid), do not charge again.
+    const existing = await getPaymentLink(sig);
+    if (existing?.status === 'paid') {
+      return NextResponse.json(
+        { success: false, error: 'This payment link has already been used.' },
+        { status: 409 }
+      );
+    }
+    if (existing?.paymentIntentId) {
+      const priorPi = await stripe.paymentIntents.retrieve(existing.paymentIntentId);
+      if (priorPi.status === 'succeeded') {
+        await markPaymentLinkPaid(sig, priorPi.id);
+        return NextResponse.json(
+          { success: false, error: 'This payment link has already been used.' },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Single-use gate (atomic): reject if already paid; claim otherwise.
     const claimed = await claimPaymentLink(sig, {
       customerId,
       accountId,
@@ -67,13 +113,12 @@ export async function POST(
       );
     }
 
-    const stripe = getStripeForAccount(accountId);
-
-    if (saveCard) {
+    // Only attach a card to the customer when saving a NEW card.
+    if (isNewCard && saveCard) {
       try {
         await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId });
       } catch (attachError) {
-        console.log('Payment method attachment:', attachError);
+        console.log('Payment method attachment failed (non-fatal):', attachError);
       }
     }
 
@@ -84,15 +129,25 @@ export async function POST(
       payment_method: paymentMethodId,
       confirm: true,
       automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
-      setup_future_usage: saveCard ? 'off_session' : undefined,
+      setup_future_usage: isNewCard && saveCard ? 'off_session' : undefined,
       metadata: {
         reason: 'Payment link',
         InvoiceUID: invoiceUID,
         payNow: 'true',
         payLink: 'true',
-        cardSaved: saveCard ? 'true' : 'false',
+        payLinkSig: sig, // C3 — bind this PI to this exact link for finalize.
+        cardSaved: isNewCard && saveCard ? 'true' : 'false',
       },
+    }, {
+      // H2 — concurrency guard: two simultaneous submits of THIS link with THIS card
+      // collapse to a single PaymentIntent instead of charging twice. A retry with a
+      // different card (e.g. after a decline) uses a different key and is allowed.
+      idempotencyKey: `paylink_${sig}_${paymentMethodId}`,
     });
+
+    // Record the PI on the link doc immediately so a later success-without-markPaid
+    // can be reconciled on retry (H2).
+    await recordPaymentIntent(sig, paymentIntent.id);
 
     // 3DS required: hand the client secret back. The link stays 'pending' (not yet
     // paid) so finalize can complete it. A failed 3DS simply leaves it retryable.
@@ -108,33 +163,44 @@ export async function POST(
     }
 
     if (paymentIntent.status !== 'succeeded') {
+      // Generic message — don't leak Stripe internals to the customer.
       return NextResponse.json(
-        { success: false, error: `Payment failed with status: ${paymentIntent.status}` },
+        { success: false, error: 'Your payment could not be completed. Please try another card.' },
         { status: 400 }
       );
     }
 
-    // Charge succeeded — distribute to invoices and mark the link consumed.
-    const { invoicesPaid } = await distributePayment({
-      stripe,
-      paymentIntent,
-      customerId,
-      invoiceUID,
-      amount,
-      reason: 'Payment link',
-      applyToAll: true,
-    });
-
+    // Charge succeeded — mark consumed FIRST (so any later failure can never lead to
+    // a second charge), then distribute to invoices. A distribution hiccup is logged
+    // and reconciled out-of-band; the money has moved and the link is spent.
     await markPaymentLinkPaid(sig, paymentIntent.id);
+
+    let invoicesPaid: Awaited<ReturnType<typeof distributePayment>>['invoicesPaid'] = [];
+    try {
+      ({ invoicesPaid } = await distributePayment({
+        stripe,
+        paymentIntent,
+        customerId,
+        invoiceUID,
+        amount,
+        reason: 'Payment link',
+        applyToAll: true,
+      }));
+    } catch (distErr) {
+      console.error('pay-link: charge succeeded but invoice distribution failed', {
+        paymentIntentId: paymentIntent.id, sig, error: distErr,
+      });
+    }
 
     return NextResponse.json({
       success: true,
       data: { paymentIntentId: paymentIntent.id, amountPaid: amount, invoicesPaid },
     });
   } catch (error) {
+    // Log full detail server-side; return a generic message to the customer.
     console.error('Error processing pay-link:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to process payment' },
+      { success: false, error: 'We could not process your payment. Please try again.' },
       { status: 500 }
     );
   }
