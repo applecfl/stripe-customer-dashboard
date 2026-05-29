@@ -2,6 +2,7 @@ import { CheckCircle, AlertCircle } from 'lucide-react';
 import { verifyToken, getTokenSignature } from '@/lib/auth';
 import { getPaymentLink } from '@/lib/paymentLinks';
 import { getStripeForAccount, getStripeAccountInfo } from '@/lib/stripe';
+import { getOutstandingForUID } from '@/lib/balance';
 import { PaymentMethodData } from '@/types';
 import { PayLinkForm } from '@/components/pay/PayLinkForm';
 
@@ -18,19 +19,40 @@ export default async function PayPage({
   const { token } = await searchParams;
 
   const payload = token ? verifyToken(token) : null;
-  if (!token || !payload || payload.kind !== 'payment_link' || !payload.amount) {
+  // Valid payment_link token required. Fixed links must carry an amount; dynamic
+  // links compute it live below.
+  const isDynamic = payload?.dynamic === true;
+  if (!token || !payload || payload.kind !== 'payment_link' || (!isDynamic && !payload.amount)) {
     return <Centered icon="error" title="Invalid or expired link"
       message="This payment link is no longer valid. Please request a new one." />;
   }
 
-  // Already used?
-  const record = await getPaymentLink(getTokenSignature(token));
-  if (record?.status === 'paid') {
-    return <Centered icon="check" title="Already paid"
-      message="This payment link has already been used. No further action is needed." />;
-  }
+  const { customerId, accountId } = payload;
 
-  const { customerId, accountId, amount } = payload;
+  // Determine the amount to charge.
+  //  - FIXED: the signed amount; single-use, so reject if already paid.
+  //  - DYNAMIC: the live outstanding balance; if zero, it's paid in full.
+  let amount = payload.amount ?? 0;
+  if (isDynamic) {
+    try {
+      const stripe = getStripeForAccount(accountId);
+      amount = await getOutstandingForUID(stripe, customerId, payload.invoiceUID);
+    } catch (e) {
+      console.error('pay page balance error:', e);
+      return <Centered icon="error" title="Something went wrong"
+        message="We couldn't load this payment. Please try again later." />;
+    }
+    if (amount <= 0) {
+      return <Centered icon="check" title="Paid in full"
+        message="Your balance has been paid in full. Thank you! No further action is needed." />;
+    }
+  } else {
+    const record = await getPaymentLink(getTokenSignature(token));
+    if (record?.status === 'paid') {
+      return <Centered icon="check" title="Already paid"
+        message="This payment link has already been used. No further action is needed." />;
+    }
+  }
 
   // Load saved cards + publishable key + customer name server-side.
   let savedMethods: PaymentMethodData[] = [];
@@ -85,6 +107,7 @@ export default async function PayPage({
           token={token}
           accountId={accountId!}
           amount={amount}
+          dynamic={isDynamic}
           customerName={customerName}
           description={description}
           publishableKey={publishableKey}

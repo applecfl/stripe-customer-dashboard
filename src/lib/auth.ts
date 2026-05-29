@@ -69,9 +69,14 @@ export interface TokenPayload {
   iat: number; // Issued at timestamp (seconds)
   // Token kind - controls which routes the token may open (see middleware)
   kind?: TokenKind;
-  // For payment_link tokens: the exact amount (in cents) the customer may pay.
-  // The charge amount is read from here server-side, never from the request body.
+  // For FIXED payment_link tokens: the exact amount (cents) the customer may pay,
+  // read server-side, never from the body. Absent on dynamic links.
   amount?: number;
+  // DYNAMIC payment_link: when true the chargeable amount is NOT fixed in the token.
+  // The server computes the live outstanding balance for (customerId, invoiceUID)
+  // from Stripe on each visit, and the customer may pay any amount up to it. The link
+  // stays usable (within its 7-day expiry) until the balance reaches zero.
+  dynamic?: boolean;
   // Extended info from external system
   extendedInfo?: ExtendedCustomerInfo;
   otherPayments?: OtherPayment[];
@@ -240,6 +245,38 @@ export function generatePaymentLinkToken(
     iat: now,
     kind: 'payment_link',
     amount,
+    extendedInfo,
+  };
+
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = createSignature(encodedPayload);
+  const token = `${encodedPayload}.${signature}`;
+
+  return { token, expiresAt };
+}
+
+/**
+ * Generate a DYNAMIC payment-link token. No amount is signed; the server computes
+ * the live outstanding balance for (customerId, invoiceUID) on each visit and lets
+ * the customer pay up to it. Usable (within 7-day expiry) until the balance is zero.
+ */
+export function generateDynamicPaymentLinkToken(
+  customerId: string,
+  invoiceUID: string,
+  accountId: string,
+  extendedInfo?: ExtendedCustomerInfo
+): { token: string; expiresAt: number } {
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = now + PAYMENT_LINK_EXPIRY_SECONDS;
+
+  const payload: TokenPayload = {
+    customerId,
+    invoiceUID,
+    accountId,
+    exp: expiresAt,
+    iat: now,
+    kind: 'payment_link',
+    dynamic: true,
     extendedInfo,
   };
 

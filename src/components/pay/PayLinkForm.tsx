@@ -15,7 +15,8 @@ import { getStripePromise } from '@/lib/stripe-client';
 interface PayLinkFormProps {
   token: string;
   accountId: string;
-  amount: number; // cents, fixed by the signed token
+  amount: number; // cents — fixed link: the charge; dynamic link: the live balance (cap)
+  dynamic?: boolean; // when true, customer may edit the amount up to `amount`
   customerName: string;
   description: string;
   publishableKey: string;
@@ -33,9 +34,10 @@ const cardStyle = {
   },
 };
 
-function InnerForm({ token, amount, savedMethods, onPaid }: {
+function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
   token: string;
-  amount: number;
+  amount: number; // dynamic: the live balance (cap); fixed: the exact charge
+  dynamic?: boolean;
   savedMethods: PaymentMethodData[];
   onPaid: () => void;
 }) {
@@ -48,6 +50,10 @@ function InnerForm({ token, amount, savedMethods, onPaid }: {
   const defaultId = savedMethods.find(m => m.isDefault)?.id || savedMethods[0]?.id || 'new';
   const [selected, setSelected] = useState<string>(defaultId);
   const [saveCard, setSaveCard] = useState(false);
+
+  // Dynamic links: editable amount (defaults to the full balance), capped at it.
+  const [amountInput, setAmountInput] = useState((amount / 100).toFixed(2));
+  const chosenCents = dynamic ? Math.round((parseFloat(amountInput) || 0) * 100) : amount;
 
   const finalizeAfter3DS = async (paymentIntentId: string) => {
     const res = await fetch(`/api/stripe/pay-link/finalize?token=${encodeURIComponent(token)}`, {
@@ -62,6 +68,13 @@ function InnerForm({ token, amount, savedMethods, onPaid }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stripe) return;
+
+    // Dynamic links: validate the chosen amount client-side (server re-validates).
+    if (dynamic) {
+      if (chosenCents <= 0) { setError('Please enter an amount to pay.'); return; }
+      if (chosenCents > amount) { setError('Amount cannot exceed the balance due.'); return; }
+    }
+
     setLoading(true);
     setError('');
 
@@ -90,6 +103,8 @@ function InnerForm({ token, amount, savedMethods, onPaid }: {
           paymentMethodId,
           // Server determines new-vs-saved from the PM's owner; this is only a hint.
           saveCard: selected === 'new' ? saveCard : false,
+          // Dynamic links: the chosen amount (server caps it at the live balance).
+          ...(dynamic ? { amount: chosenCents } : {}),
         }),
       });
       const result = await res.json();
@@ -117,6 +132,28 @@ function InnerForm({ token, amount, savedMethods, onPaid }: {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {dynamic && (
+        <div>
+          <label className="text-sm font-medium text-gray-700">Amount to pay</label>
+          <div className="relative mt-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amountInput}
+              onChange={(e) => {
+                const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                setAmountInput(cleaned);
+              }}
+              className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="0.00"
+            />
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            Up to {formatCurrency(amount, 'usd')} due.
+          </p>
+        </div>
+      )}
       {savedMethods.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium text-gray-700">Pay with</p>
@@ -194,7 +231,7 @@ function InnerForm({ token, amount, savedMethods, onPaid }: {
           </>
         ) : (
           <>
-            <Lock className="w-4 h-4" /> Pay {formatCurrency(amount, 'usd')}
+            <Lock className="w-4 h-4" /> Pay {formatCurrency(chosenCents > 0 ? chosenCents : amount, 'usd')}
           </>
         )}
       </button>
@@ -237,14 +274,20 @@ export function PayLinkForm(props: PayLinkFormProps) {
         </p>
       )}
       <div className="mb-6">
-        <p className="text-sm text-gray-500">{props.description || 'Amount due'}</p>
+        <p className="text-sm text-gray-500">
+          {props.dynamic ? 'Balance due' : (props.description || 'Amount due')}
+        </p>
         <p className="text-3xl font-bold text-gray-900">{formatCurrency(props.amount, 'usd')}</p>
+        {props.dynamic && (
+          <p className="text-xs text-gray-400 mt-1">You can pay the full balance or any part of it.</p>
+        )}
       </div>
       {stripePromise && (
         <Elements stripe={stripePromise}>
           <InnerForm
             token={props.token}
             amount={props.amount}
+            dynamic={props.dynamic}
             savedMethods={props.savedMethods}
             onPaid={() => setPaid(true)}
           />

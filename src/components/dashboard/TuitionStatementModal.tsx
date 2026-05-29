@@ -98,10 +98,10 @@ export function TuitionStatementModal({
                 Dear ${parentsName},
               </p>
               <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                We hope this message finds you well. This is a friendly reminder that you have an outstanding balance of <strong>${payAmountDisplay}</strong>${description ? ` for ${description}` : ''}.
+                For your ${description || 'tuition'}, your balance is <strong>${payAmountDisplay}</strong>.
               </p>
               <p style="margin: 0 0 8px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                To make your payment quickly and securely, simply tap the button below. It only takes a moment.
+                Please click below to make your payment.
               </p>`
     : `
               <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
@@ -354,7 +354,10 @@ export function TuitionStatementModal({
           senderName: extendedInfo?.senderName,
           senderEmail: extendedInfo?.senderEmail,
           recipientName: getRecipientName(),
-          includePayButton: includePayButton && payAmountCents > 0,
+          // Payment-request mode always includes a DYNAMIC pay link (live balance,
+          // customer can pay any part). Statement mode uses the optional fixed button.
+          includePayButton: isPaymentMode ? true : (includePayButton && payAmountCents > 0),
+          dynamicPayLink: isPaymentMode,
           customerId: customer?.id,
           invoiceUID,
           payAmount: payAmountCents,

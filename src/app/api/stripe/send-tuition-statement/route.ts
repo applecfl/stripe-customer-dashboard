@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
-import { generatePaymentLinkToken } from '@/lib/auth';
+import { generatePaymentLinkToken, generateDynamicPaymentLinkToken } from '@/lib/auth';
 
 interface SendTuitionStatementRequest {
   customerEmails: string[];
@@ -20,6 +20,10 @@ interface SendTuitionStatementRequest {
   customerId?: string;
   invoiceUID?: string;
   payAmount?: number;
+  // When true, mint a DYNAMIC pay link (no fixed amount): the customer can pay any
+  // part of their live balance, and the link stays usable until the balance is zero.
+  // payAmount is then only the initial display amount.
+  dynamicPayLink?: boolean;
 }
 
 // Build the Pay Now button block. The button is a server-rendered PNG so it can
@@ -201,6 +205,7 @@ export async function POST(request: NextRequest) {
       customerId,
       invoiceUID,
       payAmount,
+      dynamicPayLink,
       accountId,
     } = body;
 
@@ -223,21 +228,37 @@ export async function POST(request: NextRequest) {
 
     let htmlContent = emailHtml || defaultEmailBody;
 
-    // Optionally mint a single-use payment link (server-side, using AUTH_SECRET)
-    // and inject a Pay Now button. Amount is fixed into the signed token here.
+    // Optionally mint a payment link (server-side, using AUTH_SECRET) and inject a
+    // Pay Now button. dynamicPayLink => live-balance link (no fixed amount); else a
+    // fixed single-use link for the given payAmount.
     if (includePayButton) {
-      const amountCents = typeof payAmount === 'number' ? Math.round(payAmount) : NaN;
-      if (!customerId || !invoiceUID || !accountId || !Number.isFinite(amountCents) || amountCents <= 0) {
+      if (!customerId || !invoiceUID || !accountId) {
         return NextResponse.json(
-          { success: false, error: 'customerId, invoiceUID, accountId and a positive payAmount are required for the Pay Now button' },
+          { success: false, error: 'customerId, invoiceUID and accountId are required for the Pay Now button' },
           { status: 400 }
         );
       }
-      const { token: payToken } = generatePaymentLinkToken(customerId, invoiceUID, accountId, amountCents);
+      const amountCents = typeof payAmount === 'number' ? Math.round(payAmount) : 0;
+
+      let payToken: string;
+      if (dynamicPayLink) {
+        ({ token: payToken } = generateDynamicPaymentLinkToken(customerId, invoiceUID, accountId));
+      } else {
+        if (!Number.isFinite(amountCents) || amountCents <= 0) {
+          return NextResponse.json(
+            { success: false, error: 'A positive payAmount is required for a fixed Pay Now button' },
+            { status: 400 }
+          );
+        }
+        ({ token: payToken } = generatePaymentLinkToken(customerId, invoiceUID, accountId, amountCents));
+      }
+
       const base = getBaseUrl(request);
       const enc = encodeURIComponent(payToken);
       const payUrl = `${base}/pay?token=${enc}`;
       const imgUrl = `${base}/api/stripe/pay-link/button?token=${enc}`;
+      // Button label uses the initial amount for fixed; for dynamic the image shows
+      // the live balance, so the label amount is just the starting display value.
       htmlContent = injectPayButton(htmlContent, buildPayButton(payUrl, imgUrl, amountCents));
     }
 

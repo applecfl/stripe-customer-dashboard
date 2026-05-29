@@ -26,8 +26,9 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Invalid payment link' }, { status: 401 });
     }
 
-    const { customerId, invoiceUID, accountId, amount } = payload;
-    if (!customerId || !accountId || typeof amount !== 'number') {
+    const { customerId, invoiceUID, accountId } = payload;
+    const isDynamic = payload.dynamic === true;
+    if (!customerId || !accountId) {
       return NextResponse.json({ success: false, error: 'Malformed payment link' }, { status: 400 });
     }
 
@@ -38,28 +39,33 @@ export async function POST(
     }
 
     const sig = getTokenSignature(token);
-    const record = await getPaymentLink(sig);
-    if (record?.status === 'paid') {
-      return NextResponse.json(
-        { success: false, error: 'This payment link has already been used.' },
-        { status: 409 }
-      );
+    // Fixed links are single-use; reject if already consumed. Dynamic links have no
+    // consumed flag (live balance governs), so skip this for them.
+    if (!isDynamic) {
+      const record = await getPaymentLink(sig);
+      if (record?.status === 'paid') {
+        return NextResponse.json(
+          { success: false, error: 'This payment link has already been used.' },
+          { status: 409 }
+        );
+      }
     }
 
     const stripe = getStripeForAccount(accountId);
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
-    // C3 — bind the PI to THIS link, not just to the customer+amount. The PI must
-    // be the one this link created (payLinkSig stamped at creation), belong to the
-    // token's customer, and match the signed amount. This blocks finalizing some
-    // other, unrelated succeeded PaymentIntent of the same amount.
+    // C3 — bind the PI to THIS link: it must carry this link's payLinkSig (stamped at
+    // creation) and belong to the token's customer. For FIXED links the amount must
+    // also equal the signed amount. For DYNAMIC links the amount was validated &
+    // capped server-side when the PI was created, so the sig+customer bind suffices.
     const piCustomer = typeof paymentIntent.customer === 'string'
       ? paymentIntent.customer
       : paymentIntent.customer?.id;
+    const amountOk = isDynamic ? true : paymentIntent.amount === payload.amount;
     if (
       paymentIntent.metadata?.payLinkSig !== sig ||
       piCustomer !== customerId ||
-      paymentIntent.amount !== amount
+      !amountOk
     ) {
       return NextResponse.json({ success: false, error: 'Payment could not be verified.' }, { status: 400 });
     }
@@ -70,8 +76,13 @@ export async function POST(
       );
     }
 
-    // Mark consumed first (prevents any re-charge), then distribute.
-    await markPaymentLinkPaid(sig, paymentIntent.id);
+    const amount = paymentIntent.amount;
+
+    // Fixed: mark consumed first (prevents re-charge). Dynamic: no flag — live balance
+    // governs — so just distribute (which lowers the balance).
+    if (!isDynamic) {
+      await markPaymentLinkPaid(sig, paymentIntent.id);
+    }
 
     let invoicesPaid: Awaited<ReturnType<typeof distributePayment>>['invoicesPaid'] = [];
     try {
