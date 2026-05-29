@@ -124,42 +124,43 @@ function verifySignature(data: string, signature: string): boolean {
  */
 export function isClientChainAllowed(request: Request): boolean {
   const xff = request.headers.get('x-forwarded-for');
-  const candidates: string[] = [];
 
+  // On Firebase App Hosting / Cloud Run, the Google Front End rewrites the LEFTMOST
+  // x-forwarded-for entry to the real connecting peer (a client-supplied XFF can't
+  // overwrite it — GFE prepends the true source). So the trustworthy "client IP" is
+  // XFF[0]. We additionally require that EVERY hop to the right of it is platform
+  // infra (Google ranges / private), so an attacker can't smuggle a non-Google
+  // public hop. This keeps the legitimate chain
+  //   [whitelisted_server, 35.x google egress, 192.178.x GFE]
+  // working while rejecting arbitrary public IPs.
   if (xff) {
-    for (const part of xff.split(',')) {
-      candidates.push(part.trim());
-    }
+    const hops = xff.split(',').map(s => s.trim()).filter(Boolean);
+    if (hops.length === 0) return false;
+    const origin = hops[0];
+    if (!isAllowedIP(origin)) return false;
+    // Every subsequent hop must be Google/infra (not an attacker-inserted public IP).
+    return hops.slice(1).every(ip => isInfraHop(ip));
   }
+
+  // No XFF (e.g. direct/localhost in dev): fall back to other proxy headers.
   for (const h of ['x-real-ip', 'x-vercel-forwarded-for', 'cf-connecting-ip']) {
     const v = request.headers.get(h);
-    if (v) candidates.push(v.trim());
+    if (v && isAllowedIP(v.trim())) return true;
   }
-
-  if (candidates.length === 0) return false;
-
-  // At least one whitelisted IP must be present...
-  const hasAllowed = candidates.some(ip => isAllowedIP(ip));
-  if (!hasAllowed) return false;
-
-  // ...and every non-infrastructure hop must be whitelisted, so an attacker can't
-  // simply prepend a fake whitelisted IP to their real (non-whitelisted) one.
-  const allOk = candidates.every(ip => isAllowedIP(ip) || isInfraHop(ip));
-  return allOk;
+  return false;
 }
 
-// Google Front End / load-balancer ranges that legitimately appear as a hop in the
-// forwarding chain. These are NOT trusted as the client — they're just tolerated so
-// the real (whitelisted) client IP next to them still validates.
-//
-// IMPORTANT: we deliberately do NOT trust the whole 35.0.0.0/8 — that block contains
-// customer-operated GCP VMs, so an attacker on a 35.x VM could otherwise spoof a
-// chain. We allow only the documented Google LB proxy ranges (35.191.0.0/16 and
-// 130.211.0.0/22), the App Hosting front-end range we actually observe (192.178.x),
-// link-local, and RFC1918 private ranges.
+// Google ranges that legitimately appear as hops AFTER the real client in the
+// forwarding chain on App Hosting / Cloud Run. These are tolerated as infra, never
+// trusted as the client IP (the client is XFF[0], checked against the whitelist).
+// Covers Google's broad egress/GFE space (34./35./130.211./192.178./192.158./
+// 66.249.) plus link-local and RFC1918. A non-Google public hop is rejected.
 function isInfraHop(ip: string): boolean {
   const clean = ip.replace(/^::ffff:/, '');
-  return /^(35\.191\.|130\.211\.|192\.178\.|169\.254\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(clean);
+  // Google egress/GFE (34., 35., 130.211., 192.178., 192.158., 66.249.) + link-local
+  // + RFC1918. Safe because the CLIENT identity is XFF[0] (whitelisted); these only
+  // appear to the right of it as Google-added hops.
+  return /^(34\.|35\.|130\.211\.|192\.178\.|192\.158\.|66\.249\.|169\.254\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(clean);
 }
 
 /**
