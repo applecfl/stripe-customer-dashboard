@@ -39,7 +39,7 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
   amount: number; // dynamic: the live balance (cap); fixed: the exact charge
   dynamic?: boolean;
   savedMethods: PaymentMethodData[];
-  onPaid: () => void;
+  onPaid: (paidCents: number) => void;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -55,7 +55,7 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
   const [amountInput, setAmountInput] = useState((amount / 100).toFixed(2));
   const chosenCents = dynamic ? Math.round((parseFloat(amountInput) || 0) * 100) : amount;
 
-  const finalizeAfter3DS = async (paymentIntentId: string) => {
+  const finalizeAfter3DS = async (paymentIntentId: string): Promise<number> => {
     const res = await fetch(`/api/stripe/pay-link/finalize?token=${encodeURIComponent(token)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -63,6 +63,7 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
     });
     const result = await res.json();
     if (!result.success) throw new Error(result.error || 'Failed to complete payment');
+    return result.data?.amountPaid ?? chosenCents;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,6 +111,9 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
       const result = await res.json();
       if (!result.success) throw new Error(result.error || 'Payment failed');
 
+      // The actual amount charged (authoritative, from the server).
+      let paidCents: number = result.data?.amountPaid ?? chosenCents;
+
       // 3DS path
       if (result.data?.requiresAction && result.data?.clientSecret) {
         const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(
@@ -119,10 +123,10 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
         if (paymentIntent?.status !== 'succeeded') {
           throw new Error('Your card could not be authorized. Please try another card.');
         }
-        await finalizeAfter3DS(result.data.paymentIntentId);
+        paidCents = await finalizeAfter3DS(result.data.paymentIntentId);
       }
 
-      onPaid();
+      onPaid(paidCents);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
     } finally {
@@ -245,6 +249,7 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
 
 export function PayLinkForm(props: PayLinkFormProps) {
   const [paid, setPaid] = useState(false);
+  const [paidCents, setPaidCents] = useState(0);
   const [stripePromise, setStripePromise] = useState<ReturnType<typeof getStripePromise> | null>(null);
 
   useEffect(() => {
@@ -260,7 +265,7 @@ export function PayLinkForm(props: PayLinkFormProps) {
         </div>
         <h2 className="text-xl font-semibold text-gray-900 mb-1">Payment Successful</h2>
         <p className="text-gray-600 text-sm">
-          Thank you! Your payment of {formatCurrency(props.amount, 'usd')} has been received.
+          Thank you! Your payment of {formatCurrency(paidCents, 'usd')} has been received.
         </p>
       </div>
     );
@@ -289,7 +294,7 @@ export function PayLinkForm(props: PayLinkFormProps) {
             amount={props.amount}
             dynamic={props.dynamic}
             savedMethods={props.savedMethods}
-            onPaid={() => setPaid(true)}
+            onPaid={(cents) => { setPaidCents(cents); setPaid(true); }}
           />
         </Elements>
       )}

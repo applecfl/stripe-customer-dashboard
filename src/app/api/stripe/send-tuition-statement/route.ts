@@ -257,10 +257,25 @@ export async function POST(request: NextRequest) {
       const enc = encodeURIComponent(payToken);
       const payUrl = `${base}/pay?token=${enc}`;
       const imgUrl = `${base}/api/stripe/pay-link/button?token=${enc}`;
+      const amountImgUrl = `${base}/api/stripe/pay-link/amount?token=${enc}`;
+
+      // Replace the {{BALANCE_IMG}} placeholder with a small LIVE amount image so the
+      // balance shown in the sentence reflects the current outstanding balance each
+      // time the email is opened. If the placeholder is absent (e.g. heavily edited
+      // body), fall back to the static amount text.
+      const amountImgTag = `<img src="${amountImgUrl}" alt="${(amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}" style="vertical-align:middle;border:0;height:20px;" />`;
+      if (htmlContent.includes('{{BALANCE_IMG}}')) {
+        htmlContent = htmlContent.replaceAll('{{BALANCE_IMG}}', amountImgTag);
+      }
+
       // Button label uses the initial amount for fixed; for dynamic the image shows
       // the live balance, so the label amount is just the starting display value.
       htmlContent = injectPayButton(htmlContent, buildPayButton(payUrl, imgUrl, amountCents));
     }
+
+    // Safety net: if a {{BALANCE_IMG}} placeholder survived without a pay button
+    // (shouldn't happen), strip it so it never reaches the customer literally.
+    htmlContent = htmlContent.replaceAll('{{BALANCE_IMG}}', '');
 
     const textContent = pdfBuffer
       ? `Dear ${recipientName || 'Parent/Guardian'},\n\nAttached please find your current tuition statement.\n\nThank you,\nLEC Administration`

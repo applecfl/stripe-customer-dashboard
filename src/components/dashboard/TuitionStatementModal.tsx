@@ -97,8 +97,11 @@ export function TuitionStatementModal({
               <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
                 Dear ${parentsName},
               </p>
+              <p style="margin: 0 0 8px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
+                <strong>Payment for:</strong> ${description || 'Tuition'}
+              </p>
               <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                For your ${description || 'tuition'}, your balance is <strong>${payAmountDisplay}</strong>.
+                Your balance is <strong>{{BALANCE_IMG}}</strong>.
               </p>
               <p style="margin: 0 0 8px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
                 Please click below to make your payment.

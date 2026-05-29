@@ -167,7 +167,7 @@ export async function middleware(request: NextRequest) {
   // clients (no headers) and must render even for an EXPIRED token (to show a grey
   // "Link Expired" button), so it can't go through the normal token gate. It does
   // its own verification internally and never returns sensitive data (only a PNG).
-  if (pathname === '/api/stripe/pay-link/button') {
+  if (pathname === '/api/stripe/pay-link/button' || pathname === '/api/stripe/pay-link/amount') {
     return NextResponse.next();
   }
 
