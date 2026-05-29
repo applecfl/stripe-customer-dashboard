@@ -36,6 +36,13 @@ export function TuitionStatementModal({
   const [newEmail, setNewEmail] = useState('');
   const [statementHtml, setStatementHtml] = useState('');
   const [pdfBase64, setPdfBase64] = useState('');
+  // Pay Now button: include a single-use payment link in the email.
+  const defaultPayAmount = extendedInfo?.totalAmount ?? 0;
+  const [includePayButton, setIncludePayButton] = useState(defaultPayAmount > 0);
+  const [payAmountInput, setPayAmountInput] = useState(
+    defaultPayAmount > 0 ? (defaultPayAmount / 100).toFixed(2) : ''
+  );
+  const payAmountCents = Math.round((parseFloat(payAmountInput) || 0) * 100);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const parentsName = extendedInfo?.parentsName || customer?.name || '';
@@ -299,6 +306,10 @@ export function TuitionStatementModal({
           senderName: extendedInfo?.senderName,
           senderEmail: extendedInfo?.senderEmail,
           recipientName: getRecipientName(),
+          includePayButton: includePayButton && payAmountCents > 0,
+          customerId: customer?.id,
+          invoiceUID,
+          payAmount: payAmountCents,
         }),
       });
 
@@ -473,6 +484,36 @@ export function TuitionStatementModal({
               </button>
             )}
           </div>
+        </div>
+
+        {/* Pay Now button option */}
+        <div className="flex items-center gap-3 pb-4 mb-4 border-b border-gray-200">
+          <label className="text-sm font-medium text-gray-500 w-16">Pay link:</label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includePayButton}
+              onChange={(e) => setIncludePayButton(e.target.checked)}
+              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+            />
+            <span className="text-sm text-gray-700">Include a &ldquo;Pay Now&rdquo; button</span>
+          </label>
+          {includePayButton && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm text-gray-500">for</span>
+              <span className="text-sm text-gray-500">$</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={payAmountInput}
+                onChange={(e) => setPayAmountInput(e.target.value)}
+                className="w-28 px-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="0.00"
+              />
+              <span className="text-xs text-gray-400">(single-use, 7-day link)</span>
+            </div>
+          )}
         </div>
 
         {/* WYSIWYG Toolbar */}

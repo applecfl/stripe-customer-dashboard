@@ -26,6 +26,9 @@ interface TokenPayload {
   invoiceUID: string;
   exp: number;
   iat: number;
+  kind?: 'dashboard' | 'payment_link';
+  accountId?: string;
+  amount?: number;
 }
 
 /**
@@ -147,8 +150,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // For main page and API routes, require token authentication
-  if (pathname === '/' || pathname.startsWith('/api/stripe')) {
+  // Route classification:
+  //  - Customer pay-link surface: /pay page + /api/stripe/pay-link* routes.
+  //    Requires a payment_link token. A dashboard token must NOT open these.
+  //  - Admin/dashboard surface: / page + all other /api/stripe/* routes.
+  //    Requires a dashboard (non-payment_link) token. A payment_link token must
+  //    NOT open these (so a leaked pay link can't reach the full dashboard/API).
+  const isPayLinkRoute = pathname === '/pay' || pathname.startsWith('/api/stripe/pay-link');
+  const isDashboardRoute =
+    !isPayLinkRoute && (pathname === '/' || pathname.startsWith('/api/stripe'));
+
+  if (isPayLinkRoute || isDashboardRoute) {
+    const isApi = pathname.startsWith('/api/');
     const token = request.nextUrl.searchParams.get('token');
     const secret = process.env.AUTH_SECRET;
 
@@ -157,9 +170,8 @@ export async function middleware(request: NextRequest) {
       return new NextResponse('Server configuration error', { status: 500 });
     }
 
-    if (!token) {
-      // No token - redirect to expired page (for page requests) or return 401 (for API)
-      if (pathname.startsWith('/api/')) {
+    const reject = () => {
+      if (isApi) {
         return new NextResponse(JSON.stringify({ success: false, error: 'Session expired' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },
@@ -169,44 +181,41 @@ export async function middleware(request: NextRequest) {
       url.pathname = '/expired';
       url.search = '';
       return NextResponse.redirect(url);
-    }
+    };
+
+    if (!token) return reject();
 
     const payload = await verifyToken(token, secret);
+    if (!payload) return reject();
 
-    if (!payload) {
-      // Invalid or expired token - redirect to expired page (for page requests) or return 401 (for API)
-      if (pathname.startsWith('/api/')) {
-        return new NextResponse(JSON.stringify({ success: false, error: 'Session expired' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      const url = request.nextUrl.clone();
-      url.pathname = '/expired';
-      url.search = '';
-      return NextResponse.redirect(url);
+    // Enforce kind-per-route. payment_link tokens only on pay-link routes;
+    // dashboard tokens only on dashboard routes.
+    const isPaymentLinkToken = payload.kind === 'payment_link';
+    if (isPayLinkRoute !== isPaymentLinkToken) {
+      return reject();
     }
 
-    // Token is valid - pass the decoded values in headers for the page/API to use
-
-    // For API routes, add customer info to headers
-    if (pathname.startsWith('/api/stripe')) {
+    // Token is valid and kind matches the route.
+    if (isApi) {
       const response = NextResponse.next();
       response.headers.set('x-customer-id', payload.customerId);
       response.headers.set('x-invoice-uid', payload.invoiceUID);
+      // pay-link routes additionally trust the signed amount/account from the token,
+      // never the request body. Surface them as headers for the Node route.
+      if (isPayLinkRoute) {
+        if (payload.accountId) response.headers.set('x-account-id', payload.accountId);
+        if (typeof payload.amount === 'number') response.headers.set('x-amount', String(payload.amount));
+      }
       return response;
     }
 
-    // For the main page, redirect to include customerId and invoiceUID as visible query params
-    // Check if customerId is already in the URL to avoid redirect loop
+    // Page requests: surface customerId/invoiceUID as query params (existing behavior).
     const hasCustomerId = request.nextUrl.searchParams.has('customerId');
     const hasInvoiceUID = request.nextUrl.searchParams.has('invoiceUID');
-
     if (!hasCustomerId || !hasInvoiceUID) {
       const url = request.nextUrl.clone();
       url.searchParams.set('customerId', payload.customerId);
       url.searchParams.set('invoiceUID', payload.invoiceUID);
-      // Keep the token in the URL for subsequent API calls
       return NextResponse.redirect(url);
     }
 

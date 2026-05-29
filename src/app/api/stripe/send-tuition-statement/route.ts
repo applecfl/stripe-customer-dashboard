@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
+import { generatePaymentLinkToken } from '@/lib/auth';
 
 interface SendTuitionStatementRequest {
   customerEmails: string[];
@@ -12,6 +13,46 @@ interface SendTuitionStatementRequest {
   senderName?: string;
   senderEmail?: string;
   recipientName?: string;
+  // When includePayButton is true, the server mints a single-use payment_link
+  // token for (customerId, invoiceUID, accountId, payAmount) and injects a
+  // "Pay Now" button into the email. payAmount is in cents.
+  includePayButton?: boolean;
+  customerId?: string;
+  invoiceUID?: string;
+  payAmount?: number;
+}
+
+// Build the HTML for the Pay Now button block injected into the email.
+function buildPayButton(payUrl: string, amountCents: number): string {
+  const dollars = (amountCents / 100).toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  });
+  return `
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td align="center" style="padding: 8px 40px 32px;">
+      <a href="${payUrl}" style="display:inline-block;background-color:#4f46e5;color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;padding:14px 32px;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        Pay ${dollars} Now
+      </a>
+      <p style="margin:12px 0 0;font-size:12px;color:#a1a1aa;">Secure payment powered by Stripe. This link expires in 7 days.</p>
+    </td></tr>
+  </table>`;
+}
+
+// Inject the button just before </body> (fallback: append).
+function injectPayButton(html: string, buttonHtml: string): string {
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${buttonHtml}\n</body>`);
+  }
+  return html + buttonHtml;
+}
+
+// Resolve the public base URL for building the pay link.
+function getBaseUrl(request: NextRequest): string {
+  if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL.replace(/\/$/, '');
+  const proto = request.headers.get('x-forwarded-proto') || 'https';
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
+  return `${proto}://${host}`;
 }
 
 async function sendWithGmailAPI(
@@ -149,6 +190,11 @@ export async function POST(request: NextRequest) {
       senderName,
       senderEmail,
       recipientName,
+      includePayButton,
+      customerId,
+      invoiceUID,
+      payAmount,
+      accountId,
     } = body;
 
     if (!customerEmails || customerEmails.length === 0) {
@@ -167,7 +213,23 @@ export async function POST(request: NextRequest) {
 
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
 
-    const htmlContent = emailHtml || defaultEmailBody;
+    let htmlContent = emailHtml || defaultEmailBody;
+
+    // Optionally mint a single-use payment link (server-side, using AUTH_SECRET)
+    // and inject a Pay Now button. Amount is fixed into the signed token here.
+    if (includePayButton) {
+      const amountCents = typeof payAmount === 'number' ? Math.round(payAmount) : NaN;
+      if (!customerId || !invoiceUID || !accountId || !Number.isFinite(amountCents) || amountCents <= 0) {
+        return NextResponse.json(
+          { success: false, error: 'customerId, invoiceUID, accountId and a positive payAmount are required for the Pay Now button' },
+          { status: 400 }
+        );
+      }
+      const { token: payToken } = generatePaymentLinkToken(customerId, invoiceUID, accountId, amountCents);
+      const payUrl = `${getBaseUrl(request)}/pay?token=${encodeURIComponent(payToken)}`;
+      htmlContent = injectPayButton(htmlContent, buildPayButton(payUrl, amountCents));
+    }
+
     const textContent = `Dear ${recipientName || 'Parent/Guardian'},\n\nAttached please find your current tuition statement.\n\nThank you,\nLEC Administration`;
 
     const fromEmail = senderEmail || process.env.GMAIL_DELEGATED_USER || process.env.GMAIL_USER || 'noreply@lecfl.com';

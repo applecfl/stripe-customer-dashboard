@@ -27,6 +27,10 @@ export const ALLOWED_IPS = [
 // Token expiry time in seconds (30 minutes)
 const TOKEN_EXPIRY_SECONDS = 30 * 60;
 
+// Payment-link tokens live longer so the email has time to be read, but are
+// single-use (enforced via Firestore) so a leaked link can't be replayed.
+const PAYMENT_LINK_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
+
 // Extended customer info from external system
 export interface ExtendedCustomerInfo {
   fatherName?: string;
@@ -53,12 +57,21 @@ export interface OtherPayment {
   description: string;
 }
 
+// Token kind distinguishes the full admin dashboard token from a customer-facing
+// single-use payment link. Absent/undefined kind === legacy "dashboard" token.
+export type TokenKind = 'dashboard' | 'payment_link';
+
 export interface TokenPayload {
   customerId: string;
   invoiceUID: string;
   accountId: string;
   exp: number; // Expiration timestamp (seconds)
   iat: number; // Issued at timestamp (seconds)
+  // Token kind - controls which routes the token may open (see middleware)
+  kind?: TokenKind;
+  // For payment_link tokens: the exact amount (in cents) the customer may pay.
+  // The charge amount is read from here server-side, never from the request body.
+  amount?: number;
   // Extended info from external system
   extendedInfo?: ExtendedCustomerInfo;
   otherPayments?: OtherPayment[];
@@ -144,6 +157,49 @@ export function generateToken(
   const token = `${encodedPayload}.${signature}`;
 
   return { token, expiresAt };
+}
+
+/**
+ * Generate a single-use payment-link token for a customer-facing pay page.
+ * The amount (cents) is signed into the token; the server charges exactly this.
+ * Expires in 7 days; single-use is enforced separately via Firestore.
+ */
+export function generatePaymentLinkToken(
+  customerId: string,
+  invoiceUID: string,
+  accountId: string,
+  amount: number,
+  extendedInfo?: ExtendedCustomerInfo
+): { token: string; expiresAt: number } {
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = now + PAYMENT_LINK_EXPIRY_SECONDS;
+
+  const payload: TokenPayload = {
+    customerId,
+    invoiceUID,
+    accountId,
+    exp: expiresAt,
+    iat: now,
+    kind: 'payment_link',
+    amount,
+    extendedInfo,
+  };
+
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = createSignature(encodedPayload);
+  const token = `${encodedPayload}.${signature}`;
+
+  return { token, expiresAt };
+}
+
+/**
+ * Derive the stable single-use key for a payment-link token. We use the token's
+ * signature segment (already an HMAC over the payload) rather than the raw token,
+ * so the Firestore doc id is fixed-length and contains no payload data.
+ */
+export function getTokenSignature(token: string): string {
+  const parts = token.split('.');
+  return parts[1] || '';
 }
 
 /**

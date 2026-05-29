@@ -13,6 +13,7 @@
     "@stripe/stripe-js": "^8.5.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "firebase-admin": "^13.10.0",
     "flatpickr": "^4.6.13",
     "googleapis": "^144.0.0",
     "lucide-react": "^0.556.0",

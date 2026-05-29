@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateToken, isAllowedIP, getClientIP, ExtendedCustomerInfo, OtherPayment } from '@/lib/auth';
+import { generateToken, generatePaymentLinkToken, isAllowedIP, getClientIP, ExtendedCustomerInfo, OtherPayment } from '@/lib/auth';
 
 interface GenerateTokenRequest {
   CustomerID: string;
@@ -22,6 +22,11 @@ interface GenerateTokenRequest {
   // Payment summary info
   Total?: number;
   Description?: string;
+  // Token kind: "payment_link" mints a single-use 7-day customer-facing pay link.
+  // Requires Amount (cents). Omit/other => normal 30-min dashboard token.
+  Kind?: 'dashboard' | 'payment_link';
+  // For payment_link: exact amount (cents) the customer may pay.
+  Amount?: number;
   // Other payments (Zelle, Cash, etc.)
   OtherPayments?: Array<{
     PaymentDate: string;
@@ -71,6 +76,8 @@ export async function POST(
       Total,
       Description,
       OtherPayments,
+      Kind,
+      Amount,
     } = body;
 
     // Validate required fields
@@ -129,10 +136,25 @@ export async function POST(
       description: p.Description,
     }));
 
-    // Generate token
-    const { token, expiresAt } = generateToken(customerId, invoiceUID, accountId, extendedInfo, otherPayments);
+    // Generate token. payment_link => single-use 7-day customer pay link with a
+    // bound amount; otherwise the normal 30-min dashboard token.
+    let token: string;
+    let expiresAt: number;
 
-    console.log(`Token generated for customer ${customerId} from IP ${clientIP}`);
+    if (Kind === 'payment_link') {
+      const amountCents = typeof Amount === 'number' ? Math.round(Amount) : NaN;
+      if (!Number.isFinite(amountCents) || amountCents <= 0) {
+        return NextResponse.json(
+          { success: false, error: 'Amount (positive cents) is required for payment_link tokens' },
+          { status: 400 }
+        );
+      }
+      ({ token, expiresAt } = generatePaymentLinkToken(customerId, invoiceUID, accountId, amountCents, extendedInfo));
+      console.log(`Payment link token generated for customer ${customerId} amount ${amountCents} from IP ${clientIP}`);
+    } else {
+      ({ token, expiresAt } = generateToken(customerId, invoiceUID, accountId, extendedInfo, otherPayments));
+      console.log(`Token generated for customer ${customerId} from IP ${clientIP}`);
+    }
 
     return NextResponse.json({
       success: true,
