@@ -70,17 +70,49 @@ function DashboardContent() {
   const router = useRouter();
   const initialToken = searchParams.get('token') || '';
 
-  // Try to extract values from token first, fallback to URL params
-  const tokenPayload = initialToken ? decodeTokenPayload(initialToken) : null;
-  const customerId = tokenPayload?.customerId || searchParams.get('customerId') || '';
-  const invoiceUID = tokenPayload?.invoiceUID || searchParams.get('invoiceUID') || '';
-  const accountId = tokenPayload?.accountId || searchParams.get('accountId') || '';
-  const extendedInfo = tokenPayload?.extendedInfo;
-  const otherPayments = tokenPayload?.otherPayments;
+  // GAM cookie mode: no token in the URL. The access token lives in the
+  // httpOnly session cookie, so business data is loaded from /api/auth/me
+  // instead of decoding the URL token. Legacy URL-token flow is unaffected.
+  const isCookieMode = !initialToken;
+  const [session, setSession] = useState<DecodedTokenPayload | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(isCookieMode);
 
-  // Track the current valid token (may be refreshed)
+  // Extract values from the URL token first, then the cookie session, then URL params
+  const tokenPayload = initialToken ? decodeTokenPayload(initialToken) : null;
+  const customerId = tokenPayload?.customerId || session?.customerId || searchParams.get('customerId') || '';
+  const invoiceUID = tokenPayload?.invoiceUID || session?.invoiceUID || searchParams.get('invoiceUID') || '';
+  const accountId = tokenPayload?.accountId || session?.accountId || searchParams.get('accountId') || '';
+  const extendedInfo = tokenPayload?.extendedInfo || session?.extendedInfo;
+  const otherPayments = tokenPayload?.otherPayments || session?.otherPayments;
+
+  // Track the current valid token (may be refreshed). Stays empty in cookie mode.
   const [token, setToken] = useState(initialToken);
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // In cookie mode, load the verified business context from the session cookie.
+  useEffect(() => {
+    if (!isCookieMode) return;
+    let cancelled = false;
+    fetch('/api/auth/me')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled || !data?.success) return;
+        setSession({
+          customerId: data.customerId,
+          invoiceUID: data.invoiceUID,
+          accountId: data.accountId,
+          extendedInfo: data.extendedInfo ?? undefined,
+          otherPayments: data.otherPayments ?? undefined,
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setSessionLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCookieMode]);
 
   // Data state
   const [customer, setCustomer] = useState<CustomerData | null>(null);
@@ -225,7 +257,7 @@ function DashboardContent() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [customerId, invoiceUID, token, checkSessionExpired]);
+  }, [customerId, invoiceUID, accountId, token, checkSessionExpired]);
 
   // Background refresh helper
   const refreshData = useCallback(() => fetchData(true), [fetchData]);
@@ -611,6 +643,16 @@ function DashboardContent() {
       setError(err instanceof Error ? err.message : 'Failed to delete payments');
     }
   };
+
+  // In cookie mode, /api/auth/me may still be in flight — show loading instead
+  // of flashing the "Missing Parameters" screen.
+  if (sessionLoading && (!customerId || !invoiceUID || !accountId)) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <LoadingState message="Loading customer data..." />
+      </div>
+    );
+  }
 
   // Show error if missing required params
   if (!customerId || !invoiceUID || !accountId) {

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Note2: We can't import from @/lib/auth in middleware because Edge runtime
-// has limited crypto support. We'll re-implement the verification here.
+// Note: We can't import from @/lib/auth in middleware because the Edge runtime
+// has limited crypto support. We re-implement verification here using Web Crypto.
 
 const ALLOWED_IPS = [
   "35.208.69.250",
@@ -21,6 +21,14 @@ const ALLOWED_IPS = [
   "127.0.0.1",
 ];
 
+// ─── GAM (central issuer) config ──────────────────────────────────────────────
+// Additive: GAM-issued RS256 tokens arrive via the `gam_session` cookie and are
+// verified against keys fetched from GAM's JWKS endpoint. The legacy HMAC
+// `?token=` path below is unchanged.
+const GAM_COOKIE = 'gam_session';
+const GAM_AUDIENCE = 'stripe-dashboard';
+const GAM_BASE_URL = process.env.GAM_BASE_URL || '';
+
 interface TokenPayload {
   customerId: string;
   invoiceUID: string;
@@ -29,6 +37,19 @@ interface TokenPayload {
   kind?: 'dashboard' | 'payment_link';
   accountId?: string;
   amount?: number;
+}
+
+interface GamClaims {
+  email: string;
+  aud: string;
+  typ: string;
+  exp: number;
+  iat: number;
+  data?: {
+    customerId?: string;
+    invoiceUID?: string;
+    accountId?: string;
+  };
 }
 
 /**
@@ -99,7 +120,7 @@ function constantTimeEqual(a: string, b: string): boolean {
 }
 
 /**
- * Verify and decode token
+ * Verify and decode legacy HMAC token (unchanged)
  */
 async function verifyToken(token: string, secret: string): Promise<TokenPayload | null> {
   try {
@@ -129,6 +150,156 @@ async function verifyToken(token: string, secret: string): Promise<TokenPayload 
   } catch {
     return null;
   }
+}
+
+// ─── GAM RS256 verification (Web Crypto, Edge compatible) ─────────────────────
+
+function base64UrlToString(s: string): string {
+  const base64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  const padding = '='.repeat((4 - base64.length % 4) % 4);
+  return atob(base64 + padding);
+}
+
+function base64UrlToBytes(s: string) {
+  const str = base64UrlToString(s);
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i);
+  return bytes;
+}
+
+// ─── JWKS cache (kid → imported CryptoKey) ────────────────────────────────────
+// GAM exposes its public keys at /.well-known/jwks.json with a stable RFC-7638
+// `kid` per key. We import each on first miss and cache by kid in memory.
+// Key rotation: when GAM signs with a new kid we don't have, we refetch.
+
+interface RsaJwk {
+  kty: string;
+  kid: string;
+  alg?: string;
+  n: string;
+  e: string;
+}
+
+const jwksKeys = new Map<string, CryptoKey>();
+let jwksInflight: Promise<void> | null = null;
+
+async function refreshJwks(): Promise<void> {
+  if (!GAM_BASE_URL) {
+    console.error('GAM_BASE_URL not configured — cannot fetch JWKS');
+    return;
+  }
+  try {
+    const res = await fetch(`${GAM_BASE_URL}/.well-known/jwks.json`);
+    if (!res.ok) {
+      console.error(`JWKS fetch failed: ${res.status}`);
+      return;
+    }
+    const body = (await res.json()) as { keys?: RsaJwk[] };
+    for (const jwk of body.keys ?? []) {
+      if (jwk.kty !== 'RSA' || !jwk.kid) continue;
+      try {
+        const key = await crypto.subtle.importKey(
+          'jwk',
+          { kty: 'RSA', n: jwk.n, e: jwk.e, alg: 'RS256' },
+          { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+          false,
+          ['verify']
+        );
+        jwksKeys.set(jwk.kid, key);
+      } catch (e) {
+        console.error(`Failed to import JWK kid=${jwk.kid}`, e);
+      }
+    }
+  } catch (e) {
+    console.error('JWKS fetch error', e);
+  }
+}
+
+async function getJwksKey(kid: string): Promise<CryptoKey | null> {
+  const cached = jwksKeys.get(kid);
+  if (cached) return cached;
+  if (!jwksInflight) {
+    jwksInflight = refreshJwks().finally(() => { jwksInflight = null; });
+  }
+  await jwksInflight;
+  return jwksKeys.get(kid) ?? null;
+}
+
+/**
+ * Verify a GAM RS256 access token using the JWKS-fetched signing key.
+ * Checks signature, aud, typ=access, exp. Returns claims or null.
+ */
+async function verifyGamToken(token: string): Promise<GamClaims | null> {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, signatureB64] = parts;
+
+    const header = JSON.parse(base64UrlToString(headerB64));
+    if (header.alg !== 'RS256' || !header.kid) return null;
+
+    const key = await getJwksKey(header.kid);
+    if (!key) return null;
+
+    const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+    const ok = await crypto.subtle.verify(
+      'RSASSA-PKCS1-v1_5',
+      key,
+      base64UrlToBytes(signatureB64),
+      data
+    );
+    if (!ok) return null;
+
+    const claims: GamClaims = JSON.parse(base64UrlToString(payloadB64));
+    const now = Math.floor(Date.now() / 1000);
+    if (!claims.exp || claims.exp < now) return null;
+    if (claims.aud !== GAM_AUDIENCE) return null;
+    if (claims.typ !== 'access') return null;
+
+    return claims;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Exchange a short GAM code for the full access token (server-to-server).
+ */
+async function exchangeGamCode(code: string): Promise<{ token: string; claims: GamClaims } | null> {
+  if (!GAM_BASE_URL) {
+    console.error('GAM_BASE_URL not configured — cannot exchange GAM code');
+    return null;
+  }
+  try {
+    const res = await fetch(`${GAM_BASE_URL}/auth/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, name: GAM_AUDIENCE }),
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    if (!body?.success || !body?.token) return null;
+    const claims = await verifyGamToken(body.token);
+    if (!claims) return null;
+    return { token: body.token, claims };
+  } catch (e) {
+    console.error('GAM exchange request failed', e);
+    return null;
+  }
+}
+
+function redirectExpired(request: NextRequest) {
+  const url = request.nextUrl.clone();
+  url.pathname = '/expired';
+  url.search = '';
+  return NextResponse.redirect(url);
+}
+
+function unauthorized() {
+  return new NextResponse(JSON.stringify({ success: false, error: 'Session expired' }), {
+    status: 401,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 export async function middleware(request: NextRequest) {
@@ -183,61 +354,105 @@ export async function middleware(request: NextRequest) {
 
   if (isPayLinkRoute || isDashboardRoute) {
     const isApi = pathname.startsWith('/api/');
-    const token = request.nextUrl.searchParams.get('token');
-    const secret = process.env.AUTH_SECRET;
 
-    if (!secret) {
-      console.error('AUTH_SECRET not configured');
-      return new NextResponse('Server configuration error', { status: 500 });
-    }
+    const reject = () => (isApi ? unauthorized() : redirectExpired(request));
 
-    const reject = () => {
-      if (isApi) {
-        return new NextResponse(JSON.stringify({ success: false, error: 'Session expired' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
+    // GAM authorization-code landing (dashboard page only). Exchange the short
+    // code for the access token, store it in an httpOnly cookie, and redirect to
+    // a clean URL — the page will fetch its business context from /api/auth/me.
+    const code = request.nextUrl.searchParams.get('code');
+    if (code && pathname === '/') {
+      const exchanged = await exchangeGamCode(code);
+      if (!exchanged) {
+        return redirectExpired(request);
       }
       const url = request.nextUrl.clone();
-      url.pathname = '/expired';
       url.search = '';
-      return NextResponse.redirect(url);
-    };
 
-    if (!token) return reject();
+      const response = NextResponse.redirect(url);
+      const now = Math.floor(Date.now() / 1000);
+      response.cookies.set(GAM_COOKIE, exchanged.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: Math.max(0, exchanged.claims.exp - now),
+      });
+      return response;
+    }
 
-    const payload = await verifyToken(token, secret);
-    if (!payload) return reject();
+    // Resolve auth from the legacy URL token (HMAC) OR — for the dashboard
+    // surface only — the GAM session cookie (RS256).
+    const urlToken = request.nextUrl.searchParams.get('token');
+    const cookieToken = request.cookies.get(GAM_COOKIE)?.value;
 
-    // Enforce kind-per-route. payment_link tokens only on pay-link routes;
-    // dashboard tokens only on dashboard routes.
-    const isPaymentLinkToken = payload.kind === 'payment_link';
-    if (isPayLinkRoute !== isPaymentLinkToken) {
+    let customerId: string | null = null;
+    let invoiceUID: string | null = null;
+    let accountId: string | undefined;
+    let amount: number | undefined;
+    let isCookieAuth = false;
+
+    if (urlToken) {
+      // ── Legacy HMAC path ──
+      const secret = process.env.AUTH_SECRET;
+      if (!secret) {
+        console.error('AUTH_SECRET not configured');
+        return new NextResponse('Server configuration error', { status: 500 });
+      }
+      const payload = await verifyToken(urlToken, secret);
+      if (payload) {
+        // Enforce kind-per-route. payment_link tokens only on pay-link routes;
+        // dashboard tokens only on dashboard routes.
+        const isPaymentLinkToken = payload.kind === 'payment_link';
+        if (isPayLinkRoute !== isPaymentLinkToken) {
+          return reject();
+        }
+        customerId = payload.customerId;
+        invoiceUID = payload.invoiceUID;
+        accountId = payload.accountId;
+        amount = payload.amount;
+      }
+    } else if (cookieToken && isDashboardRoute) {
+      // ── New GAM cookie path (dashboard only) ──
+      const claims = await verifyGamToken(cookieToken);
+      if (claims) {
+        customerId = claims.data?.customerId ?? null;
+        invoiceUID = claims.data?.invoiceUID ?? null;
+        isCookieAuth = true;
+      }
+    }
+
+    if (!customerId || !invoiceUID) {
+      // No / invalid credentials — redirect to expired (page) or 401 (API)
       return reject();
     }
 
-    // Token is valid and kind matches the route.
+    // Credentials valid - pass the decoded values in headers for the page/API.
     if (isApi) {
       const response = NextResponse.next();
-      response.headers.set('x-customer-id', payload.customerId);
-      response.headers.set('x-invoice-uid', payload.invoiceUID);
-      // pay-link routes additionally trust the signed amount/account from the token,
-      // never the request body. Surface them as headers for the Node route.
+      response.headers.set('x-customer-id', customerId);
+      response.headers.set('x-invoice-uid', invoiceUID);
+      // pay-link routes additionally trust the signed amount/account from the
+      // token, never the request body. Surface them as headers for the Node route.
       if (isPayLinkRoute) {
-        if (payload.accountId) response.headers.set('x-account-id', payload.accountId);
-        if (typeof payload.amount === 'number') response.headers.set('x-amount', String(payload.amount));
+        if (accountId) response.headers.set('x-account-id', accountId);
+        if (typeof amount === 'number') response.headers.set('x-amount', String(amount));
       }
       return response;
     }
 
-    // Page requests: surface customerId/invoiceUID as query params (existing behavior).
-    const hasCustomerId = request.nextUrl.searchParams.has('customerId');
-    const hasInvoiceUID = request.nextUrl.searchParams.has('invoiceUID');
-    if (!hasCustomerId || !hasInvoiceUID) {
-      const url = request.nextUrl.clone();
-      url.searchParams.set('customerId', payload.customerId);
-      url.searchParams.set('invoiceUID', payload.invoiceUID);
-      return NextResponse.redirect(url);
+    // Page requests. For the GAM cookie path keep the URL clean — the page reads
+    // its business context from /api/auth/me. For the legacy URL-token path,
+    // surface customerId/invoiceUID the way the page has always expected.
+    if (!isCookieAuth) {
+      const hasCustomerId = request.nextUrl.searchParams.has('customerId');
+      const hasInvoiceUID = request.nextUrl.searchParams.has('invoiceUID');
+      if (!hasCustomerId || !hasInvoiceUID) {
+        const url = request.nextUrl.clone();
+        url.searchParams.set('customerId', customerId);
+        url.searchParams.set('invoiceUID', invoiceUID);
+        return NextResponse.redirect(url);
+      }
     }
 
     return NextResponse.next();
