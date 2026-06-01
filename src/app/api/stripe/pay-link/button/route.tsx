@@ -18,46 +18,33 @@ export const runtime = 'nodejs';
 const WIDTH = 320;
 const HEIGHT = 64;
 
-function button(label: string, color: string, sub?: string) {
+function button(label: string, color: string) {
+  // The pill fills the ENTIRE image frame (edge to edge) so, when layered over the
+  // email's fallback text button, it fully COVERS it instead of letting the text
+  // bleed around a transparent margin.
   return new ImageResponse(
     (
       <div
         style={{
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           width: '100%',
           height: '100%',
-          backgroundColor: 'transparent',
+          backgroundColor: color,
+          color: '#ffffff',
+          fontSize: 22,
+          fontWeight: 600,
+          borderRadius: 10,
+          fontFamily: 'sans-serif',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: color,
-            color: '#ffffff',
-            fontSize: 22,
-            fontWeight: 600,
-            padding: '14px 32px',
-            borderRadius: 10,
-            fontFamily: 'sans-serif',
-          }}
-        >
-          {label}
-        </div>
-        {sub ? (
-          <div style={{ display: 'flex', marginTop: 8, fontSize: 12, color: '#a1a1aa', fontFamily: 'sans-serif' }}>
-            {sub}
-          </div>
-        ) : null}
+        {label}
       </div>
     ),
     {
       width: WIDTH,
-      height: HEIGHT + (sub ? 28 : 0),
+      height: HEIGHT,
       headers: {
         // Short cache: fast repeat opens without recomputing the balance every time,
         // while staying fresh within seconds (stale-while-revalidate serves instantly
@@ -80,7 +67,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (v.expired) {
-    return button('Link Expired', '#9ca3af', 'This payment link is no longer active');
+    return button('Link Expired', '#9ca3af');
   }
 
   const fmt = (cents: number) =>
@@ -92,7 +79,7 @@ export async function GET(request: NextRequest) {
       const stripe = getStripeForAccount(v.payload.accountId);
       const outstanding = await getOutstandingForUID(stripe, v.payload.customerId, v.payload.invoiceUID);
       if (outstanding <= 0) {
-        return button('Paid in Full', '#9ca3af', 'Your balance has been paid');
+        return button('Paid in Full', '#9ca3af');
       }
       return button(`Pay ${fmt(outstanding)} Now`, '#4f46e5');
     } catch {
@@ -105,7 +92,7 @@ export async function GET(request: NextRequest) {
   try {
     const rec = await getPaymentLink(getTokenSignature(token!));
     if (rec?.status === 'paid') {
-      return button('Already Paid', '#9ca3af', 'This payment has been received');
+      return button('Already Paid', '#9ca3af');
     }
   } catch {
     // If the single-use store is unreachable, fail open to the active button —

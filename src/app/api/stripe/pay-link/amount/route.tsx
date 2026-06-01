@@ -26,7 +26,9 @@ function amountImage(text: string, color: string) {
           justifyContent: 'center',
           width: '100%',
           height: '100%',
-          backgroundColor: 'transparent',
+          // Opaque white background so, when layered over the email's fallback text,
+          // the image fully COVERS it instead of overlapping (emails render on white).
+          backgroundColor: '#ffffff',
           color,
           fontSize: 18,
           fontWeight: 700,
