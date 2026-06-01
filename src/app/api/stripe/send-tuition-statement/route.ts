@@ -35,23 +35,16 @@ function buildPayButton(payUrl: string, imgUrl: string, amountCents: number): st
     style: 'currency',
     currency: 'USD',
   });
-  // The clickable area is a real HTML text button (blue, shows "Pay $X Now"
-  // instantly — never blank). The LIVE button PNG is layered ON TOP via a cell
-  // background, so once it loads it visually replaces the static text with the
-  // current-balance image. If the image is blocked, the text button remains.
+  // The button is the live PNG (current-balance "Pay $X Now"). The alt is the
+  // send-time amount, shown only if the image is blocked — no text behind the image,
+  // so there's no overlap. A text link below is the always-available fallback.
   const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
   return `
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr><td align="center" style="padding: 8px 40px 32px;">
       <a href="${payUrl}" style="text-decoration:none;display:inline-block;">
-        <table role="presentation" cellspacing="0" cellpadding="0" style="border-radius:10px;">
-          <tr>
-            <td align="center" valign="middle" width="320" height="64" background="${imgUrl}"
-                style="width:320px;height:64px;background-color:#4f46e5;background-image:url('${imgUrl}');background-size:320px 64px;background-repeat:no-repeat;background-position:center;border-radius:10px;color:#ffffff;font-family:${FONT};font-size:18px;font-weight:600;text-align:center;">
-              Pay ${dollars} Now
-            </td>
-          </tr>
-        </table>
+        <img src="${imgUrl}" alt="Pay ${dollars} Now" width="320" height="64"
+             style="display:block;border:0;outline:none;width:320px;height:64px;border-radius:10px;" />
       </a>
       <p style="margin:12px 0 0;font-size:12px;color:#a1a1aa;font-family:${FONT};">
         Secure payment powered by Stripe. This link expires in 7 days.
@@ -271,14 +264,11 @@ export async function POST(request: NextRequest) {
       const imgUrl = `${base}/api/stripe/pay-link/button?token=${enc}`;
       const amountImgUrl = `${base}/api/stripe/pay-link/amount?token=${enc}`;
 
-      // Inline balance: show the static send-time amount as TEXT instantly (never
-      // blank), with the LIVE amount PNG layered on top via background-image. Once the
-      // image loads it visually replaces the text with the current balance; if images
-      // are blocked, the text remains. Implemented as an inline-block span sized to
-      // the image so the background lines up over the text.
-      const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+      // Inline balance: the LIVE amount PNG (current balance). Its alt is the
+      // send-time amount, shown only if the image is blocked — no text behind the
+      // image, so no overlap. One clean line.
       const altAmount = (amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-      const amountTag = `<span style="display:inline-block;min-width:96px;height:22px;line-height:22px;text-align:center;vertical-align:middle;color:#18181b;font-weight:700;font-family:${FONT};background-image:url('${amountImgUrl}');background-size:contain;background-repeat:no-repeat;background-position:center;">${altAmount}</span>`;
+      const amountTag = `<img src="${amountImgUrl}" alt="${altAmount}" height="20" style="vertical-align:middle;border:0;height:20px;" />`;
       if (htmlContent.includes('{{BALANCE_AMOUNT}}')) {
         htmlContent = htmlContent.replaceAll('{{BALANCE_AMOUNT}}', amountTag);
       }
