@@ -35,14 +35,25 @@ function buildPayButton(payUrl: string, imgUrl: string, amountCents: number): st
     style: 'currency',
     currency: 'USD',
   });
+  // The clickable area is a real HTML text button (blue, shows "Pay $X Now"
+  // instantly — never blank). The LIVE button PNG is layered ON TOP via a cell
+  // background, so once it loads it visually replaces the static text with the
+  // current-balance image. If the image is blocked, the text button remains.
+  const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
   return `
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr><td align="center" style="padding: 8px 40px 32px;">
       <a href="${payUrl}" style="text-decoration:none;display:inline-block;">
-        <img src="${imgUrl}" alt="Pay ${dollars} Now" width="320" height="64"
-             style="display:block;border:0;outline:none;width:320px;height:64px;background-color:#4f46e5;color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:18px;font-weight:600;line-height:64px;text-align:center;border-radius:10px;" />
+        <table role="presentation" cellspacing="0" cellpadding="0" style="border-radius:10px;">
+          <tr>
+            <td align="center" valign="middle" width="320" height="64" background="${imgUrl}"
+                style="width:320px;height:64px;background-color:#4f46e5;background-image:url('${imgUrl}');background-size:320px 64px;background-repeat:no-repeat;background-position:center;border-radius:10px;color:#ffffff;font-family:${FONT};font-size:18px;font-weight:600;text-align:center;">
+              Pay ${dollars} Now
+            </td>
+          </tr>
+        </table>
       </a>
-      <p style="margin:12px 0 0;font-size:12px;color:#a1a1aa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <p style="margin:12px 0 0;font-size:12px;color:#a1a1aa;font-family:${FONT};">
         Secure payment powered by Stripe. This link expires in 7 days.
         <br/><a href="${payUrl}" style="color:#4f46e5;">Tap here if the button doesn't load.</a>
       </p>
@@ -260,17 +271,16 @@ export async function POST(request: NextRequest) {
       const imgUrl = `${base}/api/stripe/pay-link/button?token=${enc}`;
       const amountImgUrl = `${base}/api/stripe/pay-link/amount?token=${enc}`;
 
-      // Replace the {{BALANCE_IMG}} placeholder with a small LIVE amount image so the
-      // balance shown in the sentence reflects the current outstanding balance each
-      // time the email is opened. If the placeholder is absent (e.g. heavily edited
-      // body), fall back to the static amount text.
-      // The alt shows the static send-time amount as a styled fallback, so while the
-      // live PNG loads (or if images are blocked) the customer still sees a number
-      // instead of a broken/empty box. height fixed to avoid layout shift.
+      // Inline balance: show the static send-time amount as TEXT instantly (never
+      // blank), with the LIVE amount PNG layered on top via background-image. Once the
+      // image loads it visually replaces the text with the current balance; if images
+      // are blocked, the text remains. Implemented as an inline-block span sized to
+      // the image so the background lines up over the text.
+      const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
       const altAmount = (amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-      const amountImgTag = `<img src="${amountImgUrl}" alt="${altAmount}" height="20" style="vertical-align:middle;border:0;height:20px;color:#18181b;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;" />`;
-      if (htmlContent.includes('{{BALANCE_IMG}}')) {
-        htmlContent = htmlContent.replaceAll('{{BALANCE_IMG}}', amountImgTag);
+      const amountTag = `<span style="display:inline-block;min-width:96px;height:22px;line-height:22px;text-align:center;vertical-align:middle;color:#18181b;font-weight:700;font-family:${FONT};background-image:url('${amountImgUrl}');background-size:contain;background-repeat:no-repeat;background-position:center;">${altAmount}</span>`;
+      if (htmlContent.includes('{{BALANCE_AMOUNT}}')) {
+        htmlContent = htmlContent.replaceAll('{{BALANCE_AMOUNT}}', amountTag);
       }
 
       // Button label uses the initial amount for fixed; for dynamic the image shows
@@ -278,9 +288,9 @@ export async function POST(request: NextRequest) {
       htmlContent = injectPayButton(htmlContent, buildPayButton(payUrl, imgUrl, amountCents));
     }
 
-    // Safety net: if a {{BALANCE_IMG}} placeholder survived without a pay button
-    // (shouldn't happen), strip it so it never reaches the customer literally.
-    htmlContent = htmlContent.replaceAll('{{BALANCE_IMG}}', '');
+    // Safety net: strip any leftover balance placeholder (e.g. if no pay button was
+    // added) so it never reaches the customer literally.
+    htmlContent = htmlContent.replaceAll('{{BALANCE_AMOUNT}}', '');
 
     const textContent = pdfBuffer
       ? `Dear ${recipientName || 'Parent/Guardian'},\n\nAttached please find your current tuition statement.\n\nThank you,\nLEC Administration`
