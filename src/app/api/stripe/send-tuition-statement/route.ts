@@ -38,8 +38,9 @@ function buildPayButton(payUrl: string, imgUrl: string, amountCents: number): st
   return `
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr><td align="center" style="padding: 8px 40px 32px;">
-      <a href="${payUrl}" style="text-decoration:none;">
-        <img src="${imgUrl}" alt="Pay ${dollars} Now" width="320" style="display:block;border:0;outline:none;max-width:320px;height:auto;" />
+      <a href="${payUrl}" style="text-decoration:none;display:inline-block;">
+        <img src="${imgUrl}" alt="Pay ${dollars} Now" width="320" height="64"
+             style="display:block;border:0;outline:none;width:320px;height:64px;background-color:#4f46e5;color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:18px;font-weight:600;line-height:64px;text-align:center;border-radius:10px;" />
       </a>
       <p style="margin:12px 0 0;font-size:12px;color:#a1a1aa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
         Secure payment powered by Stripe. This link expires in 7 days.
@@ -263,7 +264,11 @@ export async function POST(request: NextRequest) {
       // balance shown in the sentence reflects the current outstanding balance each
       // time the email is opened. If the placeholder is absent (e.g. heavily edited
       // body), fall back to the static amount text.
-      const amountImgTag = `<img src="${amountImgUrl}" alt="${(amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}" style="vertical-align:middle;border:0;height:20px;" />`;
+      // The alt shows the static send-time amount as a styled fallback, so while the
+      // live PNG loads (or if images are blocked) the customer still sees a number
+      // instead of a broken/empty box. height fixed to avoid layout shift.
+      const altAmount = (amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+      const amountImgTag = `<img src="${amountImgUrl}" alt="${altAmount}" height="20" style="vertical-align:middle;border:0;height:20px;color:#18181b;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;" />`;
       if (htmlContent.includes('{{BALANCE_IMG}}')) {
         htmlContent = htmlContent.replaceAll('{{BALANCE_IMG}}', amountImgTag);
       }

@@ -59,8 +59,10 @@ function button(label: string, color: string, sub?: string) {
       width: WIDTH,
       height: HEIGHT + (sub ? 28 : 0),
       headers: {
-        // Don't let an email client cache an old state for long; re-fetch on open.
-        'Cache-Control': 'no-store, max-age=0, must-revalidate',
+        // Short cache: fast repeat opens without recomputing the balance every time,
+        // while staying fresh within seconds (stale-while-revalidate serves instantly
+        // then refreshes in the background).
+        'Cache-Control': 'public, max-age=15, stale-while-revalidate=60',
       },
     }
   );

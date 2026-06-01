@@ -39,7 +39,11 @@ function amountImage(text: string, color: string) {
     {
       width,
       height: 24,
-      headers: { 'Cache-Control': 'no-store, max-age=0, must-revalidate' },
+      headers: {
+        // Short cache: speeds up repeat opens (no Stripe recompute) while staying
+        // fresh within seconds. stale-while-revalidate serves instantly then updates.
+        'Cache-Control': 'public, max-age=15, stale-while-revalidate=60',
+      },
     }
   );
 }
