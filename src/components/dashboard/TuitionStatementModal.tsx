@@ -101,7 +101,7 @@ export function TuitionStatementModal({
                 <strong>Payment for:</strong> ${description || 'Tuition'}
               </p>
               <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
-                Your balance is <strong>${payAmountDisplay}</strong>.
+                Your balance is <strong>{{BALANCE_AMOUNT}}</strong>.
               </p>
               <p style="margin: 0 0 8px; font-size: 16px; line-height: 1.6; color: #3f3f46;">
                 Please click below to make your payment.

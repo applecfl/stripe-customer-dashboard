@@ -42,9 +42,9 @@ function amountImage(text: string, color: string) {
       width,
       height: 24,
       headers: {
-        // Short cache: speeds up repeat opens (no Stripe recompute) while staying
-        // fresh within seconds. stale-while-revalidate serves instantly then updates.
-        'Cache-Control': 'public, max-age=15, stale-while-revalidate=60',
+        // Always render the current balance — no server-side staleness. (Gmail's
+        // own image proxy may still cache; that's outside our control.)
+        'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
       },
     }
   );
