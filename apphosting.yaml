@@ -40,4 +40,4 @@ env:
     value: https://stripe.lec.li
 
   - variable: GAM_BASE_URL
-    value: https://gam-service-364894474586.us-central1.run.app
+    value: https://flask-gam-app-364894474586.us-central1.run.app
