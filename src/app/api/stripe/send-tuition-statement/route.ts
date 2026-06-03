@@ -262,25 +262,11 @@ export async function POST(request: NextRequest) {
       const enc = encodeURIComponent(payToken);
       const payUrl = `${base}/pay?token=${enc}`;
       const imgUrl = `${base}/api/stripe/pay-link/button?token=${enc}`;
-      const amountImgUrl = `${base}/api/stripe/pay-link/amount?token=${enc}`;
 
-      // Inline balance: the LIVE amount PNG (current balance). Its alt is the
-      // send-time amount, shown only if the image is blocked — no text behind the
-      // image, so no overlap. One clean line.
-      const altAmount = (amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-      const amountTag = `<img src="${amountImgUrl}" alt="${altAmount}" height="20" style="vertical-align:middle;border:0;height:20px;" />`;
-      if (htmlContent.includes('{{BALANCE_AMOUNT}}')) {
-        htmlContent = htmlContent.replaceAll('{{BALANCE_AMOUNT}}', amountTag);
-      }
-
-      // Button label uses the initial amount for fixed; for dynamic the image shows
-      // the live balance, so the label amount is just the starting display value.
+      // The balance in the body is plain text (the send-time amount) so it shows
+      // instantly and is never blank. The live current balance is the button image.
       htmlContent = injectPayButton(htmlContent, buildPayButton(payUrl, imgUrl, amountCents));
     }
-
-    // Safety net: strip any leftover balance placeholder (e.g. if no pay button was
-    // added) so it never reaches the customer literally.
-    htmlContent = htmlContent.replaceAll('{{BALANCE_AMOUNT}}', '');
 
     const textContent = pdfBuffer
       ? `Dear ${recipientName || 'Parent/Guardian'},\n\nAttached please find your current tuition statement.\n\nThank you,\nLEC Administration`
