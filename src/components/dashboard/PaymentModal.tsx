@@ -23,6 +23,9 @@ interface PaymentModalProps {
   invoiceUID: string;
   currency: string;
   token?: string;
+  // GAM cookie mode: auth is carried by the httpOnly session cookie, so there is
+  // no URL token. When true, the form must NOT block on a missing `token`.
+  isCookieMode?: boolean;
   accountId?: string;
   onSuccess: () => void;
   onPaymentMethodAdded?: () => void;
@@ -73,6 +76,7 @@ interface PaymentFormProps {
   invoiceUID: string;
   currency: string;
   token?: string;
+  isCookieMode?: boolean;
   accountId?: string;
   onSuccess: () => void;
   onClose: () => void;
@@ -91,6 +95,7 @@ function PaymentForm({
   invoiceUID,
   currency,
   token,
+  isCookieMode = false,
   accountId,
   onSuccess,
   onClose,
@@ -397,8 +402,10 @@ function PaymentForm({
       return;
     }
 
-    // Verify token is available for API authentication
-    if (!token) {
+    // Verify token is available for API authentication. In GAM cookie mode there
+    // is no URL token — auth is carried by the httpOnly session cookie — so only
+    // block when we're in URL-token mode and the token is genuinely missing.
+    if (!token && !isCookieMode) {
       onFormError('Session expired. Please refresh the page.');
       return;
     }
@@ -1026,6 +1033,7 @@ export function PaymentModal({
   invoiceUID,
   currency,
   token,
+  isCookieMode = false,
   accountId,
   onSuccess,
   onPaymentMethodAdded,
@@ -1190,6 +1198,7 @@ export function PaymentModal({
             invoiceUID={invoiceUID}
             currency={currency}
             token={token}
+            isCookieMode={isCookieMode}
             accountId={accountId}
             onSuccess={onSuccess}
             onClose={onClose}

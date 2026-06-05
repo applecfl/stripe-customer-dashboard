@@ -918,6 +918,7 @@ function DashboardContent() {
         invoiceUID={invoiceUID}
         currency={customer.currency}
         token={token}
+        isCookieMode={isCookieMode}
         accountId={accountId}
         onSuccess={refreshData}
         onPaymentMethodAdded={refreshData}
