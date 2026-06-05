@@ -46,10 +46,9 @@ function button(label: string, color: string) {
       width: WIDTH,
       height: HEIGHT,
       headers: {
-        // Short cache: fast repeat opens without recomputing the balance every time,
-        // while staying fresh within seconds (stale-while-revalidate serves instantly
-        // then refreshes in the background).
-        'Cache-Control': 'public, max-age=15, stale-while-revalidate=60',
+        // Always render the current balance — no server-side staleness. (Gmail's
+        // own image proxy may still cache; that's outside our control.)
+        'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
       },
     }
   );

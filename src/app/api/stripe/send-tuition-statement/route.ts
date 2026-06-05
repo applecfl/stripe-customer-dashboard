@@ -262,11 +262,19 @@ export async function POST(request: NextRequest) {
       const enc = encodeURIComponent(payToken);
       const payUrl = `${base}/pay?token=${enc}`;
       const imgUrl = `${base}/api/stripe/pay-link/button?token=${enc}`;
+      const amountImgUrl = `${base}/api/stripe/pay-link/amount?token=${enc}`;
 
-      // The balance in the body is plain text (the send-time amount) so it shows
-      // instantly and is never blank. The live current balance is the button image.
+      // Inline balance: the LIVE amount PNG (current balance). alt = send-time amount,
+      // shown if images are blocked. Plain <img>, no text behind it (no overlap).
+      const altAmount = (amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+      const amountTag = `<img src="${amountImgUrl}" alt="${altAmount}" height="20" style="vertical-align:middle;border:0;height:20px;" />`;
+      htmlContent = htmlContent.replaceAll('{{BALANCE_AMOUNT}}', amountTag);
+
       htmlContent = injectPayButton(htmlContent, buildPayButton(payUrl, imgUrl, amountCents));
     }
+
+    // Safety net: strip any leftover placeholder if no pay button was added.
+    htmlContent = htmlContent.replaceAll('{{BALANCE_AMOUNT}}', '');
 
     const textContent = pdfBuffer
       ? `Dear ${recipientName || 'Parent/Guardian'},\n\nAttached please find your current tuition statement.\n\nThank you,\nLEC Administration`
