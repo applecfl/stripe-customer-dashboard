@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { InvoiceData } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import {
@@ -498,8 +498,8 @@ export function FailedPaymentsTable({
               const isLoadingAttempts = loadingAttempts.has(invoice.id);
 
               return (
-                <>
-                  <TableRow key={invoice.id} className={invoice.isPaused ? "bg-red-100/70" : "bg-red-50/50"}>
+                <Fragment key={invoice.id}>
+                  <TableRow className={invoice.isPaused ? "bg-red-100/70" : "bg-red-50/50"}>
                     <td className="p-0">
                       <button
                         onClick={() => toggleExpanded(invoice.id)}
@@ -956,7 +956,7 @@ export function FailedPaymentsTable({
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </TableBody>
