@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   const data = gamSessionData(claims);
   return NextResponse.json({
     success: true,
-    email: claims.email,
+    email: claims.Email,
     customerId: data.customerId ?? null,
     invoiceUID: data.invoiceUID ?? null,
     accountId: data.accountId ?? null,

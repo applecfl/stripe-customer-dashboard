@@ -9,8 +9,8 @@ import type { ExtendedCustomerInfo, OtherPayment } from './auth';
  * using public keys fetched from GAM's JWKS endpoint. We hold no signing key
  * and cannot mint tokens.
  *
- * The dashboard's business context (customerId/invoiceUID/accountId/…) is baked
- * by Magic into the token's `data` claim at /auth/issue time, so a verified GAM
+ * The dashboard's business context (customerId/invoiceUID/accountId/...) is baked
+ * by Magic into the token's `Data` claim at /auth/issue time, so a verified GAM
  * token yields the same fields the legacy token carried.
  */
 
@@ -25,15 +25,44 @@ export interface GamTokenData {
   otherPayments?: OtherPayment[];
 }
 
+interface GamExtendedInfoClaim {
+  FatherName?: string;
+  FatherEmail?: string;
+  FatherCell?: string | number;
+  MotherName?: string;
+  MotherEmail?: string;
+  MotherCell?: string | number;
+  ParentsName?: string;
+  SenderName?: string;
+  SenderEmail?: string;
+  PaymentName?: string;
+  TotalAmount?: number;
+}
+
+interface GamOtherPaymentClaim {
+  PaymentDate?: string;
+  Amount?: number;
+  PaymentType?: string;
+  Description?: string;
+}
+
+interface GamTokenDataClaim {
+  CustomerID?: string;
+  InvoiceUID?: string;
+  AccountID?: string;
+  ExtendedInfo?: GamExtendedInfoClaim;
+  OtherPayments?: GamOtherPaymentClaim[];
+}
+
 export interface GamClaims {
-  sub: string;
-  email: string;
-  aud: string;
-  typ: string;
+  Sub?: string;
+  Email: string;
+  AUD: string;
+  Typ: string;
   exp: number;
   iat: number;
-  scope?: string[];
-  data?: GamTokenData;
+  Scope?: string[];
+  Data?: GamTokenDataClaim;
 }
 
 // ─── JWKS cache (kid → KeyObject) ─────────────────────────────────────────────
@@ -90,7 +119,7 @@ async function getJwksKey(kid: string): Promise<KeyObject | null> {
 
 /**
  * Verify a GAM RS256 access token. Returns the claims if valid, else null.
- * Checks: RS256 signature against the JWKS-resolved key, aud, typ=access, exp.
+ * Checks: RS256 signature against the JWKS-resolved key, AUD, Typ=access, exp.
  */
 export async function verifyGamToken(token: string, audience: string = GAM_AUDIENCE): Promise<GamClaims | null> {
   try {
@@ -115,8 +144,8 @@ export async function verifyGamToken(token: string, audience: string = GAM_AUDIE
 
     const now = Math.floor(Date.now() / 1000);
     if (!claims.exp || claims.exp < now) return null;
-    if (claims.aud !== audience) return null;
-    if (claims.typ !== 'access') return null;
+    if (claims.AUD !== audience) return null;
+    if (claims.Typ !== 'access') return null;
 
     return claims;
   } catch {
@@ -126,5 +155,38 @@ export async function verifyGamToken(token: string, audience: string = GAM_AUDIE
 
 /** Pull the dashboard business context out of a verified GAM token. */
 export function gamSessionData(claims: GamClaims): GamTokenData {
-  return claims.data ?? {};
+  const data = claims.Data;
+  if (!data) return {};
+
+  const extended = data.ExtendedInfo;
+  const extendedInfo: ExtendedCustomerInfo | undefined = extended
+    ? {
+        fatherName: extended.FatherName,
+        fatherEmail: extended.FatherEmail,
+        fatherCell: extended.FatherCell != null ? String(extended.FatherCell) : undefined,
+        motherName: extended.MotherName,
+        motherEmail: extended.MotherEmail,
+        motherCell: extended.MotherCell != null ? String(extended.MotherCell) : undefined,
+        parentsName: extended.ParentsName,
+        senderName: extended.SenderName,
+        senderEmail: extended.SenderEmail,
+        totalAmount: extended.TotalAmount,
+        paymentName: extended.PaymentName,
+      }
+    : undefined;
+
+  const otherPayments: OtherPayment[] | undefined = data.OtherPayments?.map(payment => ({
+    paymentDate: payment.PaymentDate ?? '',
+    amount: payment.Amount ?? 0,
+    paymentType: payment.PaymentType ?? '',
+    description: payment.Description ?? '',
+  }));
+
+  return {
+    customerId: data.CustomerID,
+    invoiceUID: data.InvoiceUID,
+    accountId: data.AccountID,
+    extendedInfo,
+    otherPayments,
+  };
 }

@@ -51,13 +51,13 @@ load_env_var() {
 }
 load_env_var GAM_BASE_URL
 
-GAM_BASE_URL="${GAM_BASE_URL:-http://localhost:8080}"
+GAM_BASE_URL="${GAM_BASE_URL:-https://flask-gam-app-364894474586.us-central1.run.app}"
 BASE_URL="${BASE_URL:-http://localhost:3000}"
-EMAIL="${EMAIL:-golem1@lecfl.com}"
+EMAIL="${EMAIL:-sholem@lecfl.com}"
 
 # Same defaults as open-dashboard.sh — a real triple pulled from production logs.
-DEFAULT_CUSTOMER_ID="cus_RDY5fgetvZ3bt4"
-DEFAULT_INVOICE_UID="2BAD77DA-AB33-4D03-A455-55F9799495C0"
+DEFAULT_CUSTOMER_ID="cus_RCNmmDbRyZZVzz"
+DEFAULT_INVOICE_UID="4B85A29E-E3F3-4ADC-A5E8-3219CE204F49"
 DEFAULT_ACCOUNT_ID="1"
 
 CUSTOMER_ID="${1:-${CUSTOMER_ID:-$DEFAULT_CUSTOMER_ID}}"
@@ -72,10 +72,14 @@ ACCOUNT_ID="${3:-${ACCOUNT_ID:-$DEFAULT_ACCOUNT_ID}}"
 ALLOWED_IP_FOR_DEV="67.23.68.218"
 
 echo "→ Requesting code from $GAM_BASE_URL/auth/issue (email=$EMAIL aud=stripe-dashboard)"
+PAYLOAD=$(cat <<JSON
+{"AUD":"stripe-dashboard","Email":"$EMAIL","Data":{"AccountID":"$ACCOUNT_ID","CustomerID":"$CUSTOMER_ID","InvoiceUID":"$INVOICE_UID","ExtendedInfo":{"FatherName":"Shmuel Freeman","FatherEmail":"ShmuelFreeman@gmail.com","FatherCell":3233639795,"MotherName":"Kayla Freeman","MotherEmail":"KaylaCFreeman@gmail.com","MotherCell":3238930181,"ParentsName":"Mr. Shmuel and Mrs. Kayla Freeman","SenderName":"Rabbi Sholem Kleinman","SenderEmail":"sholem@lecfl.com","PaymentName":"Enrollment & Tuition for 2025/26 School Year","TotalAmount":7166.00}}}
+JSON
+)
 RESPONSE=$(curl -sS -X POST "$GAM_BASE_URL/auth/issue" \
   -H "Content-Type: application/json" \
   -H "X-Forwarded-For: $ALLOWED_IP_FOR_DEV" \
-  -d "{\"email\":\"$EMAIL\",\"aud\":\"stripe-dashboard\",\"data\":{\"customerId\":\"$CUSTOMER_ID\",\"invoiceUID\":\"$INVOICE_UID\",\"accountId\":\"$ACCOUNT_ID\"}}")
+  -d "$PAYLOAD")
 
 CODE=$(printf '%s' "$RESPONSE" | node -e '
   let s = "";

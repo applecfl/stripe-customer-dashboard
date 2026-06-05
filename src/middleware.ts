@@ -40,15 +40,15 @@ interface TokenPayload {
 }
 
 interface GamClaims {
-  email: string;
-  aud: string;
-  typ: string;
+  Email: string;
+  AUD: string;
+  Typ: string;
   exp: number;
   iat: number;
-  data?: {
-    customerId?: string;
-    invoiceUID?: string;
-    accountId?: string;
+  Data?: {
+    CustomerID?: string;
+    InvoiceUID?: string;
+    AccountID?: string;
   };
 }
 
@@ -227,7 +227,7 @@ async function getJwksKey(kid: string): Promise<CryptoKey | null> {
 
 /**
  * Verify a GAM RS256 access token using the JWKS-fetched signing key.
- * Checks signature, aud, typ=access, exp. Returns claims or null.
+ * Checks signature, AUD, Typ=access, exp. Returns claims or null.
  */
 async function verifyGamToken(token: string): Promise<GamClaims | null> {
   try {
@@ -253,8 +253,8 @@ async function verifyGamToken(token: string): Promise<GamClaims | null> {
     const claims: GamClaims = JSON.parse(base64UrlToString(payloadB64));
     const now = Math.floor(Date.now() / 1000);
     if (!claims.exp || claims.exp < now) return null;
-    if (claims.aud !== GAM_AUDIENCE) return null;
-    if (claims.typ !== 'access') return null;
+    if (claims.AUD !== GAM_AUDIENCE) return null;
+    if (claims.Typ !== 'access') return null;
 
     return claims;
   } catch {
@@ -416,8 +416,8 @@ export async function middleware(request: NextRequest) {
       // ── New GAM cookie path (dashboard only) ──
       const claims = await verifyGamToken(cookieToken);
       if (claims) {
-        customerId = claims.data?.customerId ?? null;
-        invoiceUID = claims.data?.invoiceUID ?? null;
+        customerId = claims.Data?.CustomerID ?? null;
+        invoiceUID = claims.Data?.InvoiceUID ?? null;
         isCookieAuth = true;
       }
     }
