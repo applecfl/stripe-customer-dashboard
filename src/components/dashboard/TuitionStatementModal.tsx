@@ -54,6 +54,10 @@ export function TuitionStatementModal({
     defaultPayAmount > 0 ? (defaultPayAmount / 100).toFixed(2) : ''
   );
   const payAmountCents = Math.round((parseFloat(payAmountInput) || 0) * 100);
+  // Live balance (dynamic link, recomputed each visit) vs a fixed custom amount.
+  // Default to live in payment mode; turning it off uses the entered amount as a
+  // fixed charge.
+  const [useLiveBalance, setUseLiveBalance] = useState(isPaymentMode);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const parentsName = extendedInfo?.parentsName || customer?.name || '';
@@ -333,8 +337,9 @@ export function TuitionStatementModal({
       return;
     }
 
-    // Payment request must have a positive amount (it has no PDF to fall back on).
-    if (isPaymentMode && payAmountCents <= 0) {
+    // A FIXED (custom) payment request needs a positive amount. A live-balance
+    // request computes the amount server-side, so an empty field is fine.
+    if (isPaymentMode && !useLiveBalance && payAmountCents <= 0) {
       setError('Please enter a payment amount');
       return;
     }
@@ -357,10 +362,11 @@ export function TuitionStatementModal({
           senderName: extendedInfo?.senderName,
           senderEmail: extendedInfo?.senderEmail,
           recipientName: getRecipientName(),
-          // Payment-request mode always includes a DYNAMIC pay link (live balance,
-          // customer can pay any part). Statement mode uses the optional fixed button.
+          // Payment-request mode includes a pay link. Live balance => DYNAMIC link;
+          // a custom (fixed) amount => fixed link for exactly that amount. Statement
+          // mode uses the optional fixed button.
           includePayButton: isPaymentMode ? true : (includePayButton && payAmountCents > 0),
-          dynamicPayLink: isPaymentMode,
+          dynamicPayLink: isPaymentMode && useLiveBalance,
           customerId: customer?.id,
           invoiceUID,
           payAmount: payAmountCents,
@@ -543,37 +549,84 @@ export function TuitionStatementModal({
         </div>
 
         {/* Pay Now button option */}
-        <div className="flex items-center gap-3 pb-4 mb-4 border-b border-gray-200">
+        <div className="flex items-center gap-3 pb-4 mb-4 border-b border-gray-200 flex-wrap">
           <label className="text-sm font-medium text-gray-500 w-16">Pay link:</label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={includePayButton}
-              onChange={(e) => setIncludePayButton(e.target.checked)}
-              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-            />
-            <span className="text-sm text-gray-700">Include a &ldquo;Pay Now&rdquo; button</span>
-          </label>
-          {includePayButton && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm text-gray-500">for</span>
-              <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-gray-500">$</span>
+
+          {isPaymentMode ? (
+            <>
+              {/* Live outstanding balance vs a fixed custom amount */}
+              <label className="flex items-center gap-1.5 cursor-pointer">
                 <input
-                  type="text"
-                  inputMode="decimal"
-                  value={payAmountInput}
-                  onChange={(e) => {
-                    // Allow only digits and a single decimal point.
-                    const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
-                    setPayAmountInput(cleaned);
-                  }}
-                  className="w-28 pl-5 pr-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="0.00"
+                  type="radio"
+                  name="payAmountMode"
+                  checked={useLiveBalance}
+                  onChange={() => setUseLiveBalance(true)}
+                  className="w-4 h-4 text-indigo-600"
                 />
-              </div>
-              <span className="text-xs text-gray-400">(single-use, 7-day link)</span>
-            </div>
+                <span className="text-sm text-gray-700">Outstanding balance (live)</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="payAmountMode"
+                  checked={!useLiveBalance}
+                  onChange={() => setUseLiveBalance(false)}
+                  className="w-4 h-4 text-indigo-600"
+                />
+                <span className="text-sm text-gray-700">Custom amount</span>
+              </label>
+              {!useLiveBalance && (
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-gray-500">$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={payAmountInput}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                      setPayAmountInput(cleaned);
+                    }}
+                    className="w-28 pl-5 pr-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
+              <span className="text-xs text-gray-400">
+                {useLiveBalance ? '(recomputed each visit, 7-day link)' : '(fixed, single-use, 7-day link)'}
+              </span>
+            </>
+          ) : (
+            <>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includePayButton}
+                  onChange={(e) => setIncludePayButton(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                />
+                <span className="text-sm text-gray-700">Include a &ldquo;Pay Now&rdquo; button</span>
+              </label>
+              {includePayButton && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm text-gray-500">for</span>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-gray-500">$</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={payAmountInput}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                        setPayAmountInput(cleaned);
+                      }}
+                      className="w-28 pl-5 pr-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <span className="text-xs text-gray-400">(single-use, 7-day link)</span>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -678,7 +731,9 @@ export function TuitionStatementModal({
           loading={loading}
           disabled={
             emails.length === 0 ||
-            (isPaymentMode ? payAmountCents <= 0 : (fetchingStatement || !pdfBase64))
+            (isPaymentMode
+              ? (!useLiveBalance && payAmountCents <= 0)
+              : (fetchingStatement || !pdfBase64))
           }
         >
           <Send className="w-4 h-4" />
