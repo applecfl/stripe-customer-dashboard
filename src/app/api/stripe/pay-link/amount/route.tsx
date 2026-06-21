@@ -1,8 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { NextRequest } from 'next/server';
-import { verifyTokenAllowExpired } from '@/lib/auth';
-import { getStripeForAccount } from '@/lib/stripe';
-import { getOutstandingForUID } from '@/lib/balance';
+import { verifyTokenAllowExpired, getTokenSignature } from '@/lib/auth';
+import { getPaymentLink } from '@/lib/paymentLinks';
 
 export const runtime = 'nodejs';
 
@@ -57,23 +56,21 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token');
   const v = token ? verifyTokenAllowExpired(token) : null;
 
-  if (!v || v.payload.kind !== 'payment_link') {
+  if (!v || v.payload.kind !== 'payment_link' || typeof v.payload.amount !== 'number') {
     return amountImage('—', '#9ca3af');
   }
   if (v.expired) {
     return amountImage('expired', '#9ca3af');
   }
 
-  // Dynamic: live balance. Fixed: the signed amount.
-  if (v.payload.dynamic === true) {
-    try {
-      const stripe = getStripeForAccount(v.payload.accountId);
-      const outstanding = await getOutstandingForUID(stripe, v.payload.customerId, v.payload.invoiceUID);
-      return amountImage(outstanding > 0 ? fmt(outstanding) : '$0.00', '#18181b');
-    } catch {
-      return amountImage('—', '#9ca3af');
-    }
+  // Show the link's REMAINING counter (fall back to the signed amount if the doc
+  // doesn't exist yet — don't create it here, this image is pre-fetched by email).
+  let remaining = v.payload.amount;
+  try {
+    const rec = await getPaymentLink(getTokenSignature(token!));
+    if (rec) remaining = rec.remaining;
+  } catch {
+    // store unreachable — show signed amount
   }
-
-  return amountImage(typeof v.payload.amount === 'number' ? fmt(v.payload.amount) : '—', '#18181b');
+  return amountImage(remaining > 0 ? fmt(remaining) : '$0.00', '#18181b');
 }

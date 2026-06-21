@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
-import { generatePaymentLinkToken, generateDynamicPaymentLinkToken } from '@/lib/auth';
+import { generatePaymentLinkToken } from '@/lib/auth';
 
 interface SendTuitionStatementRequest {
   customerEmails: string[];
@@ -20,10 +20,6 @@ interface SendTuitionStatementRequest {
   customerId?: string;
   invoiceUID?: string;
   payAmount?: number;
-  // When true, mint a DYNAMIC pay link (no fixed amount): the customer can pay any
-  // part of their live balance, and the link stays usable until the balance is zero.
-  // payAmount is then only the initial display amount.
-  dynamicPayLink?: boolean;
 }
 
 // Build the Pay Now button block. The button is a server-rendered PNG so it can
@@ -210,7 +206,6 @@ export async function POST(request: NextRequest) {
       customerId,
       invoiceUID,
       payAmount,
-      dynamicPayLink,
       accountId,
     } = body;
 
@@ -233,9 +228,9 @@ export async function POST(request: NextRequest) {
 
     let htmlContent = emailHtml || defaultEmailBody;
 
-    // Optionally mint a payment link (server-side, using AUTH_SECRET) and inject a
-    // Pay Now button. dynamicPayLink => live-balance link (no fixed amount); else a
-    // fixed single-use link for the given payAmount.
+    // Mint a payment link (server-side, using AUTH_SECRET) for the given amount and
+    // inject a Pay Now button. The link carries this fixed amount; the customer can
+    // pay it in parts and it counts down to zero (see lib/paymentLinks).
     if (includePayButton) {
       if (!customerId || !invoiceUID || !accountId) {
         return NextResponse.json(
@@ -244,19 +239,13 @@ export async function POST(request: NextRequest) {
         );
       }
       const amountCents = typeof payAmount === 'number' ? Math.round(payAmount) : 0;
-
-      let payToken: string;
-      if (dynamicPayLink) {
-        ({ token: payToken } = generateDynamicPaymentLinkToken(customerId, invoiceUID, accountId));
-      } else {
-        if (!Number.isFinite(amountCents) || amountCents <= 0) {
-          return NextResponse.json(
-            { success: false, error: 'A positive payAmount is required for a fixed Pay Now button' },
-            { status: 400 }
-          );
-        }
-        ({ token: payToken } = generatePaymentLinkToken(customerId, invoiceUID, accountId, amountCents));
+      if (!Number.isFinite(amountCents) || amountCents <= 0) {
+        return NextResponse.json(
+          { success: false, error: 'A positive payAmount is required for the Pay Now button' },
+          { status: 400 }
+        );
       }
+      const { token: payToken } = generatePaymentLinkToken(customerId, invoiceUID, accountId, amountCents);
 
       const base = getBaseUrl(request);
       const enc = encodeURIComponent(payToken);
