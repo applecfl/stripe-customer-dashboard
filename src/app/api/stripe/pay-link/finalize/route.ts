@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
 import { verifyToken, getTokenSignature } from '@/lib/auth';
-import { distributePayment } from '@/lib/payNowCore';
 import { commitPayment } from '@/lib/paymentLinks';
 
 interface FinalizeResult {
@@ -27,7 +26,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Invalid payment link' }, { status: 401 });
     }
 
-    const { customerId, invoiceUID, accountId } = payload;
+    const { customerId, accountId } = payload;
     if (!customerId || !accountId) {
       return NextResponse.json({ success: false, error: 'Malformed payment link' }, { status: 400 });
     }
@@ -60,24 +59,13 @@ export async function POST(
 
     const amount = paymentIntent.amount;
 
-    // Decrement the link's remaining counter (idempotent per PI), then distribute.
+    // Decrement the link's counter only. Standalone payment request — do NOT run
+    // distributePayment / touch the customer's invoices (per Sholem's directive).
     const remaining = await commitPayment(sig, paymentIntent.id, amount);
-
-    let invoicesPaid: Awaited<ReturnType<typeof distributePayment>>['invoicesPaid'] = [];
-    try {
-      ({ invoicesPaid } = await distributePayment({
-        stripe, paymentIntent, customerId, invoiceUID, amount,
-        reason: 'Payment link', applyToAll: true,
-      }));
-    } catch (distErr) {
-      console.error('pay-link finalize: paid but distribution failed', {
-        paymentIntentId: paymentIntent.id, sig, error: distErr,
-      });
-    }
 
     return NextResponse.json({
       success: true,
-      data: { paymentIntentId: paymentIntent.id, amountPaid: amount, remaining, invoicesPaid },
+      data: { paymentIntentId: paymentIntent.id, amountPaid: amount, remaining, invoicesPaid: [] },
     });
   } catch (error) {
     console.error('Error finalizing pay-link:', error);

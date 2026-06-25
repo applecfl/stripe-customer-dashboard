@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
 import { verifyToken, getTokenSignature } from '@/lib/auth';
-import { distributePayment } from '@/lib/payNowCore';
 import { getOrInitLink, getChargeableAmount, commitPayment } from '@/lib/paymentLinks';
 
 // Customer-facing payment link with a simple decrementing counter. The link's fixed
@@ -145,26 +144,17 @@ export async function POST(
       );
     }
 
-    // Charge succeeded — decrement the counter (idempotent per PI), then distribute
-    // to the customer's invoices for this InvoiceUID. Distribution errors are logged
-    // for out-of-band reconciliation (the money has moved and the counter is updated).
+    // Charge succeeded — decrement the link's counter (idempotent per PI). This is a
+    // STANDALONE office payment request, NOT tied to a specific Stripe invoice, so we
+    // deliberately do NOT run distributePayment / touch the customer's other open or
+    // draft invoices (per Sholem's directive — see Bejman bug). The PaymentIntent
+    // carries InvoiceUID in metadata for downstream reconciliation; the Firestore
+    // counter tracks the remaining balance on this link.
     const remaining = await commitPayment(sig, paymentIntent.id, amount);
-
-    let invoicesPaid: Awaited<ReturnType<typeof distributePayment>>['invoicesPaid'] = [];
-    try {
-      ({ invoicesPaid } = await distributePayment({
-        stripe, paymentIntent, customerId, invoiceUID, amount,
-        reason: 'Payment link', applyToAll: true,
-      }));
-    } catch (distErr) {
-      console.error('pay-link: charge succeeded but invoice distribution failed', {
-        paymentIntentId: paymentIntent.id, sig, error: distErr,
-      });
-    }
 
     return NextResponse.json({
       success: true,
-      data: { paymentIntentId: paymentIntent.id, amountPaid: amount, remaining, invoicesPaid },
+      data: { paymentIntentId: paymentIntent.id, amountPaid: amount, remaining, invoicesPaid: [] },
     });
   } catch (error) {
     console.error('Error processing pay-link:', error);
