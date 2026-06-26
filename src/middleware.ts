@@ -342,6 +342,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow the Gotenberg keep-warm endpoint (hit by Cloud Scheduler with no token).
+  // It only triggers a tiny PDF conversion to keep the PDF service warm; no data out.
+  if (pathname === '/api/stripe/gotenberg-warm') {
+    return NextResponse.next();
+  }
+
   // Route classification:
   //  - Customer pay-link surface: /pay page + /api/stripe/pay-link* routes.
   //    Requires a payment_link token. A dashboard token must NOT open these.
