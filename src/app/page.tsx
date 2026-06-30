@@ -159,14 +159,6 @@ function DashboardContent() {
     return Math.max(0, total - paid - scheduled - failed);
   }, [payments, invoices, otherPayments, extendedInfo]);
 
-  // Failed payments total (open invoices with attempt_count > 0), in cents.
-  // Used as the default amount for a Payment Request — that's what actually
-  // failed to collect and needs to be paid.
-  const failedPaymentsAmount = useMemo(() => {
-    return invoices
-      .filter(inv => inv.status === 'open' && inv.attempt_count > 0)
-      .reduce((sum, inv) => sum + inv.amount_remaining, 0);
-  }, [invoices]);
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -982,7 +974,7 @@ function DashboardContent() {
 
       <TuitionStatementModal
         mode="payment"
-        outstandingAmount={failedPaymentsAmount}
+        outstandingAmount={outstandingAmount}
         isOpen={showPaymentRequestModal}
         onClose={() => setShowPaymentRequestModal(false)}
         invoiceUID={invoiceUID}
