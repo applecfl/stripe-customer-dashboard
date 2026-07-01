@@ -130,6 +130,25 @@ function verifySignature(data: string, signature: string): boolean {
 export function isClientChainAllowed(request: Request): boolean {
   const xff = request.headers.get('x-forwarded-for');
 
+  // Cloudflare -> Coolify/Traefik deployment: the container's peer is an internal
+  // proxy (e.g. 10.0.1.1) and XFF only carries that private hop, so the real public
+  // client IP lives in CF-Connecting-IP (set by Cloudflare). We trust CF-Connecting-IP
+  // ONLY when the connection actually arrived through our own internal proxy — i.e.
+  // every XFF hop is a private/infra address. That prevents a request hitting the app
+  // directly (not via our Cloudflare) from spoofing CF-Connecting-IP: such a request
+  // would have a PUBLIC peer in XFF, failing the all-private check below.
+  const cfIp = request.headers.get('cf-connecting-ip') || request.headers.get('true-client-ip');
+  if (cfIp) {
+    const xffHops = (xff || '').split(',').map(s => s.trim()).filter(Boolean);
+    const arrivedViaInternalProxy =
+      xffHops.length === 0 || xffHops.every(ip => isInfraHop(ip));
+    if (arrivedViaInternalProxy && isAllowedIP(cfIp.trim())) {
+      return true;
+    }
+    // If CF header is present but the chain isn't our internal proxy, fall through —
+    // don't blindly trust a spoofable CF header from a direct/public connection.
+  }
+
   // On Firebase App Hosting / Cloud Run, the Google Front End rewrites the LEFTMOST
   // x-forwarded-for entry to the real connecting peer (a client-supplied XFF can't
   // overwrite it — GFE prepends the true source). So the trustworthy "client IP" is
@@ -371,8 +390,15 @@ export function verifyTokenAllowExpired(
  * Handles various proxy headers
  */
 export function getClientIP(request: Request): string | null {
-  // Check various headers that might contain the real IP
   const headers = request.headers;
+
+  // Prefer Cloudflare's client IP — behind Cloudflare -> Coolify/Traefik the socket
+  // peer + x-forwarded-for only show the internal proxy (e.g. 10.0.1.1), so the real
+  // public client IP is in CF-Connecting-IP (or True-Client-IP).
+  const cfConnectingIP = headers.get('cf-connecting-ip') || headers.get('true-client-ip');
+  if (cfConnectingIP) {
+    return cfConnectingIP.trim();
+  }
 
   // X-Forwarded-For can contain multiple IPs, take the first one
   const forwardedFor = headers.get('x-forwarded-for');
@@ -381,22 +407,14 @@ export function getClientIP(request: Request): string | null {
     return ips[0] || null;
   }
 
-  // Other common proxy headers
   const realIP = headers.get('x-real-ip');
   if (realIP) {
     return realIP;
   }
 
-  // Vercel-specific header
   const vercelForwardedFor = headers.get('x-vercel-forwarded-for');
   if (vercelForwardedFor) {
     return vercelForwardedFor;
-  }
-
-  // CF-Connecting-IP for Cloudflare
-  const cfConnectingIP = headers.get('cf-connecting-ip');
-  if (cfConnectingIP) {
-    return cfConnectingIP;
   }
 
   return null;

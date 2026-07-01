@@ -47,12 +47,23 @@ export async function POST(
   request: NextRequest
 ): Promise<NextResponse<GenerateTokenResponse>> {
   try {
+    // TEMP DIAGNOSTIC: log the forwarding headers so we can see exactly what the
+    // Cloudflare -> Coolify/Traefik proxy chain preserves (which one carries the real
+    // public client IP). Remove once IP detection is confirmed.
+    console.log('generate-token headers:', JSON.stringify({
+      'cf-connecting-ip': request.headers.get('cf-connecting-ip'),
+      'x-forwarded-for': request.headers.get('x-forwarded-for'),
+      'x-real-ip': request.headers.get('x-real-ip'),
+      'true-client-ip': request.headers.get('true-client-ip'),
+      forwarded: request.headers.get('forwarded'),
+    }));
+
     // Get client IP (for logging)
     const clientIP = getClientIP(request);
 
     // Validate the full forwarding chain is whitelisted (resistant to XFF spoofing).
     if (!isClientChainAllowed(request)) {
-      console.warn(`Token generation rejected - IP not allowed: ${clientIP} (xff: ${request.headers.get('x-forwarded-for')})`);
+      console.warn(`Token generation rejected - IP not allowed: ${clientIP} (xff: ${request.headers.get('x-forwarded-for')}, cf: ${request.headers.get('cf-connecting-ip')})`);
       return NextResponse.json(
         { success: false, error: 'Access denied' },
         { status: 403 }
