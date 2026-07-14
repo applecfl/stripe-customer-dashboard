@@ -100,8 +100,10 @@ export function CustomerHeader({
     const calculatedTotal = paid + scheduled + failed;
     const total = totalFromToken !== null ? totalFromToken : calculatedTotal;
 
-    // Outstanding = total - paid - scheduled - failed (can be negative for overpay)
-    const outstandingRaw = total - paid - scheduled - failed;
+    // Outstanding = total - paid - scheduled (Failed is NOT subtracted — a failed
+    // charge is still owed, so it remains part of Outstanding; the Failed card is an
+    // informational subset). Can be negative for overpay.
+    const outstandingRaw = total - paid - scheduled;
     const outstanding = Math.max(0, outstandingRaw);
     const overpay = outstandingRaw < 0 ? Math.abs(outstandingRaw) : 0;
 

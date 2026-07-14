@@ -155,8 +155,11 @@ function DashboardContent() {
     const totalFromToken = extendedInfo?.totalAmount ? extendedInfo.totalAmount * 100 : 0;
     const total = totalFromToken > 0 ? totalFromToken : (paid + scheduled + failed);
 
-    // Outstanding = total - paid - scheduled - failed
-    return Math.max(0, total - paid - scheduled - failed);
+    // Outstanding = total - paid - scheduled. Failed is NOT subtracted: a failed
+    // charge is still owed, so it stays part of Outstanding (Failed is shown as an
+    // informational subset, not a separate deduction). `failed` kept for reference.
+    void failed;
+    return Math.max(0, total - paid - scheduled);
   }, [payments, invoices, otherPayments, extendedInfo]);
 
 
