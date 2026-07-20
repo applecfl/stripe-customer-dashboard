@@ -1,4 +1,5 @@
 export { CustomerHeader } from './CustomerHeader';
+export { ScreenshotLink } from './ScreenshotLink';
 export { InvoicesTable } from './InvoicesTable';
 export { PaymentsTable } from './PaymentsTable';
 export { PaymentMethodsTable } from './PaymentMethodsTable';

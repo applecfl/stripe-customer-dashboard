@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { ScreenshotLink } from './ScreenshotLink';
 import { InvoiceData, PaymentData, PaymentMethodData, OtherPayment } from '@/types';
 import { formatCurrency, formatDateTime, formatDate } from '@/lib/utils';
 import {
@@ -588,6 +589,17 @@ export function SuccessfulPaymentsTable({
                                 Payment Note
                               </div>
                               <p className="text-gray-700 italic">{invoiceInfo.reason}</p>
+                            </div>
+                          )}
+
+                          {/* Uploaded screenshot (from Magic, stored in lec-records) */}
+                          {payment.metadata?.ScreenShotFile && (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
+                                <MessageSquare className="w-3 h-3" />
+                                Screenshot
+                              </div>
+                              <ScreenshotLink screenShotFile={payment.metadata.ScreenShotFile} token={token} />
                             </div>
                           )}
 

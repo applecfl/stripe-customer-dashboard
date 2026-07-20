@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { InvoiceData, PaymentData, PaymentMethodData } from '@/types';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { ScreenshotLink } from './ScreenshotLink';
 import {
   Card,
   CardHeader,
@@ -636,6 +637,9 @@ export function TransactionsTable({
                                   </p>
                                   {payment.refund_reason && (
                                     <p className="text-xs text-gray-500">Reason: {payment.refund_reason}</p>
+                                  )}
+                                  {payment.metadata?.ScreenShotFile && (
+                                    <ScreenshotLink screenShotFile={payment.metadata.ScreenShotFile} />
                                   )}
                                 </div>
                               )}

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { PaymentData } from '@/types';
+import { ScreenshotLink } from './ScreenshotLink';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import {
   Card,
@@ -341,6 +342,9 @@ export function PaymentsTable({
                                 </p>
                                 {payment.refund_reason && (
                                   <p className="text-xs text-gray-500">Reason: {payment.refund_reason}</p>
+                                )}
+                                {payment.metadata?.ScreenShotFile && (
+                                  <ScreenshotLink screenShotFile={payment.metadata.ScreenShotFile} />
                                 )}
                               </div>
                             )}
