@@ -466,16 +466,21 @@ export function TransactionsTable({
                           </div>
                         </TableCell>
                         <TableCell align="right">
-                          {payment.status === 'succeeded' && payment.amount_refunded < payment.amount ? (
-                            <button
-                              onClick={() => onRefund(payment)}
-                              className="text-xs sm:text-sm text-gray-600 hover:text-indigo-600 transition-colors"
-                            >
-                              Refund
-                            </button>
-                          ) : payment.amount_refunded >= payment.amount ? (
-                            <span className="text-[10px] sm:text-xs text-red-400 font-medium"><span className="hidden sm:inline">Fully </span>Refunded</span>
-                          ) : null}
+                          <div className="flex items-center justify-end gap-1">
+                            {payment.metadata?.ScreenShotFile && (
+                              <ScreenshotLink screenShotFile={payment.metadata.ScreenShotFile} />
+                            )}
+                            {payment.status === 'succeeded' && payment.amount_refunded < payment.amount ? (
+                              <button
+                                onClick={() => onRefund(payment)}
+                                className="text-xs sm:text-sm text-gray-600 hover:text-indigo-600 transition-colors"
+                              >
+                                Refund
+                              </button>
+                            ) : payment.amount_refunded >= payment.amount ? (
+                              <span className="text-[10px] sm:text-xs text-red-400 font-medium"><span className="hidden sm:inline">Fully </span>Refunded</span>
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
 
@@ -637,9 +642,6 @@ export function TransactionsTable({
                                   </p>
                                   {payment.refund_reason && (
                                     <p className="text-xs text-gray-500">Reason: {payment.refund_reason}</p>
-                                  )}
-                                  {payment.metadata?.ScreenShotFile && (
-                                    <ScreenshotLink screenShotFile={payment.metadata.ScreenShotFile} />
                                   )}
                                 </div>
                               )}

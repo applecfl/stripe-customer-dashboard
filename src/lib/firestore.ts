@@ -39,20 +39,40 @@ export function getDb(): Firestore {
 const RECORDS_BUCKET = 'lec-records';
 
 /**
- * Generate a short-lived read URL for a file in the lec-records bucket by its exact
- * name (e.g. a ScreenShotFile GUID). Returns null if the file doesn't exist.
+ * Generate a short-lived read URL for a ScreenShotFile in lec-records.
+ *
+ * The metadata stores only the bare GUID, but the actual object is stored under
+ * `Uploads/<GUID>.<ext>` (ext varies: png/jpg/jpeg/pdf) — and occasionally the bare
+ * name. We try the exact value first, then a set of candidate paths, and sign the
+ * first that exists. Returns null only if none exist.
  */
 export async function getRecordsSignedUrl(
   fileName: string,
   expiresMs = 5 * 60 * 1000
 ): Promise<string | null> {
-  const file = getStorage(getApp()).bucket(RECORDS_BUCKET).file(fileName);
-  const [exists] = await file.exists();
-  if (!exists) return null;
-  const [url] = await file.getSignedUrl({
-    version: 'v4',
-    action: 'read',
-    expires: Date.now() + expiresMs,
-  });
-  return url;
+  const bucket = getStorage(getApp()).bucket(RECORDS_BUCKET);
+
+  // If the value already has a path/extension, honour it first; then fall back to the
+  // common Uploads/<name>.<ext> convention.
+  const exts = ['png', 'jpg', 'jpeg', 'pdf'];
+  const candidates = [
+    fileName,
+    `Uploads/${fileName}`,
+    ...exts.map((e) => `Uploads/${fileName}.${e}`),
+    ...exts.map((e) => `${fileName}.${e}`),
+  ];
+
+  for (const name of candidates) {
+    const file = bucket.file(name);
+    const [exists] = await file.exists();
+    if (exists) {
+      const [url] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + expiresMs,
+      });
+      return url;
+    }
+  }
+  return null;
 }

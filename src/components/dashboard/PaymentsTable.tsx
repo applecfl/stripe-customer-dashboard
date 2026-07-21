@@ -201,20 +201,25 @@ export function PaymentsTable({
                         </span>
                       </TableCell>
                       <TableCell align="right">
-                        {payment.status === 'succeeded' && !payment.refunded && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onRefund(payment)}
-                            title="Refund Payment"
-                          >
-                            <RotateCcw className="w-4 h-4 text-indigo-600" />
-                            Refund
-                          </Button>
-                        )}
-                        {payment.refunded && (
-                          <span className="text-sm text-gray-400">Refunded</span>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {payment.metadata?.ScreenShotFile && (
+                            <ScreenshotLink screenShotFile={payment.metadata.ScreenShotFile} />
+                          )}
+                          {payment.status === 'succeeded' && !payment.refunded && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onRefund(payment)}
+                              title="Refund Payment"
+                            >
+                              <RotateCcw className="w-4 h-4 text-indigo-600" />
+                              Refund
+                            </Button>
+                          )}
+                          {payment.refunded && (
+                            <span className="text-sm text-gray-400">Refunded</span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                     {isExpanded && (
@@ -342,9 +347,6 @@ export function PaymentsTable({
                                 </p>
                                 {payment.refund_reason && (
                                   <p className="text-xs text-gray-500">Reason: {payment.refund_reason}</p>
-                                )}
-                                {payment.metadata?.ScreenShotFile && (
-                                  <ScreenshotLink screenShotFile={payment.metadata.ScreenShotFile} />
                                 )}
                               </div>
                             )}

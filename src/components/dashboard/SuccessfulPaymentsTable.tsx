@@ -331,6 +331,11 @@ export function SuccessfulPaymentsTable({
                     </TableCell>
                     <TableCell align="right" compact>
                       <div className="flex items-center justify-end gap-1">
+                        {payment.metadata?.ScreenShotFile && (
+                          <Tooltip content="View uploaded screenshot">
+                            <ScreenshotLink screenShotFile={payment.metadata.ScreenShotFile} token={token} />
+                          </Tooltip>
+                        )}
                         {payment.status === 'succeeded' && payment.amount_refunded < payment.amount ? (
                           <>
                             <Tooltip content="Refund Payment">
@@ -589,17 +594,6 @@ export function SuccessfulPaymentsTable({
                                 Payment Note
                               </div>
                               <p className="text-gray-700 italic">{invoiceInfo.reason}</p>
-                            </div>
-                          )}
-
-                          {/* Uploaded screenshot (from Magic, stored in lec-records) */}
-                          {payment.metadata?.ScreenShotFile && (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium uppercase">
-                                <MessageSquare className="w-3 h-3" />
-                                Screenshot
-                              </div>
-                              <ScreenshotLink screenShotFile={payment.metadata.ScreenShotFile} token={token} />
                             </div>
                           )}
 

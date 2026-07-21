@@ -51,10 +51,10 @@ export function ScreenshotLink({
       onClick={open}
       disabled={loading}
       title={error || 'View the uploaded screenshot'}
-      className={`inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-60 ${className}`}
+      className={`inline-flex items-center justify-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors disabled:opacity-60 ${className}`}
     >
       {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5" />}
-      {error ? 'Retry screenshot' : 'View screenshot'}
+      <span className="hidden sm:inline">{error ? 'Retry' : 'Screenshot'}</span>
     </button>
   );
 }
