@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ImageIcon, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Modal } from '@/components/ui';
 
 // Icon-only action button that opens the payment's uploaded screenshot in a modal.
@@ -58,9 +58,10 @@ export function ScreenshotLink({
         onClick={load}
         title="View uploaded screenshot"
         aria-label="View uploaded screenshot"
-        className={`inline-flex items-center justify-center p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors ${className}`}
+        className={`inline-flex items-center justify-center p-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors ${className}`}
       >
-        <ImageIcon className="w-4 h-4" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/Authorization.png" alt="Screenshot" className="h-5 w-auto" />
       </button>
 
       <Modal isOpen={open} onClose={() => setOpen(false)} title="Screenshot" size="full">
