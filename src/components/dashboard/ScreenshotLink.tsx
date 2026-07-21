@@ -1,8 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { Modal } from '@/components/ui';
+
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 5;
+const ZOOM_STEP = 0.25;
 
 // Icon-only action button that opens the payment's uploaded screenshot in a modal.
 // The screenshot is a ScreenShotFile GUID stored in Magic's lec-records bucket; we
@@ -20,11 +24,18 @@ export function ScreenshotLink({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [url, setUrl] = useState('');
+  const [zoom, setZoom] = useState(1);
 
   if (!screenShotFile) return null;
 
+  const close = () => { setOpen(false); setZoom(1); };
+  const zoomIn = () => setZoom((z) => Math.min(MAX_ZOOM, +(z + ZOOM_STEP).toFixed(2)));
+  const zoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, +(z - ZOOM_STEP).toFixed(2)));
+  const resetZoom = () => setZoom(1);
+
   const load = async () => {
     setOpen(true);
+    setZoom(1);
     if (url) return; // already fetched
     setLoading(true);
     setError('');
@@ -64,8 +75,41 @@ export function ScreenshotLink({
         <img src="/Authorization.png" alt="Screenshot" className="h-5 w-auto" />
       </button>
 
-      <Modal isOpen={open} onClose={() => setOpen(false)} title="Screenshot" size="full">
-        <div className="flex items-center justify-center min-h-[300px]">
+      <Modal isOpen={open} onClose={close} title="Screenshot" size="full">
+        {/* Zoom toolbar — only for images (PDFs use the browser's own controls) */}
+        {url && !isPdf && !loading && !error && (
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <button
+              type="button"
+              onClick={zoomOut}
+              disabled={zoom <= MIN_ZOOM}
+              title="Zoom out"
+              className="inline-flex items-center justify-center p-1.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-40"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <span className="text-xs text-gray-500 w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              onClick={zoomIn}
+              disabled={zoom >= MAX_ZOOM}
+              title="Zoom in"
+              className="inline-flex items-center justify-center p-1.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-40"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={resetZoom}
+              title="Reset zoom"
+              className="inline-flex items-center justify-center p-1.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-center min-h-[300px] max-h-[78vh] overflow-auto">
           {loading ? (
             <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
           ) : error ? (
@@ -84,7 +128,12 @@ export function ScreenshotLink({
               <iframe src={url} title="Screenshot PDF" className="w-full h-[75vh] rounded-lg border-0" />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={url} alt="Payment screenshot" className="max-w-full max-h-[75vh] rounded-lg object-contain" />
+              <img
+                src={url}
+                alt="Payment screenshot"
+                style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
+                className="max-w-full max-h-[75vh] rounded-lg object-contain transition-transform duration-150"
+              />
             )
           ) : null}
         </div>
