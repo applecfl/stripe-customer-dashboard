@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
+import { getGotenbergAuthHeader } from '@/lib/gotenberg-auth';
 
 const GOTENBERG_URL = process.env.GOTENBERG_URL || 'http://localhost:3000';
-const GOTENBERG_API_KEY = process.env.GOTENBERG_API_KEY || '';
 
 // Keep-warm endpoint hit by Cloud Scheduler during working hours. It runs a tiny
 // real PDF conversion so the Gotenberg Cloud Run container (and Chromium) stay warm,
@@ -15,7 +15,7 @@ export async function GET() {
     const res = await fetch(`${GOTENBERG_URL}/forms/chromium/convert/html`, {
       method: 'POST',
       body: form,
-      headers: { 'X-Api-Key': GOTENBERG_API_KEY },
+      headers: await getGotenbergAuthHeader(),
     });
     // Drain the body so the connection completes.
     await res.arrayBuffer().catch(() => undefined);
