@@ -57,6 +57,17 @@ export interface OtherPayment {
   description: string;
 }
 
+// Payment-plan offer signed into a payment_link token. The office sets a ceiling
+// (maxInstallments) and a final date (endDate); the customer picks any count 1..max on the
+// /pay page. All installments are monthly, the last never after endDate. The per-installment
+// amounts and dates are NOT signed — they are derived deterministically from the link's
+// amount + endDate + chosen count (see lib/installments), so the server always recomputes
+// them and a tampered client can't dictate them.
+export interface PaymentPlanConfig {
+  maxInstallments: number; // ceiling the customer may choose up to (>= 2)
+  endDate: number;         // unix seconds — the plan must finish on or before this date
+}
+
 // Token kind distinguishes the full admin dashboard token from a customer-facing
 // single-use payment link. Absent/undefined kind === legacy "dashboard" token.
 export type TokenKind = 'dashboard' | 'payment_link';
@@ -80,6 +91,9 @@ export interface TokenPayload {
   // Extended info from external system
   extendedInfo?: ExtendedCustomerInfo;
   otherPayments?: OtherPayment[];
+  // Payment-link only: when present, the /pay page offers a monthly installment plan the
+  // customer can opt into (1..maxInstallments). See PaymentPlanConfig.
+  plan?: PaymentPlanConfig;
 }
 
 /**
@@ -251,7 +265,8 @@ export function generatePaymentLinkToken(
   invoiceUID: string,
   accountId: string,
   amount: number,
-  extendedInfo?: ExtendedCustomerInfo
+  extendedInfo?: ExtendedCustomerInfo,
+  plan?: PaymentPlanConfig
 ): { token: string; expiresAt: number } {
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + PAYMENT_LINK_EXPIRY_SECONDS;
@@ -265,6 +280,7 @@ export function generatePaymentLinkToken(
     kind: 'payment_link',
     amount,
     extendedInfo,
+    ...(plan ? { plan } : {}),
   };
 
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');

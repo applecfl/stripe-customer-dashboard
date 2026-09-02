@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { CustomerData, ExtendedCustomerInfo, InvoiceData } from '@/types';
 import { Modal, ModalFooter, Button } from '@/components/ui';
-import { Send, AlertCircle, CheckCircle, X, RotateCcw, Bold, Italic, Link, List, Plus, Loader2, Paperclip, Eye } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle, X, RotateCcw, Bold, Italic, Link, List, Plus, Loader2, Paperclip, Eye, CalendarClock } from 'lucide-react';
+import { buildPlan, maxMonthlyInstallments } from '@/lib/installments';
 
 interface TuitionStatementModalProps {
   isOpen: boolean;
@@ -58,6 +59,34 @@ export function TuitionStatementModal({
   );
   const payAmountCents = Math.round((parseFloat(payAmountInput) || 0) * 100);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // ── Installment plan (payment mode only) ────────────────────────────────────
+  // The office offers the customer a monthly plan: a max number of payments + a final
+  // date. The customer later chooses how many (1..max) on the /pay page. Here we only
+  // collect the bounds and show a live preview; the split/dates are derived.
+  const [planEnabled, setPlanEnabled] = useState(false);
+  const [planMaxInput, setPlanMaxInput] = useState('3');
+  const [planEndDate, setPlanEndDate] = useState(''); // YYYY-MM-DD from a date input
+  const MIN_INSTALLMENT_CENTS = 50;
+
+  const planEndSec = planEndDate
+    ? Math.floor(new Date(planEndDate + 'T12:00:00').getTime() / 1000)
+    : 0;
+  const nowSec = Math.floor(Date.now() / 1000);
+  // How many whole monthly payments actually fit before the chosen end date.
+  const planMonthsMax = planEndSec > nowSec ? maxMonthlyInstallments(nowSec, planEndSec) : 0;
+  const planRequestedMax = Math.max(0, Math.floor(parseFloat(planMaxInput) || 0));
+  const planEffectiveMax = Math.min(planRequestedMax, planMonthsMax);
+  // A usable plan needs >= 2 payments and each split at/above Stripe's minimum.
+  const planTooSmall =
+    planEffectiveMax >= 2 && Math.floor(payAmountCents / planEffectiveMax) < MIN_INSTALLMENT_CENTS;
+  const planUsable = isPaymentMode && planEnabled && planEffectiveMax >= 2 && !planTooSmall && payAmountCents > 0;
+  // Example breakdown at the effective max (what the customer would see if they pick max).
+  const planPreview = planUsable ? buildPlan(payAmountCents, planEffectiveMax, nowSec, planEndSec) : [];
+  const fmtDate = (unixSec: number) =>
+    new Date(unixSec * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const fmtMoney = (cents: number) =>
+    (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
   const parentsName = extendedInfo?.parentsName || customer?.name || '';
   const description = extendedInfo?.paymentName || '';
@@ -368,6 +397,11 @@ export function TuitionStatementModal({
           customerId: customer?.id,
           invoiceUID,
           payAmount: payAmountCents,
+          // Offer a monthly installment plan when enabled + usable. The server re-validates
+          // and signs the bounds into the link; the customer picks the count on /pay.
+          plan: planUsable
+            ? { maxInstallments: planEffectiveMax, endDate: planEndSec }
+            : undefined,
         }),
       });
 
@@ -605,6 +639,91 @@ export function TuitionStatementModal({
             </>
           )}
         </div>
+
+        {/* Installment plan (payment mode only) */}
+        {isPaymentMode && (
+          <div className="pb-4 mb-4 border-b border-gray-200">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={planEnabled}
+                onChange={(e) => setPlanEnabled(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+              />
+              <CalendarClock className="w-4 h-4 text-indigo-500" />
+              <span className="text-sm font-medium text-gray-700">Offer a monthly payment plan</span>
+            </label>
+
+            {planEnabled && (
+              <div className="mt-3 pl-6 space-y-3">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm text-gray-600">Up to</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={planMaxInput}
+                      onChange={(e) => setPlanMaxInput(e.target.value.replace(/[^0-9]/g, ''))}
+                      className="w-14 px-2 py-1 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="3"
+                    />
+                    <span className="text-sm text-gray-600">payments</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm text-gray-600">finishing by</span>
+                    <input
+                      type="date"
+                      value={planEndDate}
+                      min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
+                      onChange={(e) => setPlanEndDate(e.target.value)}
+                      className="px-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Live preview / validation feedback */}
+                {!planEndDate ? (
+                  <p className="text-xs text-gray-400">Pick a final date to see the plan.</p>
+                ) : planEndSec <= nowSec ? (
+                  <p className="text-xs text-amber-600">The final date must be in the future.</p>
+                ) : payAmountCents <= 0 ? (
+                  <p className="text-xs text-amber-600">Enter a pay amount above to build the plan.</p>
+                ) : planMonthsMax < 2 ? (
+                  <p className="text-xs text-amber-600">
+                    Only {planMonthsMax} monthly payment fits before that date — pick a later date.
+                  </p>
+                ) : planTooSmall ? (
+                  <p className="text-xs text-amber-600">
+                    {fmtMoney(payAmountCents)} is too small to split {planEffectiveMax} ways.
+                  </p>
+                ) : (
+                  <div className="text-xs text-gray-600 bg-indigo-50 border border-indigo-100 rounded-lg p-3 space-y-1">
+                    <p className="font-medium text-indigo-700">
+                      Plan offer: up to {planEffectiveMax} monthly payments, finishing by{' '}
+                      {fmtDate(planEndSec)}.
+                    </p>
+                    {planEffectiveMax < planRequestedMax && (
+                      <p className="text-indigo-500">
+                        (Only {planMonthsMax} whole months fit before that date, so the customer
+                        can choose up to {planEffectiveMax}.)
+                      </p>
+                    )}
+                    <p className="text-gray-500">
+                      The customer chooses 1–{planEffectiveMax} payments. Example at {planEffectiveMax}:{' '}
+                      {fmtMoney(planPreview[0]?.amount ?? 0)} today
+                      {planPreview.length > 1 &&
+                        `, then ${planPreview
+                          .slice(1)
+                          .map((p) => `${fmtMoney(p.amount)} on ${fmtDate(p.date)}`)
+                          .join(', ')}`}
+                      .
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* WYSIWYG Toolbar */}
         <div className="flex items-center gap-1 pb-2 border-b border-gray-200 mb-2">

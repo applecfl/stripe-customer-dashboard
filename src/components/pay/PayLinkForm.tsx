@@ -7,10 +7,16 @@ import {
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js';
-import { CreditCard, Loader2, CheckCircle, AlertCircle, Lock } from 'lucide-react';
+import { CreditCard, Loader2, CheckCircle, AlertCircle, Lock, CalendarClock } from 'lucide-react';
 import { PaymentMethodData } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { getStripePromise } from '@/lib/stripe-client';
+import { buildPlan, maxMonthlyInstallments, Installment } from '@/lib/installments';
+
+interface PaymentPlanConfig {
+  maxInstallments: number;
+  endDate: number; // unix seconds
+}
 
 interface PayLinkFormProps {
   token: string;
@@ -21,6 +27,8 @@ interface PayLinkFormProps {
   description: string;
   publishableKey: string;
   savedMethods: PaymentMethodData[];
+  plan?: PaymentPlanConfig; // when present, offer a monthly installment plan
+  nowSec?: number; // server "now" (unix s) so plan dates match the backend
 }
 
 const cardStyle = {
@@ -34,12 +42,14 @@ const cardStyle = {
   },
 };
 
-function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
+function InnerForm({ token, amount, dynamic, savedMethods, plan, nowSec, onPaid }: {
   token: string;
   amount: number; // dynamic: the live balance (cap); fixed: the exact charge
   dynamic?: boolean;
   savedMethods: PaymentMethodData[];
-  onPaid: (paidCents: number) => void;
+  plan?: PaymentPlanConfig;
+  nowSec?: number;
+  onPaid: (paidCents: number, planCount?: number, installments?: Installment[]) => void;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -51,9 +61,24 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
   const [selected, setSelected] = useState<string>(defaultId);
   const [saveCard, setSaveCard] = useState(false);
 
+  // ── Installment plan chooser ────────────────────────────────────────────────
+  // A plan link caps the real number of monthly payments by its end date. `planMax`
+  // is the true ceiling; the customer picks 1..planMax (1 = pay in full today).
+  const now = nowSec ?? Math.floor(Date.now() / 1000);
+  const planMax = plan ? Math.min(plan.maxInstallments, maxMonthlyInstallments(now, plan.endDate)) : 0;
+  const hasPlan = !!plan && planMax >= 2;
+  // 'full' or 'split'; when split, planCount is how many monthly payments.
+  const [payChoice, setPayChoice] = useState<'full' | 'split'>('full');
+  const [planCount, setPlanCount] = useState(Math.min(2, planMax || 2));
+  const usingPlan = hasPlan && payChoice === 'split';
+  const installments: Installment[] = usingPlan ? buildPlan(amount, planCount, now, plan!.endDate) : [];
+
+  // A plan link disables the free-amount editor (plan is all-or-nothing on #1).
   // Dynamic links: editable amount (defaults to the full balance), capped at it.
   const [amountInput, setAmountInput] = useState((amount / 100).toFixed(2));
-  const chosenCents = dynamic ? Math.round((parseFloat(amountInput) || 0) * 100) : amount;
+  const chosenCents = usingPlan
+    ? installments[0]?.amount ?? amount
+    : (dynamic && !hasPlan ? Math.round((parseFloat(amountInput) || 0) * 100) : amount);
 
   const finalizeAfter3DS = async (paymentIntentId: string): Promise<number> => {
     const res = await fetch(`/api/stripe/pay-link/finalize?token=${encodeURIComponent(token)}`, {
@@ -70,8 +95,8 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
     e.preventDefault();
     if (!stripe) return;
 
-    // Dynamic links: validate the chosen amount client-side (server re-validates).
-    if (dynamic) {
+    // Dynamic links (non-plan): validate the chosen amount client-side (server re-validates).
+    if (dynamic && !usingPlan) {
       if (chosenCents <= 0) { setError('Please enter an amount to pay.'); return; }
       if (chosenCents > amount) { setError('Amount cannot exceed the balance due.'); return; }
     }
@@ -103,9 +128,12 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
         body: JSON.stringify({
           paymentMethodId,
           // Server determines new-vs-saved from the PM's owner; this is only a hint.
-          saveCard: selected === 'new' ? saveCard : false,
-          // Dynamic links: the chosen amount (server caps it at the live balance).
-          ...(dynamic ? { amount: chosenCents } : {}),
+          // When splitting into a plan the card MUST be saved for the future charges.
+          saveCard: usingPlan ? true : (selected === 'new' ? saveCard : false),
+          // Dynamic links (non-plan): the chosen amount (server caps it at the balance).
+          ...(dynamic && !usingPlan ? { amount: chosenCents } : {}),
+          // Plan: how many monthly payments. Server recomputes the split & schedules N-1.
+          ...(usingPlan ? { planCount } : {}),
         }),
       });
       const result = await res.json();
@@ -126,7 +154,7 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
         paidCents = await finalizeAfter3DS(result.data.paymentIntentId);
       }
 
-      onPaid(paidCents);
+      onPaid(paidCents, usingPlan ? planCount : undefined, usingPlan ? installments : undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
     } finally {
@@ -136,7 +164,8 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {dynamic && (
+      {/* Free-amount editor: dynamic links only, and not when a plan is offered. */}
+      {dynamic && !hasPlan && (
         <div>
           <label className="text-sm font-medium text-gray-700">Amount to pay</label>
           <div className="relative mt-1">
@@ -158,6 +187,88 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
           </p>
         </div>
       )}
+
+      {/* Plan chooser: pay in full, or split into monthly payments. */}
+      {hasPlan && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-gray-700">How would you like to pay?</p>
+
+          <label
+            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+              payChoice === 'full' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            <input
+              type="radio"
+              name="paychoice"
+              checked={payChoice === 'full'}
+              onChange={() => setPayChoice('full')}
+              className="w-4 h-4 text-indigo-600"
+            />
+            <span className="text-sm text-gray-800">
+              Pay in full — <span className="font-semibold">{formatCurrency(amount, 'usd')}</span>
+            </span>
+          </label>
+
+          <label
+            className={`flex flex-col gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${
+              payChoice === 'split' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="radio"
+                name="paychoice"
+                checked={payChoice === 'split'}
+                onChange={() => setPayChoice('split')}
+                className="w-4 h-4 text-indigo-600"
+              />
+              <CalendarClock className="w-4 h-4 text-indigo-500" />
+              <span className="text-sm text-gray-800">Split into monthly payments</span>
+            </div>
+
+            {payChoice === 'split' && (
+              <div className="pl-7 space-y-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {Array.from({ length: planMax - 1 }, (_, i) => i + 2).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setPlanCount(n)}
+                      className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                        planCount === n
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  <span className="text-xs text-gray-500 ml-1">payments</span>
+                </div>
+                {installments.length > 0 && (
+                  <p className="text-xs text-gray-600">
+                    <span className="font-semibold">{formatCurrency(installments[0].amount, 'usd')}</span> today,
+                    then{' '}
+                    {installments.slice(1).map((p, idx) => (
+                      <span key={p.index}>
+                        {idx > 0 ? ', ' : ''}
+                        {formatCurrency(p.amount, 'usd')} on{' '}
+                        {new Date(p.date * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    ))}
+                    .
+                  </p>
+                )}
+                <p className="text-[11px] text-gray-400">
+                  Your card will be securely saved to complete the remaining payments.
+                </p>
+              </div>
+            )}
+          </label>
+        </div>
+      )}
+
       {savedMethods.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium text-gray-700">Pay with</p>
@@ -205,15 +316,18 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
           <div className="p-3 border border-gray-300 rounded-xl bg-white">
             <CardElement options={cardStyle} />
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={saveCard}
-              onChange={(e) => setSaveCard(e.target.checked)}
-              className="w-4 h-4 text-indigo-600 rounded"
-            />
-            Save this card for future payments
-          </label>
+          {/* Plan links save the card by necessity (already messaged above), so hide this. */}
+          {!usingPlan && (
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={saveCard}
+                onChange={(e) => setSaveCard(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 rounded"
+              />
+              Save this card for future payments
+            </label>
+          )}
         </div>
       )}
 
@@ -235,10 +349,22 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
           </>
         ) : (
           <>
-            <Lock className="w-4 h-4" /> Pay {formatCurrency(chosenCents > 0 ? chosenCents : amount, 'usd')}
+            <Lock className="w-4 h-4" />{' '}
+            {usingPlan
+              ? `Pay ${formatCurrency(chosenCents > 0 ? chosenCents : amount, 'usd')} now`
+              : `Pay ${formatCurrency(chosenCents > 0 ? chosenCents : amount, 'usd')}`}
           </>
         )}
       </button>
+
+      {usingPlan && installments.length > 1 && (
+        <p className="text-center text-xs text-gray-500">
+          then {installments.length - 1} more{' '}
+          {installments.length - 1 === 1 ? 'payment' : 'payments'} of{' '}
+          {formatCurrency(installments[1].amount, 'usd')}
+          {installments.length > 2 ? '+' : ''}, billed monthly.
+        </p>
+      )}
 
       <p className="flex items-center justify-center gap-1.5 text-xs text-gray-400">
         <Lock className="w-3 h-3" /> Secured by Stripe
@@ -250,6 +376,7 @@ function InnerForm({ token, amount, dynamic, savedMethods, onPaid }: {
 export function PayLinkForm(props: PayLinkFormProps) {
   const [paid, setPaid] = useState(false);
   const [paidCents, setPaidCents] = useState(0);
+  const [futureInstallments, setFutureInstallments] = useState<Installment[]>([]);
   const [stripePromise, setStripePromise] = useState<ReturnType<typeof getStripePromise> | null>(null);
 
   useEffect(() => {
@@ -257,6 +384,7 @@ export function PayLinkForm(props: PayLinkFormProps) {
   }, [props.publishableKey]);
 
   if (paid) {
+    const remaining = futureInstallments.slice(1);
     return (
       <div className="text-center py-8">
         {/* Logo is already shown by the page above; don't duplicate it here. */}
@@ -267,6 +395,22 @@ export function PayLinkForm(props: PayLinkFormProps) {
         <p className="text-gray-600 text-sm">
           Thank you! Your payment of {formatCurrency(paidCents, 'usd')} has been received.
         </p>
+        {remaining.length > 0 && (
+          <div className="mt-4 text-left inline-block bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <p className="text-xs font-medium text-gray-700 mb-2">
+              Your remaining {remaining.length} {remaining.length === 1 ? 'payment is' : 'payments are'} scheduled:
+            </p>
+            <ul className="space-y-1">
+              {remaining.map((p) => (
+                <li key={p.index} className="text-xs text-gray-600 flex justify-between gap-6">
+                  <span>{new Date(p.date * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                  <span className="font-medium">{formatCurrency(p.amount, 'usd')}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-gray-400 mt-2">Billed automatically to your saved card.</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -283,7 +427,7 @@ export function PayLinkForm(props: PayLinkFormProps) {
           {props.dynamic ? 'Balance due' : (props.description || 'Amount due')}
         </p>
         <p className="text-3xl font-bold text-gray-900">{formatCurrency(props.amount, 'usd')}</p>
-        {props.dynamic && (
+        {props.dynamic && !props.plan && (
           <p className="text-xs text-gray-400 mt-1">You can pay the full balance or any part of it.</p>
         )}
       </div>
@@ -294,7 +438,13 @@ export function PayLinkForm(props: PayLinkFormProps) {
             amount={props.amount}
             dynamic={props.dynamic}
             savedMethods={props.savedMethods}
-            onPaid={(cents) => { setPaidCents(cents); setPaid(true); }}
+            plan={props.plan}
+            nowSec={props.nowSec}
+            onPaid={(cents, _planCount, installments) => {
+              setPaidCents(cents);
+              if (installments) setFutureInstallments(installments);
+              setPaid(true);
+            }}
           />
         </Elements>
       )}

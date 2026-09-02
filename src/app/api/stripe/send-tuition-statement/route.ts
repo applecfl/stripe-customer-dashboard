@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
 import { generatePaymentLinkToken } from '@/lib/auth';
+import { maxMonthlyInstallments } from '@/lib/installments';
 
 interface SendTuitionStatementRequest {
   customerEmails: string[];
@@ -20,7 +21,14 @@ interface SendTuitionStatementRequest {
   customerId?: string;
   invoiceUID?: string;
   payAmount?: number;
+  // Optional installment plan. When present (and valid) the /pay page lets the customer
+  // split payAmount into up to maxInstallments monthly payments, finishing by endDate
+  // (unix seconds). The office sends only these bounds; amounts/dates are derived later.
+  plan?: { maxInstallments?: number; endDate?: number };
 }
+
+// Stripe's minimum charge is ~$0.50. Reject a plan whose largest split would fall below it.
+const MIN_INSTALLMENT_CENTS = 50;
 
 // Build the Pay Now button block. The button is a server-rendered PNG so it can
 // reflect live state when the email is OPENED (blue while active, grey once the
@@ -207,6 +215,7 @@ export async function POST(request: NextRequest) {
       invoiceUID,
       payAmount,
       accountId,
+      plan,
     } = body;
 
     if (!customerEmails || customerEmails.length === 0) {
@@ -245,7 +254,28 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const { token: payToken } = generatePaymentLinkToken(customerId, invoiceUID, accountId, amountCents);
+      // Validate an optional installment plan. Silently drop an invalid plan (the pay
+      // button still works as a normal pay-in-full link) rather than failing the send.
+      let validPlan: { maxInstallments: number; endDate: number } | undefined;
+      if (plan && typeof plan.endDate === 'number' && typeof plan.maxInstallments === 'number') {
+        const nowSec = Math.floor(Date.now() / 1000);
+        const requested = Math.floor(plan.maxInstallments);
+        // Real ceiling is bounded by how many whole months fit before endDate.
+        const monthsMax = maxMonthlyInstallments(nowSec, plan.endDate);
+        const cap = Math.min(requested, monthsMax);
+        // Need at least 2 to be a "plan", a future end date, and each split >= the minimum.
+        if (
+          plan.endDate > nowSec &&
+          cap >= 2 &&
+          Math.floor(amountCents / cap) >= MIN_INSTALLMENT_CENTS
+        ) {
+          validPlan = { maxInstallments: cap, endDate: plan.endDate };
+        }
+      }
+
+      const { token: payToken } = generatePaymentLinkToken(
+        customerId, invoiceUID, accountId, amountCents, undefined, validPlan
+      );
 
       const base = getBaseUrl(request);
       const enc = encodeURIComponent(payToken);

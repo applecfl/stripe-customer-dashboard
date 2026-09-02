@@ -3,6 +3,7 @@ import { getStripeForAccount } from '@/lib/stripe';
 import { ApiResponse } from '@/types';
 import { verifyToken, getTokenSignature } from '@/lib/auth';
 import { commitPayment } from '@/lib/paymentLinks';
+import { schedulePlanRemainder } from '@/lib/plan';
 
 interface FinalizeResult {
   paymentIntentId: string;
@@ -58,6 +59,27 @@ export async function POST(
     }
 
     const amount = paymentIntent.amount;
+
+    // Plan path (3DS): the first installment succeeded. Schedule installments #2..N via the
+    // existing engine. Idempotent (guarded in schedulePlanRemainder), so it's safe even if
+    // the non-3DS route already scheduled. Anchor dates to the PI's creation time so they
+    // match whatever was previewed/created in the POST route.
+    if (paymentIntent.metadata?.plan === 'true') {
+      const planCount = parseInt(paymentIntent.metadata.planCount || '0', 10);
+      if (planCount >= 2) {
+        const sched = await schedulePlanRemainder(sig, payload, paymentIntent, planCount, paymentIntent.created);
+        return NextResponse.json({
+          success: true,
+          data: {
+            paymentIntentId: paymentIntent.id,
+            amountPaid: amount,
+            remaining: 0,
+            invoicesPaid: [],
+            plan: { count: planCount, scheduledRemainder: sched.scheduled, scheduleError: sched.error ?? null },
+          },
+        });
+      }
+    }
 
     // Decrement the link's counter only. Standalone payment request — do NOT run
     // distributePayment / touch the customer's invoices (per Sholem's directive).

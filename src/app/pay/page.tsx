@@ -101,6 +101,8 @@ export default async function PayPage({
           description={description}
           publishableKey={publishableKey}
           savedMethods={savedMethods}
+          plan={payload.plan}
+          nowSec={Math.floor(Date.now() / 1000)}
         />
       </div>
     </div>

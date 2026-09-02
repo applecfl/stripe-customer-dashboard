@@ -25,6 +25,13 @@ export interface PaymentLinkRecord {
   paidAt?: number;
   lastPaymentIntentId?: string;
   payments?: Array<{ paymentIntentId: string; amount: number; at: number }>;
+  // Installment-plan bookkeeping. When a customer chooses a plan, the first payment is
+  // charged via this link and the remaining N-1 are scheduled as future invoices. The
+  // flag is the idempotency guard so retries/3DS re-entry never double-schedule.
+  planChosen?: boolean;
+  planCount?: number;
+  planScheduled?: boolean;
+  scheduledInvoiceIds?: string[];
 }
 
 /**
@@ -118,4 +125,48 @@ export async function commitPayment(
     );
     return remaining;
   });
+}
+
+/**
+ * Atomically claim the right to schedule this link's plan installments. Returns true to
+ * exactly ONE caller (the first); subsequent callers get false so the future invoices are
+ * never created twice (3DS re-entry, retries, double submit). Also marks the link as a plan
+ * link and zeroes `remaining` (a plan is fulfilled by the first charge + scheduled invoices,
+ * so the link can't be reused to over-collect).
+ */
+export async function claimPlanScheduling(sig: string, planCount: number): Promise<boolean> {
+  const db = getDb();
+  const ref = db.collection(COLLECTION).doc(sig);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return false;
+    const rec = snap.data() as PaymentLinkRecord;
+    if (rec.planScheduled) return false; // already scheduled by someone else
+    tx.set(
+      ref,
+      {
+        planChosen: true,
+        planCount,
+        planScheduled: true,
+        status: 'paid' as PaymentLinkStatus,
+        remaining: 0,
+        paidAt: Date.now(),
+      },
+      { merge: true }
+    );
+    return true;
+  });
+}
+
+/** Record the scheduled invoice ids after a successful createFutureInvoices call. */
+export async function recordScheduledInvoices(sig: string, invoiceIds: string[]): Promise<void> {
+  const db = getDb();
+  await db.collection(COLLECTION).doc(sig).set({ scheduledInvoiceIds: invoiceIds }, { merge: true });
+}
+
+/** Undo a scheduling claim when the downstream createFutureInvoices call fails, so staff
+ *  (or a retry) can try again rather than the plan being silently marked scheduled. */
+export async function releasePlanScheduling(sig: string): Promise<void> {
+  const db = getDb();
+  await db.collection(COLLECTION).doc(sig).set({ planScheduled: false }, { merge: true });
 }
