@@ -430,12 +430,12 @@ function PaymentForm({
         const dateObj = new Date(scheduledDate + 'T12:00:00');
         const scheduledTimestamp = Math.floor(dateObj.getTime() / 1000);
 
-        // If we have an original invoice (e.g., from failed payment), include it to be voided
-        // and copy its metadata to the new draft
-        const sourceInvoice = invoice && isFailedInvoice(invoice) ? {
-          id: invoice.id,
-          metadata: invoice.metadata,
-        } : undefined;
+        // Any failed invoices actually selected for this scheduled payment should be
+        // voided and have their metadata carried over to the new draft.
+        const sourceInvoices = selectedInvoices
+          .map(id => payableInvoices.find(inv => inv.id === id))
+          .filter((inv): inv is InvoiceData => !!inv && isFailedInvoice(inv))
+          .map(inv => ({ id: inv.id, metadata: inv.metadata }));
 
         const response = await fetch(withToken('/api/stripe/invoices/create-draft'), {
           method: 'POST',
@@ -449,7 +449,7 @@ function PaymentForm({
             scheduledDate: scheduledTimestamp,
             accountId,
             paymentMethodId,
-            sourceInvoice, // Include source invoice to void and copy metadata
+            sourceInvoices, // Failed invoices to void and copy metadata from
           }),
         });
 

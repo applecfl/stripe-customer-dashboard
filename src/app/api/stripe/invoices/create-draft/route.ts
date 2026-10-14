@@ -17,7 +17,8 @@ interface CreateDraftRequest {
   scheduledDate?: number; // Unix timestamp for when to finalize
   accountId: string;
   paymentMethodId?: string; // Payment method to use for this invoice
-  sourceInvoice?: SourceInvoice; // Original invoice to void and copy metadata from
+  sourceInvoice?: SourceInvoice; // Original invoice to void and copy metadata from (legacy, single)
+  sourceInvoices?: SourceInvoice[]; // Original invoices to void and copy metadata from
 }
 
 export async function POST(
@@ -26,6 +27,12 @@ export async function POST(
   try {
     const body: CreateDraftRequest = await request.json();
     const { customerId, amount, currency, description, invoiceUID, scheduledDate, accountId, paymentMethodId, sourceInvoice } = body;
+    // Accept both the legacy single sourceInvoice and the new sourceInvoices list.
+    const sourceInvoices: SourceInvoice[] = body.sourceInvoices?.length
+      ? body.sourceInvoices
+      : sourceInvoice
+        ? [sourceInvoice]
+        : [];
 
     if (!customerId || !amount || !currency) {
       return NextResponse.json(
@@ -43,22 +50,25 @@ export async function POST(
 
     const stripe = getStripeForAccount(accountId);
 
-    // If there's a source invoice (e.g., failed payment), void it first
-    if (sourceInvoice?.id) {
+    // Void every source invoice (e.g., failed payments being rescheduled) first
+    for (const src of sourceInvoices) {
       try {
-        await stripe.invoices.voidInvoice(sourceInvoice.id);
+        await stripe.invoices.voidInvoice(src.id);
       } catch (voidError) {
-        console.error('Error voiding source invoice:', voidError);
+        console.error('Error voiding source invoice:', src.id, voidError);
         // Continue even if void fails - the invoice might already be voided or in an invalid state
       }
     }
 
-    // Build metadata - copy from source invoice if available, then overlay our values
+    // Build metadata - copy from the first source invoice if available, then overlay our values
     const metadata: Record<string, string> = {
-      ...(sourceInvoice?.metadata || {}), // Copy metadata from source invoice
+      ...(sourceInvoices[0]?.metadata || {}), // Copy metadata from source invoice
       ...(invoiceUID && { InvoiceUID: invoiceUID }), // Override with new InvoiceUID if provided
       ...(scheduledDate && { scheduledFinalizeAt: scheduledDate.toString() }),
-      ...(sourceInvoice?.id && { sourceInvoiceId: sourceInvoice.id, voidReason: 'Rescheduled as future payment' }),
+      ...(sourceInvoices.length > 0 && {
+        sourceInvoiceId: sourceInvoices.map(s => s.id).join(','),
+        voidReason: 'Rescheduled as future payment',
+      }),
     };
 
     // Create a draft invoice with automatically_finalizes_at for exact scheduling
