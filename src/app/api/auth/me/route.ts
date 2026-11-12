@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     customerId: data.customerId ?? null,
     invoiceUID: data.invoiceUID ?? null,
     accountId: data.accountId ?? null,
+    userType: data.userType ?? null,
     extendedInfo: data.extendedInfo ?? null,
     otherPayments: data.otherPayments ?? null,
     expiresAt: claims.exp,

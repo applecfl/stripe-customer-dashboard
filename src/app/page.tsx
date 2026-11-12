@@ -40,6 +40,7 @@ interface DecodedTokenPayload {
   customerId: string;
   invoiceUID: string;
   accountId: string;
+  userType?: string;
   extendedInfo?: ExtendedCustomerInfo;
   otherPayments?: OtherPayment[];
 }
@@ -55,6 +56,7 @@ function decodeTokenPayload(token: string): DecodedTokenPayload | null {
         customerId: payload.customerId,
         invoiceUID: payload.invoiceUID,
         accountId: payload.accountId,
+        userType: payload.userType,
         extendedInfo: payload.extendedInfo,
         otherPayments: payload.otherPayments,
       };
@@ -84,6 +86,7 @@ function DashboardContent() {
   const accountId = tokenPayload?.accountId || session?.accountId || searchParams.get('accountId') || '';
   const extendedInfo = tokenPayload?.extendedInfo || session?.extendedInfo;
   const otherPayments = tokenPayload?.otherPayments || session?.otherPayments;
+  const userType = tokenPayload?.userType || session?.userType;
 
   // Track the current valid token (may be refreshed). Stays empty in cookie mode.
   const [token, setToken] = useState(initialToken);
@@ -101,6 +104,7 @@ function DashboardContent() {
           customerId: data.customerId,
           invoiceUID: data.invoiceUID,
           accountId: data.accountId,
+          userType: data.userType ?? undefined,
           extendedInfo: data.extendedInfo ?? undefined,
           otherPayments: data.otherPayments ?? undefined,
         });
@@ -971,6 +975,7 @@ function DashboardContent() {
         token={token}
         customer={customer}
         extendedInfo={extendedInfo}
+        userType={userType}
         invoices={invoices}
         accountId={accountId}
       />
@@ -984,6 +989,7 @@ function DashboardContent() {
         token={token}
         customer={customer}
         extendedInfo={extendedInfo}
+        userType={userType}
         invoices={invoices}
         accountId={accountId}
       />

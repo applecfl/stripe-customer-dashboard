@@ -3,7 +3,7 @@ import { runServerCommand } from '@/lib/server-command';
 
 export async function POST(request: NextRequest) {
   try {
-    const { invoiceUID } = await request.json();
+    const { invoiceUID, userType } = await request.json();
 
     if (!invoiceUID) {
       return NextResponse.json(
@@ -13,7 +13,10 @@ export async function POST(request: NextRequest) {
     }
 
     const html = await runServerCommand(
-      JSON.stringify({ 'InvoiceUID': invoiceUID }),
+      JSON.stringify({
+        'InvoiceUID': invoiceUID,
+        ...(userType ? { 'UserType': userType } : {}),
+      }),
       'CreateTuitionStatement'
     );
 

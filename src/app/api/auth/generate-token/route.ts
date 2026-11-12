@@ -5,6 +5,8 @@ interface GenerateTokenRequest {
   CustomerID: string;
   InvoiceUID: string;
   AccountID: string;
+  // Who the sender is in Magic (e.g. 'M' = Mother). Passed through verbatim.
+  UserType?: string;
   // Extended customer info
   FatherName?: string;
   FatherEmail?: string;
@@ -76,6 +78,7 @@ export async function POST(
       CustomerID: customerId,
       InvoiceUID: invoiceUID,
       AccountID: accountId,
+      UserType: userType,
       FatherName,
       FatherEmail,
       FatherCell,
@@ -163,7 +166,7 @@ export async function POST(
       ({ token, expiresAt } = generatePaymentLinkToken(customerId, invoiceUID, accountId, amountCents, extendedInfo));
       console.log(`Payment link token generated for customer ${customerId} amount ${amountCents} from IP ${clientIP}`);
     } else {
-      ({ token, expiresAt } = generateToken(customerId, invoiceUID, accountId, extendedInfo, otherPayments));
+      ({ token, expiresAt } = generateToken(customerId, invoiceUID, accountId, extendedInfo, otherPayments, userType));
       console.log(`Token generated for customer ${customerId} from IP ${clientIP}`);
     }
 

@@ -76,6 +76,9 @@ export interface TokenPayload {
   customerId: string;
   invoiceUID: string;
   accountId: string;
+  // Who the sender is in Magic (e.g. 'M' = Mother) — passed through verbatim to
+  // CreateTuitionStatement when present. Optional: older tokens won't carry it.
+  userType?: string;
   exp: number; // Expiration timestamp (seconds)
   iat: number; // Issued at timestamp (seconds)
   // Token kind - controls which routes the token may open (see middleware)
@@ -227,7 +230,8 @@ export function generateToken(
   invoiceUID: string,
   accountId: string,
   extendedInfo?: ExtendedCustomerInfo,
-  otherPayments?: OtherPayment[]
+  otherPayments?: OtherPayment[],
+  userType?: string
 ): { token: string; expiresAt: number } {
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + TOKEN_EXPIRY_SECONDS;
@@ -238,6 +242,7 @@ export function generateToken(
     accountId,
     exp: expiresAt,
     iat: now,
+    userType,
     extendedInfo,
     otherPayments,
   };

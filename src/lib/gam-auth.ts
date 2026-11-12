@@ -21,6 +21,7 @@ export interface GamTokenData {
   customerId?: string;
   invoiceUID?: string;
   accountId?: string;
+  userType?: string;
   extendedInfo?: ExtendedCustomerInfo;
   otherPayments?: OtherPayment[];
 }
@@ -50,6 +51,7 @@ interface GamTokenDataClaim {
   CustomerID?: string;
   InvoiceUID?: string;
   AccountID?: string;
+  UserType?: string;
   ExtendedInfo?: GamExtendedInfoClaim;
   OtherPayments?: GamOtherPaymentClaim[];
 }
@@ -186,6 +188,7 @@ export function gamSessionData(claims: GamClaims): GamTokenData {
     customerId: data.CustomerID,
     invoiceUID: data.InvoiceUID,
     accountId: data.AccountID,
+    userType: data.UserType,
     extendedInfo,
     otherPayments,
   };

@@ -13,6 +13,9 @@ interface TuitionStatementModalProps {
   token: string;
   customer: CustomerData | null;
   extendedInfo?: ExtendedCustomerInfo;
+  // Who the sender is in Magic (e.g. 'M' = Mother) — passed through verbatim to
+  // CreateTuitionStatement when present.
+  userType?: string;
   invoices: InvoiceData[];
   accountId: string;
   // 'statement' (default): emails the tuition statement PDF, with an optional pay button.
@@ -29,6 +32,7 @@ export function TuitionStatementModal({
   token,
   customer,
   extendedInfo,
+  userType,
   invoices,
   accountId,
   mode = 'statement',
@@ -236,7 +240,7 @@ export function TuitionStatementModal({
     fetch(`/api/stripe/tuition-statement?token=${encodeURIComponent(token)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ invoiceUID }),
+      body: JSON.stringify({ invoiceUID, ...(userType ? { userType } : {}) }),
     })
       .then(res => res.json())
       .then(async (result) => {
